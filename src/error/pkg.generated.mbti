@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/src/error"
+
+// Values
+pub fn[T] fail(String) -> T raise PgpError
+
+pub fn[T] require(T?, String) -> T raise PgpError
+
+// Errors
+pub(all) suberror PgpError {
+  PgpError(msg~ : String)
+}
+pub impl Show for PgpError
+
+// Types and methods
+
+// Type aliases
+
+// Traits

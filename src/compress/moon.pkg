@@ -1,0 +1,6 @@
+import {
+  "justinwongcn/openpgp/src/error",
+  "justinwongcn/openpgp/src/primitives",
+  "moonbit-community/flate",
+  "moonbit-community/flate/zlib",
+}

@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/src/s2k"
+
+import {
+  "justinwongcn/openpgp/src/primitives",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const SALT_SIZE : Int = 8
+
+pub fn decode_count(Int) -> Int
+
+pub fn encode_count(Int) -> Int
+
+pub fn parse(BytesView) -> (S2k, Int) raise
+
+// Errors
+
+// Types and methods
+pub(all) enum S2k {
+  Simple(@primitives.HashId)
+  Salted(@primitives.HashId, Bytes)
+  Iterated(@primitives.HashId, Bytes, Int)
+} derive(Eq, @debug.Debug)
+pub fn S2k::derive_key(Self, BytesView, Int) -> Bytes raise
+pub fn S2k::encode(Self) -> Bytes
+
+// Type aliases
+
+// Traits

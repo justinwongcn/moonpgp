@@ -1,0 +1,22 @@
+MIME-Version: 1.0
+Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg=pgp-sha256; boundary="=gpgmime=0011="
+
+--=gpgmime=0011=
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+mime body for gpg
+- dash line
+--=gpgmime=0011=
+Content-Type: application/pgp-signature; name="sig.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iLMEAAEIAB0WIQRdweIXGOsvE24I2XzEPzfuRSaCCgUCarquUAAKCRDEPzfuRSaC
+CpB0BACq2pGhQOsXC0RmivqLZ/QCwac5li1upJL9XnVJM5K1apVrSwaufVjg2jSU
+4iILp17lUrj/m4bMInkG75mw7GbethYsloj21ai0FY8+cjCAiZsbwKIX3rg71kJh
+G46gyM99EbWibFYwKJWpVAPYTpM5xGptQNSuMbR1VcyqrlI7NA==
+=WiJW
+-----END PGP SIGNATURE-----
+
+--=gpgmime=0011=--

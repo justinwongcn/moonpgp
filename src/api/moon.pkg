@@ -1,0 +1,11 @@
+import {
+  "justinwongcn/openpgp/src/error",
+  "justinwongcn/openpgp/src/primitives",
+  "justinwongcn/openpgp/src/armor",
+  "justinwongcn/openpgp/src/s2k",
+  "justinwongcn/openpgp/src/packet",
+  "justinwongcn/openpgp/src/cipher",
+  "justinwongcn/openpgp/src/compress",
+  "justinwongcn/openpgp/src/pki",
+  "moonbitlang/core/encoding/utf8",
+}

@@ -1,0 +1,80 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/src/primitives"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const BLOCK_SIZE : Int = 16
+
+pub fn cipher_algo_of_number(Int) -> CipherAlgo?
+
+pub fn concat2(BytesView, BytesView) -> Bytes
+
+pub fn concat3(BytesView, BytesView, BytesView) -> Bytes
+
+pub fn concat4(BytesView, BytesView, BytesView, BytesView) -> Bytes
+
+pub fn ct_equal(BytesView, BytesView) -> Bool
+
+pub fn from_hex(String) -> Bytes raise
+
+pub fn hash_id_of_number(Int) -> HashId?
+
+pub fn new_aes(BytesView) -> &BlockCipher raise
+
+pub fn new_block_cipher(CipherAlgo, BytesView) -> &BlockCipher raise
+
+pub fn pad_left(BytesView, Int) -> Bytes
+
+pub fn pad_right(BytesView, Int) -> Bytes
+
+pub fn random_below(Int) -> Int raise
+
+pub fn random_bytes(Int) -> Bytes raise
+
+pub fn to_hex(BytesView) -> String
+
+pub fn unix_now() -> Int64
+
+pub fn utf8_bytes(String) -> Bytes
+
+pub fn xor_bytes(BytesView, BytesView) -> Bytes raise
+
+// Errors
+
+// Types and methods
+pub(all) enum CipherAlgo {
+  Aes128
+  Aes192
+  Aes256
+} derive(Eq, @debug.Debug)
+pub fn CipherAlgo::key_size(Self) -> Int
+pub fn CipherAlgo::number(Self) -> Int
+
+pub(all) enum HashId {
+  Md5
+  Sha1
+  Ripemd160
+  Sha224
+  Sha256
+  Sha384
+  Sha512
+} derive(Eq, @debug.Debug)
+pub fn HashId::block_size(Self) -> Int
+pub fn HashId::der_prefix(Self) -> Bytes
+pub fn HashId::digest(Self, BytesView) -> Bytes
+pub fn HashId::digest_size(Self) -> Int
+pub fn HashId::hmac(Self, BytesView, BytesView) -> Bytes
+pub fn HashId::number(Self) -> Int
+
+// Type aliases
+
+// Traits
+pub(open) trait BlockCipher {
+  fn block_size(Self) -> Int
+  fn encrypt_block(Self, BytesView) -> Bytes
+  fn decrypt_block(Self, BytesView) -> Bytes
+  fn wipe(Self) -> Unit
+}

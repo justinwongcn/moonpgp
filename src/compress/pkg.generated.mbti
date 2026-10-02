@@ -1,0 +1,32 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/src/compress"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn compressed_algo_of_number(Int) -> CompressedAlgo?
+
+pub fn zip_compress(BytesView) -> Bytes raise
+
+pub fn zip_decompress(BytesView) -> Bytes raise
+
+pub fn zlib_compress(BytesView) -> Bytes raise
+
+pub fn zlib_decompress(BytesView) -> Bytes raise
+
+// Errors
+
+// Types and methods
+pub(all) enum CompressedAlgo {
+  Uncompressed
+  Zip
+  Zlib
+  BZip2
+} derive(Eq, @debug.Debug)
+pub fn CompressedAlgo::number(Self) -> Int
+
+// Type aliases
+
+// Traits

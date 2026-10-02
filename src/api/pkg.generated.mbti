@@ -1,0 +1,159 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/src/api"
+
+import {
+  "justinwongcn/openpgp/src/packet",
+  "justinwongcn/openpgp/src/pki",
+  "justinwongcn/openpgp/src/primitives",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn canonicalize_cleartext(String) -> Bytes
+
+pub fn canonicalize_text(BytesView) -> Bytes
+
+pub fn decrypt_and_verify(String, Array[PrivateKey], PublicKey?) -> (Bytes, VerifyStatus) raise
+
+pub fn decrypt_binary_with_password(BytesView, String) -> Bytes raise
+
+pub fn decrypt_binary_with_private_key(BytesView, PrivateKey) -> Bytes raise
+
+pub fn decrypt_with_password(String, String) -> Bytes raise
+
+pub fn decrypt_with_private_key(String, PrivateKey) -> Bytes raise
+
+pub fn encrypt_to_recipients(BytesView, Array[PublicKey], file_name? : String) -> String raise
+
+pub fn encrypt_with_password(BytesView, String, file_name? : String) -> String raise
+
+pub fn generate_ed25519_key(String) -> PrivateKey raise
+
+pub fn generate_key(String, bits? : Int) -> PrivateKey raise
+
+pub fn hash_name(@primitives.HashId) -> String
+
+pub fn lock_secret_key(@packet.SecretKeyPacket, String) -> @packet.SecretKeyPacket raise
+
+pub fn pgp() -> Pgp
+
+pub fn rsa_public_key(@packet.PublicKeyPacket) -> @pki.RsaPublicKey raise
+
+pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool) -> String raise
+
+pub fn sign_cleartext(String, PrivateKey) -> String raise
+
+pub fn sign_cleartext_with(String, PrivateKey, @primitives.HashId) -> String raise
+
+pub fn sign_detached(BytesView, PrivateKey, text_mode? : Bool) -> String raise
+
+pub fn sign_inline(BytesView, PrivateKey, text_mode? : Bool) -> String raise
+
+pub fn unlock_secret_key(@packet.SecretKeyPacket, String) -> @packet.SecretKeyPacket raise
+
+pub fn verify_cleartext(String, PublicKey) -> (String, VerifyStatus) raise
+
+pub fn verify_detached(BytesView, String, PublicKey) -> VerifyStatus raise
+
+pub fn verify_inline(String, PublicKey) -> (Bytes, VerifyStatus) raise
+
+pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @packet.PublicKeyPacket, user_id? : String) -> Bool raise
+
+pub fn verify_sig_material(@packet.PublicKeyPacket, @primitives.HashId, BytesView, Array[Bytes]) -> Bool raise
+
+// Errors
+
+// Types and methods
+pub(all) enum DecryptResult {
+  Data(Bytes)
+  Verified(Bytes)
+  SignatureError(Bytes)
+} derive(@debug.Debug)
+
+pub(all) struct DecryptionBuilder {
+  // private fields
+}
+pub fn DecryptionBuilder::decryption_key(Self, PrivateKey) -> Self
+pub fn DecryptionBuilder::finish(Self) -> (String) -> DecryptResult raise
+pub fn DecryptionBuilder::password(Self, String) -> Self
+pub fn DecryptionBuilder::verification_key(Self, PublicKey) -> Self
+
+pub(all) struct EncryptionBuilder {
+  // private fields
+}
+pub fn EncryptionBuilder::file_name(Self, String) -> Self
+pub fn EncryptionBuilder::finish(Self) -> (BytesView) -> String raise
+pub fn EncryptionBuilder::password(Self, String) -> Self
+pub fn EncryptionBuilder::recipient(Self, PublicKey) -> Self
+pub fn EncryptionBuilder::sign_with(Self, PrivateKey) -> Self
+
+pub(all) struct KeyGenBuilder {
+  // private fields
+}
+pub fn KeyGenBuilder::add_user_id(Self, String) -> Self
+pub fn KeyGenBuilder::generate(Self) -> PrivateKey raise
+pub fn KeyGenBuilder::rsa_bits(Self, Int) -> Self
+
+pub struct KeyRing {
+  // private fields
+} derive(@debug.Debug)
+pub fn KeyRing::add_private(Self, PrivateKey) -> Unit
+pub fn KeyRing::add_public(Self, PublicKey) -> Unit
+pub fn KeyRing::find_decryption_key(Self, BytesView) -> @packet.SecretKeyPacket? raise
+pub fn KeyRing::find_encryption_key(Self, BytesView) -> @packet.PublicKeyPacket? raise
+pub fn KeyRing::find_verification_key(Self, BytesView) -> PublicKey? raise
+pub fn KeyRing::new() -> Self
+pub fn KeyRing::private_count(Self) -> Int
+pub fn KeyRing::public_count(Self) -> Int
+
+pub struct Pgp {
+}
+pub fn Pgp::decryption(Self) -> DecryptionBuilder
+pub fn Pgp::encryption(Self) -> EncryptionBuilder
+pub fn Pgp::key_generation(Self) -> KeyGenBuilder
+
+pub(all) struct PrivateKey {
+  primary : @packet.SecretKeyPacket
+  user_id : String
+  self_signature : @packet.SignaturePacket
+  encryption_subkey : @packet.SecretKeyPacket?
+  subkey_binding : @packet.SignaturePacket?
+} derive(@debug.Debug)
+pub fn PrivateKey::fingerprint(Self) -> Bytes raise
+pub fn PrivateKey::from_armored(String) -> Self raise
+pub fn PrivateKey::from_bytes(BytesView) -> Self raise
+pub fn PrivateKey::is_locked(Self) -> Bool
+pub fn PrivateKey::key_id(Self) -> Bytes raise
+pub fn PrivateKey::lock(Self, String) -> Self raise
+pub fn PrivateKey::to_armored(Self) -> String raise
+pub fn PrivateKey::to_bytes(Self) -> Bytes raise
+pub fn PrivateKey::to_public(Self) -> PublicKey
+pub fn PrivateKey::unlock(Self, String) -> Self raise
+pub fn PrivateKey::user_id(Self) -> String
+
+pub(all) struct PublicKey {
+  primary : @packet.PublicKeyPacket
+  user_id : String
+  self_signature : @packet.SignaturePacket
+  encryption_subkey : @packet.PublicKeyPacket?
+  subkey_binding : @packet.SignaturePacket?
+} derive(@debug.Debug)
+pub fn PublicKey::encryption_key(Self) -> @packet.PublicKeyPacket?
+pub fn PublicKey::fingerprint(Self) -> Bytes raise
+pub fn PublicKey::from_armored(String) -> Self raise
+pub fn PublicKey::from_bytes(BytesView) -> Self raise
+pub fn PublicKey::key_id(Self) -> Bytes raise
+pub fn PublicKey::to_armored(Self) -> String raise
+pub fn PublicKey::to_bytes(Self) -> Bytes raise
+pub fn PublicKey::user_id(Self) -> String
+
+pub(all) enum VerifyStatus {
+  Ok
+  NotSigned
+  NoVerifier
+  Failed
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

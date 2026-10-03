@@ -140,18 +140,18 @@ pub fn PublicKeyPacket::to_body(self : PublicKeyPacket) -> Bytes {
   match self.algo {
     EdDsaLegacy => {
       // First param carries the length-prefixed OID verbatim.
-      w.bytes(self.params[0].view())
-      w.mpi(self.params[1].view())
+      w.bytes(self.params[0].exact_view())
+      w.mpi(self.params[1].exact_view())
     }
     Ecdh => {
       // OID and KDF params carry their own length octets; point is an MPI.
-      w.bytes(self.params[0].view())
-      w.mpi(self.params[1].view())
-      w.bytes(self.params[2].view())
+      w.bytes(self.params[0].exact_view())
+      w.mpi(self.params[1].exact_view())
+      w.bytes(self.params[2].exact_view())
     }
     _ =>
       for p in self.params {
-        w.mpi(p.view())
+        w.mpi(p.exact_view())
       }
   }
   w.to_bytes()
@@ -170,8 +170,8 @@ pub fn PublicKeyPacket::fingerprint(self : PublicKeyPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(0x99)
   w.u16(body.length())
-  w.bytes(body.view())
-  let fp = @primitives.Sha1.digest(w.to_bytes().view())
+  w.bytes(body.exact_view())
+  let fp = @primitives.Sha1.digest(w.to_bytes().exact_view())
   fp
 }
 
@@ -338,20 +338,32 @@ fn cipher_block_size(algo : Int) -> Int raise {
 /// Serialize: public body followed by the secret-material wire bytes.
 pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes {
   let w = Writer::new()
-  w.bytes(self.public.to_body().view())
+  w.bytes(self.public.to_body().exact_view())
   w.u8(self.s2k_usage)
   if self.s2k_usage == 0 {
-    w.bytes(self.secret_material.view())
+    w.bytes(self.secret_material.exact_view())
   } else if self.s2k_usage == 254 || self.s2k_usage == 255 {
     w.u8(self.cipher_algo)
-    w.bytes(self.s2k_spec.view())
-    w.bytes(self.iv.view())
-    w.bytes(self.secret_material.view())
+    w.bytes(self.s2k_spec.exact_view())
+    w.bytes(self.iv.exact_view())
+    w.bytes(self.secret_material.exact_view())
   } else {
     // Legacy usage octet is the cipher id; IV follows, simple S2K implied.
     w.u8(self.cipher_algo)
-    w.bytes(self.iv.view())
-    w.bytes(self.secret_material.view())
+    w.bytes(self.iv.exact_view())
+    w.bytes(self.secret_material.exact_view())
   }
   w.to_bytes()
 }
+
+///|
+pub extend PubKeyAlgo with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend PubKeyAlgo with Eq::{not_equal, equal}
+
+///|
+pub extend PublicKeyPacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SecretKeyPacket with @moonbitlang/core/debug.Debug::{to_repr}

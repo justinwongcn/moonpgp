@@ -8,7 +8,7 @@ pub fn unlock_secret_key(
   passphrase : String,
 ) -> @packet.SecretKeyPacket raise {
   guard key.s2k_usage != 0 else { key }
-  guard not(key.dummy) else {
+  guard !key.dummy else {
     raise @error.PgpError::PgpError(
       msg="api: secret material is a GnuPG dummy (moved to a smartcard)",
     )
@@ -22,16 +22,19 @@ pub fn unlock_secret_key(
     @primitives.cipher_algo_of_number(key.cipher_algo),
     "api: unsupported protection cipher",
   )
-  let s2k = match (try? @s2k.parse(key.s2k_spec.view())) {
-    Ok((s, _)) => s
-    Err(_) => raise @error.PgpError::PgpError(msg="api: bad S2K in locked key")
-  }
+  let s2k = (@s2k.parse(key.s2k_spec.exact_view()) catch {
+      _ => raise @error.PgpError::PgpError(msg="api: bad S2K in locked key")
+    }).0
   let kek = s2k.derive_key(
-    @primitives.utf8_bytes(passphrase).view(),
+    @primitives.utf8_bytes(passphrase).exact_view(),
     algo.key_size(),
   )
-  let bc = @primitives.new_block_cipher(algo, kek.view())
-  let plain = @cipher.cfb_decrypt(bc, key.iv.view(), key.secret_material.view()) catch {
+  let bc = @primitives.new_block_cipher(algo, kek.exact_view())
+  let plain = @cipher.cfb_decrypt(
+    bc,
+    key.iv.exact_view(),
+    key.secret_material.exact_view(),
+  ) catch {
     _ =>
       raise @error.PgpError::PgpError(msg="api: secret key decryption failed")
   }
@@ -45,14 +48,14 @@ pub fn unlock_secret_key(
   let material = plain[0:plain.length() - check_len]
   let check = plain[plain.length() - check_len:plain.length()]
   if key.s2k_usage == 254 {
-    let want = @primitives.Sha1.digest(material.view())
-    guard @primitives.ct_equal(want.view(), check.view()) else {
+    let want = @primitives.Sha1.digest(material.exact_view())
+    guard @primitives.ct_equal(want.exact_view(), check.exact_view()) else {
       raise @error.PgpError::PgpError(
         msg="api: wrong passphrase (SHA-1 check failed)",
       )
     }
   } else {
-    let want = @packet.session_key_checksum(material.view())
+    let want = @packet.session_key_checksum(material.exact_view())
     let got = (check[0].to_int() << 8) | check[1].to_int()
     guard want == got else {
       raise @error.PgpError::PgpError(
@@ -87,15 +90,15 @@ pub fn lock_secret_key(
     salt,
     @s2k.encode_count(1024 * 1024),
   )
-  let kek = s2k.derive_key(@primitives.utf8_bytes(passphrase).view(), 32)
-  let bc = @primitives.new_block_cipher(@primitives.Aes256, kek.view())
+  let kek = s2k.derive_key(@primitives.utf8_bytes(passphrase).exact_view(), 32)
+  let bc = @primitives.new_block_cipher(@primitives.Aes256, kek.exact_view())
   let iv = @primitives.random_bytes(16)
   let material = key.secret_material
-  let check = @primitives.Sha1.digest(material.view())
+  let check = @primitives.Sha1.digest(material.exact_view())
   let plain = material.add(check)
-  let ciphertext = @cipher.cfb_encrypt(bc, iv.view(), plain.view())
+  let ciphertext = @cipher.cfb_encrypt(bc, iv.exact_view(), plain.exact_view())
   let spec_w = @packet.Writer::new()
-  spec_w.bytes(s2k.encode().view())
+  spec_w.bytes(s2k.encode().exact_view())
   @packet.SecretKeyPacket::{
     public: key.public,
     s2k_usage: 254,

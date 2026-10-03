@@ -12,7 +12,7 @@ pub fn cfb_encrypt(
     raise @error.PgpError::PgpError(msg="cfb: bad IV length")
   }
   let mut fr = iv.to_owned()
-  let out = @buffer.new(size_hint=data.length())
+  let out = Buffer(size_hint=data.length())
   let mut off = 0
   while off < data.length() {
     let keystream = bc.encrypt_block(fr.exact_view())
@@ -43,7 +43,7 @@ pub fn cfb_decrypt(
     raise @error.PgpError::PgpError(msg="cfb: bad IV length")
   }
   let mut fr = iv.to_owned()
-  let out = @buffer.new(size_hint=data.length())
+  let out = Buffer(size_hint=data.length())
   let mut off = 0
   while off < data.length() {
     let keystream = bc.encrypt_block(fr.exact_view())
@@ -86,14 +86,14 @@ pub fn openpgp_cfb_encrypt_resync(
   }
   let zeros = Bytes::make(bs, b'\x00')
   // First block: C0 = P0 XOR E(0).
-  let ks0 = bc.encrypt_block(zeros.view())
-  let c0 = @primitives.xor_bytes(prefix[0:bs], ks0.view())
+  let ks0 = bc.encrypt_block(zeros.exact_view())
+  let c0 = @primitives.xor_bytes(prefix[0:bs], ks0.exact_view())
   // Check bytes: C[bs..bs+2] = P[bs..bs+2] XOR E(C0)[0..2].
-  let ks1 = bc.encrypt_block(c0.view())
-  let checks = @primitives.xor_bytes(prefix[bs:bs + 2], ks1.view()[0:2])
+  let ks1 = bc.encrypt_block(c0.exact_view())
+  let checks = @primitives.xor_bytes(prefix[bs:bs + 2], ks1.exact_view()[0:2])
   let head = c0.add(checks)
   // Resynchronize: FR = C[2..bs+2].
-  let fr = head.view()[2:bs + 2]
+  let fr = head.exact_view()[2:bs + 2]
   let rest = cfb_encrypt(bc, fr, data)
   head.add(rest)
 }
@@ -110,13 +110,16 @@ pub fn openpgp_cfb_decrypt_resync(
     raise @error.PgpError::PgpError(msg="cfb: ciphertext too short")
   }
   let zeros = Bytes::make(bs, b'\x00')
-  let ks0 = bc.encrypt_block(zeros.view())
-  let p0 = @primitives.xor_bytes(ciphertext.view()[0:bs], ks0.view())
+  let ks0 = bc.encrypt_block(zeros.exact_view())
+  let p0 = @primitives.xor_bytes(
+    ciphertext.exact_view()[0:bs],
+    ks0.exact_view(),
+  )
   // Check bytes come from E(C0) keystream.
-  let ks1 = bc.encrypt_block(ciphertext.view()[0:bs])
+  let ks1 = bc.encrypt_block(ciphertext.exact_view()[0:bs])
   let checks = @primitives.xor_bytes(
-    ciphertext.view()[bs:bs + 2],
-    ks1.view()[0:2],
+    ciphertext.exact_view()[bs:bs + 2],
+    ks1.exact_view()[0:2],
   )
   let prefix = p0.add(checks)
   guard prefix[bs - 2] == prefix[bs] && prefix[bs - 1] == prefix[bs + 1] else {
@@ -125,6 +128,6 @@ pub fn openpgp_cfb_decrypt_resync(
     )
   }
   // Resynchronize: FR = C[2..bs+2].
-  let fr = ciphertext.view()[2:bs + 2]
-  cfb_decrypt(bc, fr, ciphertext.view()[bs + 2:ciphertext.length()])
+  let fr = ciphertext.exact_view()[2:bs + 2]
+  cfb_decrypt(bc, fr, ciphertext.exact_view()[bs + 2:ciphertext.length()])
 }

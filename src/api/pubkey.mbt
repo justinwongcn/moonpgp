@@ -22,7 +22,7 @@ fn create_pkesk(
       let payload = Bytes::from_array([sym_algo.number().to_byte()])
         .add(session_key.to_owned())
         .add(checksum_bytes(@packet.session_key_checksum(session_key)))
-      let mpi = rsa.pkcs1_v15_encrypt(payload.view())
+      let mpi = rsa.pkcs1_v15_encrypt(payload.exact_view())
       {
         key_id: enc_key.key_id(),
         pub_algo: a,
@@ -67,7 +67,7 @@ pub fn encrypt_to_recipients(
   recipients : Array[PublicKey],
   file_name? : String,
 ) -> String raise {
-  guard not(recipients.is_empty()) else {
+  guard !recipients.is_empty() else {
     raise @error.PgpError::PgpError(msg="api: no recipients")
   }
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
@@ -78,22 +78,31 @@ pub fn encrypt_to_recipients(
       None =>
         raise @error.PgpError::PgpError(msg="api: recipient key cannot encrypt")
     }
-    let pkesk = create_pkesk(enc_key, session_key.view(), @primitives.Aes256)
+    let pkesk = create_pkesk(
+      enc_key,
+      session_key.exact_view(),
+      @primitives.Aes256,
+    )
     let body = pkesk.to_body()
-    w.bytes(@packet.serialize_packet(@packet.Pkesk, body.view()).view())
+    w.bytes(
+      @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
+    )
   }
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let literal_wire = @packet.serialize_packet(
     @packet.Literal,
-    literal.to_body().view(),
+    literal.to_body().exact_view(),
   )
-  let bc = @primitives.new_block_cipher(@primitives.Aes256, session_key.view())
-  let seipd_ct = @cipher.seipd_v1_encrypt(bc, literal_wire.view())
+  let bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    session_key.exact_view(),
+  )
+  let seipd_ct = @cipher.seipd_v1_encrypt(bc, literal_wire.exact_view())
   let seipd : @packet.SeipdPacket = { version: 1, ciphertext: seipd_ct, }
   w.bytes(
-    @packet.serialize_packet(@packet.Seipd, seipd.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Seipd, seipd.to_body().exact_view()).exact_view(),
   )
-  @armor.Message.encode(w.to_bytes().view())
+  @armor.Message.encode(w.to_bytes().exact_view())
 }
 
 ///|
@@ -119,12 +128,9 @@ pub fn decrypt_binary_with_private_key(
   let mut session : (Int, Bytes)? = None
   for p in packets {
     if p.tag() == @packet.Pkesk {
-      let pkesk = @packet.PkeskPacket::parse(p.body().view())
+      let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
       for sk in candidates {
-        let my_id = match (try? sk.public.key_id()) {
-          Ok(id) => Some(id)
-          Err(_) => None
-        }
+        let my_id : Bytes? = Some(sk.public.key_id()) catch { _ => None }
         match my_id {
           Some(id) =>
             if id.equal(pkesk.key_id()) {
@@ -160,8 +166,8 @@ fn rsa_unwrap_session_key(
   }
   // The wire MPI may have lost a leading zero octet; os2ip restores the
   // integer value either way.
-  let padded = @primitives.pad_left(pkesk.encrypted().view(), k)
-  let payload = rsa.pkcs1_v15_decrypt(padded.view())
+  let padded = @primitives.pad_left(pkesk.encrypted().exact_view(), k)
+  let payload = rsa.pkcs1_v15_decrypt(padded.exact_view())
   guard payload.length() >= 3 + 16 else {
     raise @error.PgpError::PgpError(msg="api: session key payload too short")
   }
@@ -175,7 +181,7 @@ fn rsa_unwrap_session_key(
   let key = payload[1:1 + key_len]
   let want = (payload[payload.length() - 2].to_int() << 8) |
     payload[payload.length() - 1].to_int()
-  guard @packet.session_key_checksum(key.view()) == want else {
+  guard @packet.session_key_checksum(key.exact_view()) == want else {
     raise @error.PgpError::PgpError(msg="api: session key checksum mismatch")
   }
   key.to_owned()
@@ -189,7 +195,7 @@ fn unwrap_seipd_with_session_key(
 ) -> Bytes raise {
   for p in packets {
     if p.tag() == @packet.Seipd {
-      let seipd = @packet.SeipdPacket::parse(p.body().view())
+      let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
       guard seipd.version == 1 else {
         raise @error.PgpError::PgpError(
           msg="api: unsupported SEIPD version \{seipd.version}",
@@ -202,8 +208,8 @@ fn unwrap_seipd_with_session_key(
             msg="api: unsupported session cipher \{algo_id}",
           )
       }
-      let bc = @primitives.new_block_cipher(algo, session_key.view())
-      let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.view())
+      let bc = @primitives.new_block_cipher(algo, session_key.exact_view())
+      let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())
       return extract_literal(inner)
     }
   }

@@ -6,7 +6,7 @@ pub fn canonicalize_text(data : BytesView) -> Bytes {
   let mut prev_cr = false
   for b in data {
     if b == b'\n' {
-      if not(prev_cr) {
+      if !prev_cr {
         out.push(b'\r')
       }
       out.push(b'\n')
@@ -36,11 +36,11 @@ fn document_hash(
     _ => data.to_owned()
   }
   let w = @packet.Writer::new()
-  w.bytes(content.view())
-  w.bytes(sig.hash_prefix().view())
-  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).view())
+  w.bytes(content.exact_view())
+  w.bytes(sig.hash_prefix().exact_view())
+  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).exact_view())
   match @primitives.hash_id_of_number(sig.hash_algo()) {
-    Some(h) => h.digest(w.to_bytes().view())
+    Some(h) => h.digest(w.to_bytes().exact_view())
     None => raise @error.PgpError::PgpError(msg="api: unknown hash algorithm")
   }
 }
@@ -81,9 +81,8 @@ fn make_document_signature_with(
     {
       critical: false,
       sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
-      body: match (try? key.primary.public.key_id()) {
-        Ok(id) => id
-        Err(_) => Bytes::new(0)
+      body: key.primary.public.key_id() catch {
+        _ => Bytes::new(0)
       },
     },
   ]
@@ -98,7 +97,7 @@ fn make_document_signature_with(
     sig_params: [],
   }
   let digest = document_hash(sig, data, sig_type)
-  finish_signature(sig, key.primary, hash, digest.view())
+  finish_signature(sig, key.primary, hash, digest.exact_view())
 }
 
 ///|
@@ -115,7 +114,7 @@ pub fn sign_detached(
   }
   let sig = make_document_signature(key, data, sig_type)
   @armor.Signature.encode(
-    @packet.serialize_packet(@packet.Signature, sig.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
 }
 
@@ -145,11 +144,11 @@ pub fn verify_detached(
     raise @error.PgpError::PgpError(msg="api: not a signature armor block")
   }
   // The armor payload is a packet sequence; find the signature packet.
-  let packets = @packet.parse_packets(block.data().view())
+  let packets = @packet.parse_packets(block.data().exact_view())
   let mut sig : @packet.SignaturePacket? = None
   for p in packets {
     if p.tag() == @packet.Signature {
-      sig = Some(@packet.SignaturePacket::parse(p.body().view()))
+      sig = Some(@packet.SignaturePacket::parse(p.body().exact_view()))
       break
     }
   }
@@ -173,11 +172,7 @@ fn verify_signature_packet(
   let issuer = sig.issuer_key_id()
   let primary_id = verifier.primary.key_id()
   let sub_id : Bytes? = match verifier.encryption_subkey {
-    Some(sub) =>
-      match (try? sub.key_id()) {
-        Ok(id) => Some(id)
-        Err(_) => None
-      }
+    Some(sub) => Some(sub.key_id()) catch { _ => None }
     None => None
   }
   let signer : @packet.PublicKeyPacket? = match issuer {
@@ -199,15 +194,18 @@ fn verify_signature_packet(
         Some(h) => h
         None => return Failed
       }
-      match
-        (try? verify_sig_material(
-          signer_pk,
-          hash_id,
-          digest.view(),
-          sig.sig_params(),
-        )) {
-        Ok(true) => Ok
-        _ => Failed
+      let verified = verify_sig_material(
+        signer_pk,
+        hash_id,
+        digest.exact_view(),
+        sig.sig_params(),
+      ) catch {
+        _ => false
+      }
+      if verified {
+        Ok
+      } else {
+        Failed
       }
     }
   }
@@ -237,15 +235,15 @@ pub fn sign_inline(
   }
   let w = @packet.Writer::new()
   w.bytes(
-    @packet.serialize_packet(@packet.OnePassSig, ops.to_body().view()).view(),
+    @packet.serialize_packet(@packet.OnePassSig, ops.to_body().exact_view()).exact_view(),
   )
   w.bytes(
-    @packet.serialize_packet(@packet.Literal, literal.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Literal, literal.to_body().exact_view()).exact_view(),
   )
   w.bytes(
-    @packet.serialize_packet(@packet.Signature, sig.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
-  @armor.Message.encode(w.to_bytes().view())
+  @armor.Message.encode(w.to_bytes().exact_view())
 }
 
 ///|
@@ -256,7 +254,7 @@ pub fn verify_inline(
   verifier : PublicKey,
 ) -> (Bytes, VerifyStatus) raise {
   let block = @armor.decode(message)
-  let packets = @packet.parse_packets(block.data().view())
+  let packets = @packet.parse_packets(block.data().exact_view())
   // Locate literal (or compressed) data and the trailing signature.
   let mut data : Bytes? = None
   let mut sig : @packet.SignaturePacket? = None
@@ -267,13 +265,13 @@ pub fn verify_inline(
     if p.tag() == @packet.OnePassSig {
       // skip
     } else if p.tag() == @packet.Literal {
-      data = Some(@packet.LiteralPacket::parse(p.body().view()).data())
+      data = Some(@packet.LiteralPacket::parse(p.body().exact_view()).data())
     } else if p.tag() == @packet.Compressed {
-      let comp = @packet.CompressedPacket::parse(p.body().view())
+      let comp = @packet.CompressedPacket::parse(p.body().exact_view())
       let inner : Bytes = match comp.algo {
         0 => comp.data
-        1 => @compress.zip_decompress(comp.data.view())
-        2 => @compress.zlib_decompress(comp.data.view())
+        1 => @compress.zip_decompress(comp.data.exact_view())
+        2 => @compress.zlib_decompress(comp.data.exact_view())
         _ =>
           raise @error.PgpError::PgpError(
             msg="api: unsupported compression algorithm \{comp.algo}",
@@ -281,21 +279,23 @@ pub fn verify_inline(
       }
       // The compressed stream may be [Literal] or [OPS, Literal, Sig]
       // (gpg -es); find the literal and the signature anywhere in it.
-      for q in @packet.parse_packets(inner.view()) {
+      for q in @packet.parse_packets(inner.exact_view()) {
         if q.tag() == @packet.Literal {
-          data = Some(@packet.LiteralPacket::parse(q.body().view()).data())
+          data = Some(
+            @packet.LiteralPacket::parse(q.body().exact_view()).data(),
+          )
         } else if q.tag() == @packet.Signature {
-          sig = Some(@packet.SignaturePacket::parse(q.body().view()))
+          sig = Some(@packet.SignaturePacket::parse(q.body().exact_view()))
         }
       }
     } else if p.tag() == @packet.Signature {
-      sig = Some(@packet.SignaturePacket::parse(p.body().view()))
+      sig = Some(@packet.SignaturePacket::parse(p.body().exact_view()))
     }
     i = i + 1
   }
   match (data, sig) {
     (Some(d), Some(s)) => {
-      let status = verify_signature_packet(s, d.view(), verifier)
+      let status = verify_signature_packet(s, d.exact_view(), verifier)
       (d, status)
     }
     (Some(d), None) => (d, NotSigned)
@@ -327,15 +327,15 @@ pub fn sign_and_encrypt(
   }
   let inner = @packet.Writer::new()
   inner.bytes(
-    @packet.serialize_packet(@packet.OnePassSig, ops.to_body().view()).view(),
+    @packet.serialize_packet(@packet.OnePassSig, ops.to_body().exact_view()).exact_view(),
   )
   inner.bytes(
-    @packet.serialize_packet(@packet.Literal, literal.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Literal, literal.to_body().exact_view()).exact_view(),
   )
   inner.bytes(
-    @packet.serialize_packet(@packet.Signature, sig.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
-  encrypt_stream_to_recipients(inner.to_bytes().view(), recipients)
+  encrypt_stream_to_recipients(inner.to_bytes().exact_view(), recipients)
 }
 
 ///|
@@ -344,7 +344,7 @@ fn encrypt_stream_to_recipients(
   inner : BytesView,
   recipients : Array[PublicKey],
 ) -> String raise {
-  guard not(recipients.is_empty()) else {
+  guard !recipients.is_empty() else {
     raise @error.PgpError::PgpError(msg="api: no recipients")
   }
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
@@ -355,17 +355,26 @@ fn encrypt_stream_to_recipients(
       None =>
         raise @error.PgpError::PgpError(msg="api: recipient key cannot encrypt")
     }
-    let pkesk = create_pkesk(enc_key, session_key.view(), @primitives.Aes256)
+    let pkesk = create_pkesk(
+      enc_key,
+      session_key.exact_view(),
+      @primitives.Aes256,
+    )
     let body = pkesk.to_body()
-    w.bytes(@packet.serialize_packet(@packet.Pkesk, body.view()).view())
+    w.bytes(
+      @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
+    )
   }
-  let bc = @primitives.new_block_cipher(@primitives.Aes256, session_key.view())
+  let bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    session_key.exact_view(),
+  )
   let seipd_ct = @cipher.seipd_v1_encrypt(bc, inner)
   let seipd : @packet.SeipdPacket = { version: 1, ciphertext: seipd_ct, }
   w.bytes(
-    @packet.serialize_packet(@packet.Seipd, seipd.to_body().view()).view(),
+    @packet.serialize_packet(@packet.Seipd, seipd.to_body().exact_view()).exact_view(),
   )
-  @armor.Message.encode(w.to_bytes().view())
+  @armor.Message.encode(w.to_bytes().exact_view())
 }
 
 ///|
@@ -381,23 +390,20 @@ pub fn decrypt_and_verify(
   let block = @armor.decode(message)
   let data_bytes = @armor.ArmorBlock::data(block)
   // Decrypt
-  let packets = @packet.parse_packets(data_bytes.view())
+  let packets = @packet.parse_packets(data_bytes.exact_view())
   let mut session : (Int, Bytes)? = None
   for key in decryption_keys {
     let mut found = false
     for p in packets {
       if p.tag() == @packet.Pkesk {
-        let pkesk = @packet.PkeskPacket::parse(p.body().view())
+        let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
         let candidates = [key.primary]
         match key.encryption_subkey {
           Some(sk) => candidates.push(sk)
           None => ()
         }
         for sk in candidates {
-          let my_id = match (try? sk.public.key_id()) {
-            Ok(id) => Some(id)
-            Err(_) => None
-          }
+          let my_id : Bytes? = Some(sk.public.key_id()) catch { _ => None }
           match my_id {
             Some(id) =>
               if id.equal(pkesk.key_id()) {
@@ -424,7 +430,7 @@ pub fn decrypt_and_verify(
       let mut found : Bytes? = None
       for p in packets {
         if p.tag() == @packet.Seipd {
-          let seipd = @packet.SeipdPacket::parse(p.body().view())
+          let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
           guard seipd.version == 1 else {
             raise @error.PgpError::PgpError(
               msg="api: unsupported SEIPD version \{seipd.version}",
@@ -437,8 +443,10 @@ pub fn decrypt_and_verify(
                 msg="api: unsupported session cipher \{algo_id}",
               )
           }
-          let bc = @primitives.new_block_cipher(algo, sk.view())
-          found = Some(@cipher.seipd_v1_decrypt(bc, seipd.ciphertext.view()))
+          let bc = @primitives.new_block_cipher(algo, sk.exact_view())
+          found = Some(
+            @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view()),
+          )
           break
         }
       }
@@ -454,29 +462,31 @@ pub fn decrypt_and_verify(
       raise @error.PgpError::PgpError(msg="api: no matching decryption key")
   }
   // Walk inner packets: OPS? literal | compressed; trailing sig.
-  let inner_packets = @packet.parse_packets(inner.view())
+  let inner_packets = @packet.parse_packets(inner.exact_view())
   let mut data : Bytes? = None
   let mut sig : @packet.SignaturePacket? = None
   for p in inner_packets {
     if p.tag() == @packet.Literal {
-      data = Some(@packet.LiteralPacket::parse(p.body().view()).data())
+      data = Some(@packet.LiteralPacket::parse(p.body().exact_view()).data())
     } else if p.tag() == @packet.Signature {
-      sig = Some(@packet.SignaturePacket::parse(p.body().view()))
+      sig = Some(@packet.SignaturePacket::parse(p.body().exact_view()))
     } else if p.tag() == @packet.Compressed {
-      let comp = @packet.CompressedPacket::parse(p.body().view())
+      let comp = @packet.CompressedPacket::parse(p.body().exact_view())
       let payload : Bytes = match comp.algo {
         0 => comp.data
-        1 => @compress.zip_decompress(comp.data.view())
-        2 => @compress.zlib_decompress(comp.data.view())
+        1 => @compress.zip_decompress(comp.data.exact_view())
+        2 => @compress.zlib_decompress(comp.data.exact_view())
         _ => raise @error.PgpError::PgpError(msg="api: unsupported compression")
       }
       // The compressed stream may be [Literal] or [OPS, Literal, Sig]
       // (gpg -es); find the literal and the signature anywhere in it.
-      for q in @packet.parse_packets(payload.view()) {
+      for q in @packet.parse_packets(payload.exact_view()) {
         if q.tag() == @packet.Literal {
-          data = Some(@packet.LiteralPacket::parse(q.body().view()).data())
+          data = Some(
+            @packet.LiteralPacket::parse(q.body().exact_view()).data(),
+          )
         } else if q.tag() == @packet.Signature {
-          sig = Some(@packet.SignaturePacket::parse(q.body().view()))
+          sig = Some(@packet.SignaturePacket::parse(q.body().exact_view()))
         }
       }
     }
@@ -484,7 +494,7 @@ pub fn decrypt_and_verify(
   match (data, sig) {
     (Some(d), Some(s)) => {
       let status : VerifyStatus = match verifier {
-        Some(v) => verify_signature_packet(s, d.view(), v)
+        Some(v) => verify_signature_packet(s, d.exact_view(), v)
         None => NoVerifier
       }
       (d, status)
@@ -493,3 +503,9 @@ pub fn decrypt_and_verify(
     _ => raise @error.PgpError::PgpError(msg="api: message has no data packet")
   }
 }
+
+///|
+pub extend VerifyStatus with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend VerifyStatus with Eq::{not_equal, equal}

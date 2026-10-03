@@ -8,23 +8,26 @@ pub fn encrypt_with_password(
   file_name? : String,
 ) -> String raise {
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let skesk = build_skesk(session_key.view(), passphrase)
+  let skesk = build_skesk(session_key.exact_view(), passphrase)
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let literal_wire = @packet.serialize_packet(
     @packet.Literal,
-    literal.to_body().view(),
+    literal.to_body().exact_view(),
   )
-  let seipd_ciphertext = seal_seipd(session_key.view(), literal_wire.view())
+  let seipd_ciphertext = seal_seipd(
+    session_key.exact_view(),
+    literal_wire.exact_view(),
+  )
   let w = @packet.Writer::new()
   w.u8(0xC0 | @packet.Skesk.number())
   let skesk_body = skesk.to_body()
   write_packet_length(w, skesk_body.length())
-  w.bytes(skesk_body.view())
+  w.bytes(skesk_body.exact_view())
   w.u8(0xC0 | @packet.Seipd.number())
   write_packet_length(w, seipd_ciphertext.length() + 1)
   w.u8(1)
-  w.bytes(seipd_ciphertext.view())
-  @armor.Message.encode(w.to_bytes().view())
+  w.bytes(seipd_ciphertext.exact_view())
+  @armor.Message.encode(w.to_bytes().exact_view())
 }
 
 ///|
@@ -48,7 +51,7 @@ pub fn decrypt_binary_with_password(
   let session_key = unwrap_skesk(packets, passphrase)
   for p in packets {
     if p.tag() == @packet.Seipd {
-      let seipd = @packet.SeipdPacket::parse(p.body().view())
+      let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
       guard seipd.version == 1 else {
         raise @error.PgpError::PgpError(
           msg="api: unsupported SEIPD version \{seipd.version}",
@@ -56,9 +59,9 @@ pub fn decrypt_binary_with_password(
       }
       let bc = @primitives.new_block_cipher(
         @primitives.Aes256,
-        session_key.view(),
+        session_key.exact_view(),
       )
-      let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.view())
+      let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())
       return extract_literal(inner)
     }
   }
@@ -93,17 +96,20 @@ fn build_skesk(
   let s2k : @s2k.S2k = @s2k.Iterated(@primitives.Sha256, salt, count_byte)
   // The S2K key wraps [algo byte || session key] with CFB, zero IV.
   let wrapping_key = s2k.derive_key(
-    @primitives.utf8_bytes(passphrase).view(),
+    @primitives.utf8_bytes(passphrase).exact_view(),
     SESSION_KEY_SIZE,
   )
-  let bc = @primitives.new_block_cipher(@primitives.Aes256, wrapping_key.view())
+  let bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    wrapping_key.exact_view(),
+  )
   let plain = Bytes::from_array([@primitives.Aes256.number().to_byte()]).add(
     session_key.to_owned(),
   )
   let esk = @cipher.cfb_encrypt(
     bc,
-    Bytes::make(16, b'\x00').view(),
-    plain.view(),
+    Bytes::make(16, b'\x00').exact_view(),
+    plain.exact_view(),
   )
   @packet.SkeskPacket::{
     cipher_algo: @primitives.Aes256.number(),
@@ -119,7 +125,7 @@ fn unwrap_skesk(
 ) -> Bytes raise {
   for p in packets {
     if p.tag() == @packet.Skesk {
-      let skesk = @packet.SkeskPacket::parse(p.body().view())
+      let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
       let algo = match @primitives.cipher_algo_of_number(skesk.cipher_algo()) {
         Some(a) => a
         None =>
@@ -129,16 +135,16 @@ fn unwrap_skesk(
       }
       let pass = @primitives.utf8_bytes(passphrase)
       if skesk.encrypted_session_key().length() == 0 {
-        return skesk.s2k().derive_key(pass.view(), algo.key_size())
+        return skesk.s2k().derive_key(pass.exact_view(), algo.key_size())
       }
       let bc = @primitives.new_block_cipher(
         algo,
-        skesk.s2k().derive_key(pass.view(), algo.key_size()).view(),
+        skesk.s2k().derive_key(pass.exact_view(), algo.key_size()).exact_view(),
       )
       let wrapped = @cipher.cfb_decrypt(
         bc,
-        Bytes::make(16, b'\x00').view(),
-        skesk.encrypted_session_key().view(),
+        Bytes::make(16, b'\x00').exact_view(),
+        skesk.encrypted_session_key().exact_view(),
       )
       guard wrapped.length() >= 1 else {
         raise @error.PgpError::PgpError(msg="api: empty session key")
@@ -163,7 +169,10 @@ fn unwrap_skesk(
 
 ///|
 fn seal_seipd(session_key : BytesView, inner : BytesView) -> Bytes raise {
-  let bc = @primitives.new_block_cipher(@primitives.Aes256, session_key.view())
+  let bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    session_key.exact_view(),
+  )
   @cipher.seipd_v1_encrypt(bc, inner)
 }
 
@@ -172,7 +181,6 @@ fn seal_seipd(session_key : BytesView, inner : BytesView) -> Bytes raise {
 /// the way. Trailing signature packets (one-pass) are consumed by later
 /// layers.
 fn extract_literal(inner : BytesView) -> Bytes raise {
-  let packets = @packet.parse_packets(inner)
   let mut stream = inner
   // At most two nesting levels: SEIPD -> compressed -> literal. A
   // one-pass signature packet may precede the data.
@@ -183,16 +191,18 @@ fn extract_literal(inner : BytesView) -> Bytes raise {
     }
     let tag = ps[0].tag()
     if tag == @packet.Literal {
-      return @packet.LiteralPacket::parse(ps[0].body().view()).data()
+      return @packet.LiteralPacket::parse(ps[0].body().exact_view()).data()
     }
     if tag == @packet.OnePassSig {
       // Re-parse the rest after the OPS packet.
       if ps.length() > 1 {
         let w = @packet.Writer::new()
         for p in ps[1:ps.length()] {
-          w.bytes(@packet.serialize_packet(p.tag(), p.body().view()).view())
+          w.bytes(
+            @packet.serialize_packet(p.tag(), p.body().exact_view()).exact_view(),
+          )
         }
-        stream = w.to_bytes().view()
+        stream = w.to_bytes().exact_view()
         continue
       }
       raise @error.PgpError::PgpError(
@@ -200,17 +210,17 @@ fn extract_literal(inner : BytesView) -> Bytes raise {
       )
     }
     if tag == @packet.Compressed {
-      let comp = @packet.CompressedPacket::parse(ps[0].body().view())
+      let comp = @packet.CompressedPacket::parse(ps[0].body().exact_view())
       let decompressed : Bytes = match comp.algo {
         0 => comp.data
-        1 => @compress.zip_decompress(comp.data.view())
-        2 => @compress.zlib_decompress(comp.data.view())
+        1 => @compress.zip_decompress(comp.data.exact_view())
+        2 => @compress.zlib_decompress(comp.data.exact_view())
         _ =>
           raise @error.PgpError::PgpError(
             msg="api: unsupported compression algorithm \{comp.algo}",
           )
       }
-      stream = decompressed.view()
+      stream = decompressed.exact_view()
       continue
     }
     raise @error.PgpError::PgpError(

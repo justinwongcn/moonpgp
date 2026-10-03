@@ -6,7 +6,7 @@ fn ext_gcd(a : BigInt, m : BigInt) -> (BigInt, BigInt) {
   let mut r = m
   let mut old_s = BigInt::from_int(1)
   let mut s = BigInt::from_int(0)
-  while not(r.is_zero()) {
+  while !r.is_zero() {
     let q = old_r.div(r)
     let tmp_r = old_r.sub(q.mul(r))
     old_r = r
@@ -36,7 +36,7 @@ pub fn mod_inverse(a : BigInt, m : BigInt) -> BigInt raise {
 fn random_bigint(bits : Int) -> BigInt raise {
   let nbytes = (bits + 7) / 8
   let raw = @primitives.random_bytes(nbytes)
-  let mut v = BigInt::from_octets(raw.view(), signum=1)
+  let mut v = BigInt::from_octets(raw.exact_view(), signum=1)
   let excess = nbytes * 8 - bits
   if excess > 0 {
     v = v.shr(excess)
@@ -168,7 +168,7 @@ pub fn random_prime(
     if candidate.bit_length() != bits {
       continue
     }
-    if not(is_probable_prime(candidate, rounds~)) {
+    if !is_probable_prime(candidate, rounds~) {
       continue
     }
     // gcd(p-1, e) == 1

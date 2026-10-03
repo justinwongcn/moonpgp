@@ -9,8 +9,8 @@ test "packet header roundtrip across length classes" {
   for tag in tags {
     for size in [0, 100, 191, 192, 500, 8383, 8384, 20000] {
       let body = Bytes::make(size, b'\x5A')
-      let wire = @packet.serialize_packet(tag, body.view())
-      let parsed = @packet.parse_packets(wire.view())
+      let wire = @packet.serialize_packet(tag, body.exact_view())
+      let parsed = @packet.parse_packets(wire.exact_view())
       assert_eq(parsed.length(), 1)
       assert_eq(parsed[0].tag(), tag)
       assert_eq(parsed[0].body(), body)
@@ -21,8 +21,8 @@ test "packet header roundtrip across length classes" {
 ///|
 test "old-format header roundtrip" {
   let body = Bytes::make(300, b'\x01')
-  let wire = @packet.serialize_packet_old(@packet.PublicKey, body.view())
-  let parsed = @packet.parse_packets(wire.view())
+  let wire = @packet.serialize_packet_old(@packet.PublicKey, body.exact_view())
+  let parsed = @packet.parse_packets(wire.exact_view())
   assert_eq(parsed.length(), 1)
   assert_eq(parsed[0].tag(), @packet.PublicKey)
   assert_eq(parsed[0].body(), body)
@@ -42,7 +42,7 @@ test "partial body lengths are accumulated" {
   for _ in 0..<10 {
     w.u8(0xBB)
   }
-  let parsed = @packet.parse_packets(w.to_bytes().view())
+  let parsed = @packet.parse_packets(w.to_bytes().exact_view())
   assert_eq(parsed.length(), 1)
   assert_eq(parsed[0].tag(), @packet.Literal)
   assert_eq(parsed[0].body().length(), 512 + 10)
@@ -66,7 +66,7 @@ test "RFC 9580 A.1 sample public key packet decodes as one packet" {
     "98330453f35f0b1609" +
     "2b06010401da470f010107403f098994bdd916ed4053197934e4a87c80733a1280d62f8010992e43ee3b2406",
   )
-  let parsed = @packet.parse_packets(wire.view())
+  let parsed = @packet.parse_packets(wire.exact_view())
   assert_eq(parsed.length(), 1)
   assert_eq(parsed[0].tag(), @packet.PublicKey)
   assert_eq(parsed[0].body().length(), 0x33)
@@ -82,10 +82,10 @@ test "RFC 9580 A.2 sample signature packet parses" {
     "00ff56f90cca98e2102637bd983fdb16c131dfd27ed82bf4dde5606e0d756aed3366" +
     "0100d09c4fa11527f038e0f57f2201d82f2ea2c9033265fa6ceb489e854bae61b404",
   )
-  let parsed = @packet.parse_packets(wire.view())
+  let parsed = @packet.parse_packets(wire.exact_view())
   assert_eq(parsed.length(), 1)
   assert_eq(parsed[0].tag(), @packet.Signature)
-  let sig = @packet.SignaturePacket::parse(parsed[0].body().view())
+  let sig = @packet.SignaturePacket::parse(parsed[0].body().exact_view())
   assert_eq(@packet.SignaturePacket::sig_type(sig), @packet.BinaryDocument)
   assert_eq(@packet.SignaturePacket::pub_algo(sig), @packet.EdDsaLegacy)
   assert_eq(@packet.SignaturePacket::hash_algo(sig), 8)
@@ -123,7 +123,7 @@ test "signature packet roundtrip (RSA-shaped)" {
     sig_params: [@primitives.from_hex("deadbeefcafe")],
   }
   let body = sig.to_body()
-  let again = @packet.SignaturePacket::parse(body.view())
+  let again = @packet.SignaturePacket::parse(body.exact_view())
   assert_eq(again.sig_type(), @packet.CanonicalTextDocument)
   assert_eq(again.pub_algo(), @packet.RsaEncryptOrSign)
   assert_eq(again.hash_algo(), 8)
@@ -144,7 +144,7 @@ test "pkesk and skesk roundtrip" {
     ecdh_ephemeral: Bytes::new(0),
   }
   let body = pkesk.to_body()
-  let parsed = @packet.PkeskPacket::parse(body.view())
+  let parsed = @packet.PkeskPacket::parse(body.exact_view())
   assert_eq(parsed.key_id(), @primitives.from_hex("0123456789abcdef"))
   assert_eq(parsed.pub_algo(), @packet.RsaEncryptOrSign)
   assert_eq(parsed.encrypted(), @primitives.from_hex("feedface01"))
@@ -157,7 +157,7 @@ test "pkesk and skesk roundtrip" {
     ),
     encrypted_session_key: Bytes::new(0),
   }
-  let parsed2 = @packet.SkeskPacket::parse(skesk.to_body().view())
+  let parsed2 = @packet.SkeskPacket::parse(skesk.to_body().exact_view())
   assert_eq(parsed2.cipher_algo(), 9)
   assert_eq(parsed2.s2k(), skesk.s2k())
   assert_eq(parsed2.encrypted_session_key().length(), 0)
@@ -169,7 +169,7 @@ test "literal packet roundtrip with utf8 file name" {
     @primitives.utf8_bytes("héllo wörld\n"),
     file_name="note.txt",
   )
-  let parsed = @packet.LiteralPacket::parse(lit.to_body().view())
+  let parsed = @packet.LiteralPacket::parse(lit.to_body().exact_view())
   assert_eq(parsed.file_name(), "note.txt")
   assert_eq(parsed.data(), @primitives.utf8_bytes("héllo wörld\n"))
   assert_eq(parsed.format(), 'b')
@@ -181,7 +181,7 @@ test "seipd packet roundtrip" {
     version: 1,
     ciphertext: Bytes::make(37, b'\x03'),
   }
-  let parsed = @packet.SeipdPacket::parse(seipd.to_body().view())
+  let parsed = @packet.SeipdPacket::parse(seipd.to_body().exact_view())
   assert_eq(parsed.version, 1)
   assert_eq(parsed.ciphertext, Bytes::make(37, b'\x03'))
 }
@@ -194,8 +194,13 @@ test "session key checksum" {
 
 ///|
 test "reader truncation raises" {
-  let r = @packet.Reader::new(Bytes::from_array([1, 2]).view())
+  let r = @packet.Reader::new(Bytes::from_array([1, 2]).exact_view())
   ignore(r.read_u16())
-  let result = try? r.read_u8()
-  assert_true(result.is_err())
+  let raised = try {
+    let _ = r.read_u8()
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }

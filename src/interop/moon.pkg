@@ -6,4 +6,4 @@ import {
   "justinwongcn/openpgp/src/api",
   "justinwongcn/openpgp/src/mime",
   "moonbitlang/x/fs",
-}
+} for "test"

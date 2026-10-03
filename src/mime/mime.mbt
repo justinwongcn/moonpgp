@@ -24,7 +24,7 @@ pub fn MimeMessage::header(self : MimeMessage, name : String) -> String? {
 ///|
 /// Parse a header block + body. Headers are terminated by the first empty
 /// line; folded (continuation) headers are joined.
-pub fn parse_message(text : String) -> MimeMessage raise {
+pub fn parse_message(text : String) -> MimeMessage {
   let normalized = text.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = normalized.split("\n").collect()
   let headers = parse_folded_headers(lines)
@@ -57,13 +57,13 @@ pub fn content_type_boundary(content_type : String) -> String? {
   let rest = content_type[idx:content_type.length()]
   let rest = if rest.has_prefix("\"") {
     match rest[1:rest.length()].find("\"") {
-      Some(end) => rest[1:1 + end].to_string()
-      None => rest[1:rest.length()].to_string()
+      Some(end) => rest[1:1 + end].to_owned()
+      None => rest[1:rest.length()].to_owned()
     }
   } else {
     match rest.find(";") {
-      Some(end) => rest[0:end].to_string()
-      None => rest.to_string()
+      Some(end) => rest[0:end].to_owned()
+      None => rest.to_owned()
     }
   }
   Some(rest)
@@ -106,7 +106,7 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
 
 ///|
 fn join_lines(lines : Array[StringView]) -> String {
-  let buf = StringBuilder::new()
+  let buf = StringBuilder()
   for i in 0..<lines.length() {
     buf.write_stringview(lines[i])
     if i < lines.length() - 1 {
@@ -208,7 +208,7 @@ fn strip_leading_headers_keep_body(part : String) -> String {
   if i < lines.length() {
     i = i + 1
   }
-  let buf = StringBuilder::new()
+  let buf = StringBuilder()
   while i < lines.length() {
     buf.write_stringview(lines[i])
     if i < lines.length() - 1 {
@@ -224,7 +224,7 @@ fn strip_leading_headers_keep_body(part : String) -> String {
 /// MESSAGE (RFC 3156 §6).
 pub fn build_pgp_mime_encrypted(armored_message : String) -> String raise {
   let boundary = random_boundary()
-  let buf = StringBuilder::new()
+  let buf = StringBuilder()
   buf.write_string("MIME-Version: 1.0\r\n")
   buf.write_string(
     "Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"\{boundary}\"\r\n\r\n",
@@ -235,7 +235,7 @@ pub fn build_pgp_mime_encrypted(armored_message : String) -> String raise {
   buf.write_string("--\{boundary}\r\n")
   buf.write_string("Content-Type: application/octet-stream\r\n\r\n")
   buf.write_string(armored_message)
-  if not(armored_message.has_suffix("\n")) {
+  if !armored_message.has_suffix("\n") {
     buf.write_char('\n')
   }
 
@@ -256,20 +256,20 @@ pub fn build_pgp_mime_signed(
   // so the body's own line endings are not doubled.
   let body_lf = text.replace_all(old="\r\n", new="\n")
   let part1_lf = "Content-Type: text/plain; charset=utf-8\nContent-Transfer-Encoding: 8bit\n\n\{body_lf}"
-  if not(part1_lf.has_suffix("\n")) {
+  if !part1_lf.has_suffix("\n") {
     ignore(part1_lf)
   }
   let part1 = part1_lf.replace_all(old="\n", new="\r\n")
   let signed_bytes = @primitives.utf8_bytes(part1)
-  let sig_armor = @api.sign_detached(signed_bytes.view(), key)
-  let buf = StringBuilder::new()
+  let sig_armor = @api.sign_detached(signed_bytes.exact_view(), key)
+  let buf = StringBuilder()
   buf.write_string("MIME-Version: 1.0\r\n")
   buf.write_string(
     "Content-Type: multipart/signed; protocol=\"application/pgp-signature\"; micalg=pgp-sha256; boundary=\"\{boundary}\"\r\n\r\n",
   )
   buf.write_string("--\{boundary}\r\n")
   buf.write_string(part1)
-  if not(part1.has_suffix("\r\n")) {
+  if !part1.has_suffix("\r\n") {
     buf.write_string("\r\n")
   }
   buf.write_string("--\{boundary}\r\n")
@@ -277,7 +277,7 @@ pub fn build_pgp_mime_signed(
     "Content-Type: application/pgp-signature; name=\"OpenPGP_signature.asc\"\r\nContent-Disposition: attachment; filename=\"OpenPGP_signature.asc\"\r\n\r\n",
   )
   buf.write_string(sig_armor)
-  if not(sig_armor.has_suffix("\n")) {
+  if !sig_armor.has_suffix("\n") {
     buf.write_char('\n')
   }
   // The boundary delimiter line requires a preceding CRLF of its own.
@@ -295,13 +295,16 @@ pub fn verify_pgp_mime_signed(
 ) -> (String, @api.VerifyStatus) raise {
   let signed = extract_pgp_signed(mime_text)
   let status = @api.verify_detached(
-    signed.signed_bytes.view(),
+    signed.signed_bytes.exact_view(),
     signed.signature_armor,
     verifier,
   )
-  let text = match (try? @utf8.decode(signed.signed_bytes.view())) {
-    Ok(t) => t
-    Err(_) => ""
-  }
+  let text = @utf8.decode(signed.signed_bytes.exact_view()) catch { _ => "" }
   (text, status)
 }
+
+///|
+pub extend MimeMessage with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend PgpMimeSigned with @moonbitlang/core/debug.Debug::{to_repr}

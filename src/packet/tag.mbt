@@ -217,3 +217,12 @@ fn read_new_length(r : Reader) -> Int raise {
     r.read_u32()
   }
 }
+
+///|
+pub extend PacketTag with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend PacketTag with Eq::{not_equal, equal}
+
+///|
+pub extend RawPacket with @moonbitlang/core/debug.Debug::{to_repr}

@@ -10,7 +10,7 @@ test "debug cleartext" {
   ignore(block)
   // parse the sig from the message
   let lines : Array[StringView] = message.split("\n").collect()
-  let buf = StringBuilder::new()
+  let buf = StringBuilder()
   let mut started = false
   for l in lines {
     if l.has_prefix("-----BEGIN PGP SIGNATURE-----") {
@@ -22,10 +22,12 @@ test "debug cleartext" {
     }
   }
   let sig_block = @armor.decode(buf.to_string())
-  let packets = @packet.parse_packets(@armor.ArmorBlock::data(sig_block).view())
+  let packets = @packet.parse_packets(
+    @armor.ArmorBlock::data(sig_block).exact_view(),
+  )
   for p in packets {
     if p.tag() == @packet.Signature {
-      let sig = @packet.SignaturePacket::parse(p.body().view())
+      let sig = @packet.SignaturePacket::parse(p.body().exact_view())
       match @packet.SignaturePacket::issuer_key_id(sig) {
         Some(id) => println("sig issuer: \{@primitives.to_hex(id)}")
         None => println("sig issuer: NONE")

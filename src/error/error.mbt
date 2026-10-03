@@ -26,3 +26,6 @@ pub fn[T] require(opt : T?, msg : String) -> T raise PgpError {
     None => fail(msg)
   }
 }
+
+///|
+pub extend PgpError with Show::{to_string, output}

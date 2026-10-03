@@ -165,3 +165,9 @@ pub fn Writer::mpi(self : Writer, data : BytesView) -> Unit {
 pub fn Writer::to_bytes(self : Writer) -> Bytes {
   Bytes::from_array(self.out)
 }
+
+///|
+pub extend Reader with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend Writer with @moonbitlang/core/debug.Debug::{to_repr}

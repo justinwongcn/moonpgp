@@ -31,10 +31,8 @@ pub fn compressed_algo_of_number(n : Int) -> CompressedAlgo? {
 
 ///|
 /// Raw DEFLATE (RFC 1951) — the ZIP algorithm of the Compressed packet.
-pub fn zip_compress(data : BytesView) -> Bytes raise {
-  @flate.deflate_all(data.to_owned()) catch {
-    _ => raise @error.PgpError::PgpError(msg="compress: deflate failed")
-  }
+pub fn zip_compress(data : BytesView) -> Bytes {
+  @flate.deflate_all(data.to_owned())
 }
 
 ///|
@@ -48,10 +46,8 @@ pub fn zip_decompress(data : BytesView) -> Bytes raise {
 
 ///|
 /// ZLIB (RFC 1950) wrapper — algorithm 2 of the Compressed packet.
-pub fn zlib_compress(data : BytesView) -> Bytes raise {
-  @zlib.zlib_compress(data.to_owned()) catch {
-    _ => raise @error.PgpError::PgpError(msg="compress: zlib deflate failed")
-  }
+pub fn zlib_compress(data : BytesView) -> Bytes {
+  @zlib.zlib_compress(data.to_owned())
 }
 
 ///|
@@ -60,3 +56,9 @@ pub fn zlib_decompress(data : BytesView) -> Bytes raise {
     _ => raise @error.PgpError::PgpError(msg="compress: zlib inflate failed")
   }
 }
+
+///|
+pub extend CompressedAlgo with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend CompressedAlgo with Eq::{not_equal, equal}

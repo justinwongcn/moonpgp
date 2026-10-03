@@ -415,3 +415,12 @@ pub fn collect_body_and_attachments(
     (None, c.attachments)
   }
 }
+
+///|
+pub extend MimeAttachment with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend MimeBody with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend MimePart with @moonbitlang/core/debug.Debug::{to_repr}

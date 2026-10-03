@@ -32,7 +32,7 @@ test "key export/import roundtrip via armor" {
   assert_eq(reimported.user_id(), "Round Trip <rt@example.com>")
   // Public armor must NOT contain secret packets.
   let block = @armor.decode(pub_armored)
-  let packets = @packet.parse_packets(block.data().view())
+  let packets = @packet.parse_packets(block.data().exact_view())
   for p in packets {
     assert_false(
       p.tag() == @packet.SecretKey || p.tag() == @packet.SecretSubkey,
@@ -51,8 +51,13 @@ test "lock and unlock with passphrase" {
   let locked = key.lock("secret pass")
   assert_true(locked.is_locked())
   // Wrong passphrase fails.
-  let bad = try? locked.unlock("wrong")
-  assert_true(bad.is_err())
+  let raised = try {
+    let _ = locked.unlock("wrong")
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
   // Correct passphrase recovers equivalent secret material.
   let unlocked = locked.unlock("secret pass")
   assert_false(unlocked.is_locked())
@@ -84,8 +89,13 @@ test "decrypt fails with wrong key" {
   let bob = @api.generate_key("Bob <bob@example.com>", bits=1024)
   let plaintext = @primitives.utf8_bytes("for alice only")
   let armored = @api.encrypt_to_recipients(plaintext, [bob.to_public()])
-  let result = try? @api.decrypt_with_private_key(armored, alice)
-  assert_true(result.is_err())
+  let raised = try {
+    let _ = @api.decrypt_with_private_key(armored, alice)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }
 
 ///|

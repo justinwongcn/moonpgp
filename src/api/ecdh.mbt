@@ -15,9 +15,9 @@ fn ecdh_secret_parts(p : @packet.SecretKeyPacket) -> @pki.X25519SecretKey raise 
   guard p.public.algo() == @packet.Ecdh else {
     raise @error.PgpError::PgpError(msg="api: not an ECDH key")
   }
-  let r = @packet.Reader::new(p.secret_material.view())
+  let r = @packet.Reader::new(p.secret_material.exact_view())
   let mpi_value = r.read_mpi()
-  @pki.x25519_secret_of_wire_mpi(mpi_value.view())
+  @pki.x25519_secret_of_wire_mpi(mpi_value.exact_view())
 }
 
 ///|
@@ -41,18 +41,18 @@ fn ecdh_kdf_param(pub_packet : @packet.PublicKeyPacket) -> Bytes raise {
     raise @error.PgpError::PgpError(msg="api: ECDH requires a v4 fingerprint")
   }
   let w = @packet.Writer::new()
-  w.bytes(oid.view())
+  w.bytes(oid.exact_view())
   w.u8(18)
-  w.bytes(kdf_field.view())
-  w.bytes(@pki.ecdh_anonymous_sender().view())
-  w.bytes(fp.view())
+  w.bytes(kdf_field.exact_view())
+  w.bytes(@pki.ecdh_anonymous_sender().exact_view())
+  w.bytes(fp.exact_view())
   w.to_bytes()
 }
 
 ///|
 /// The symmetric algorithm id carried in the key's KDF parameters
 /// (the key-wrap KEK size selector).
-fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int raise {
+fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int {
   let kdf_field = pub_packet.params()[2]
   kdf_field[3].to_int()
 }
@@ -71,7 +71,11 @@ fn ecdh_kek(
         msg="api: unsupported ECDH KEK cipher \{sym}",
       )
   }
-  @pki.ecdh_kdf_sha256(shared, ecdh_kdf_param(pub_packet).view(), kek_len * 8)
+  @pki.ecdh_kdf_sha256(
+    shared,
+    ecdh_kdf_param(pub_packet).exact_view(),
+    kek_len * 8,
+  )
 }
 
 ///|
@@ -128,15 +132,18 @@ fn ecdh_wrap_session_key(
 ) -> (Bytes, Bytes) raise {
   let eph = @pki.x25519_generate()
   let peer = ecdh_native_point(recipient_pub)
-  let shared = @pki.x25519_shared_secret(eph.scalar.view(), peer.view())
-  let kek = ecdh_kek(shared.view(), recipient_pub)
+  let shared = @pki.x25519_shared_secret(
+    eph.scalar.exact_view(),
+    peer.exact_view(),
+  )
+  let kek = ecdh_kek(shared.exact_view(), recipient_pub)
   let m = @packet.Writer::new()
   m.u8(sym_algo.number())
   m.bytes(session_key)
   m.u16(@packet.session_key_checksum(session_key))
   let wrapped = @cipher.aes_key_wrap(
-    kek.view(),
-    pkcs5_pad8(m.to_bytes().view()).view(),
+    kek.exact_view(),
+    pkcs5_pad8(m.to_bytes().exact_view()).exact_view(),
   )
   let point = Bytes::from_array([0x40]).add(eph.public)
   (point, wrapped)
@@ -155,12 +162,12 @@ fn ecdh_unwrap_session_key(
     raise @error.PgpError::PgpError(msg="api: bad ECDH ephemeral point")
   }
   let shared = @pki.x25519_shared_secret(
-    secret.scalar.view(),
-    eph[1:eph.length()].view(),
+    secret.scalar.exact_view(),
+    eph[1:eph.length()].exact_view(),
   )
-  let kek = ecdh_kek(shared.view(), sk.public)
+  let kek = ecdh_kek(shared.exact_view(), sk.public)
   let m = pkcs5_unpad8(
-    @cipher.aes_key_unwrap(kek.view(), pkesk.encrypted().view()).view(),
+    @cipher.aes_key_unwrap(kek.exact_view(), pkesk.encrypted().exact_view()).exact_view(),
   )
   guard m.length() >= 3 + 16 else {
     raise @error.PgpError::PgpError(msg="api: session key payload too short")
@@ -168,7 +175,7 @@ fn ecdh_unwrap_session_key(
   let algo = m[0].to_int()
   let key = m[1:m.length() - 2].to_owned()
   let want = (m[m.length() - 2].to_int() << 8) | m[m.length() - 1].to_int()
-  guard @packet.session_key_checksum(key.view()) == want else {
+  guard @packet.session_key_checksum(key.exact_view()) == want else {
     raise @error.PgpError::PgpError(msg="api: session key checksum mismatch")
   }
   (algo, key)
@@ -202,11 +209,11 @@ fn build_ecdh_secret_key_packet(
   let sw = @packet.Writer::new()
   let wire = x.wire_mpi()
   sw.u16(255)
-  sw.bytes(wire[2:wire.length()].view())
+  sw.bytes(wire[2:wire.length()].exact_view())
   let mpi_bytes = sw.to_bytes()
   let w2 = @packet.Writer::new()
-  w2.bytes(mpi_bytes.view())
-  w2.u16(@packet.session_key_checksum(mpi_bytes.view()))
+  w2.bytes(mpi_bytes.exact_view())
+  w2.u16(@packet.session_key_checksum(mpi_bytes.exact_view()))
   @packet.SecretKeyPacket::{
     public: pub_packet,
     s2k_usage: 0,

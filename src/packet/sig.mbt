@@ -255,7 +255,7 @@ fn serialize_subpackets(subs : Array[SigSubpacket]) -> Bytes {
     }
     let type_octet = if sp.critical { sp.sub_type | 0x80 } else { sp.sub_type }
     w.u8(type_octet)
-    w.bytes(sp.body.view())
+    w.bytes(sp.body.exact_view())
   }
   w.to_bytes()
 }
@@ -274,9 +274,9 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let hash_algo = r.read_u8()
   let hashed_len = r.read_u16()
   let raw_hashed = r.read_bytes(hashed_len)
-  let hashed = parse_subpackets(raw_hashed.view())
+  let hashed = parse_subpackets(raw_hashed.exact_view())
   let unhashed_len = r.read_u16()
-  let unhashed = parse_subpackets(r.read_bytes(unhashed_len).view())
+  let unhashed = parse_subpackets(r.read_bytes(unhashed_len).exact_view())
   let fast = r.read_u16()
   let params : Array[Bytes] = []
   match pub_algo {
@@ -314,13 +314,13 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
     _ => serialize_subpackets(self.hashed_subpackets)
   }
   w.u16(hashed.length())
-  w.bytes(hashed.view())
+  w.bytes(hashed.exact_view())
   let unhashed = serialize_subpackets(self.unhashed_subpackets)
   w.u16(unhashed.length())
-  w.bytes(unhashed.view())
+  w.bytes(unhashed.exact_view())
   w.u16(self.fast_hash)
   for p in self.sig_params {
-    w.mpi(p.view())
+    w.mpi(p.exact_view())
   }
   w.to_bytes()
 }
@@ -412,7 +412,7 @@ pub fn SignaturePacket::hash_prefix(self : SignaturePacket) -> Bytes {
     _ => serialize_subpackets(self.hashed_subpackets)
   }
   w.u16(hashed.length())
-  w.bytes(hashed.view())
+  w.bytes(hashed.exact_view())
   w.to_bytes()
 }
 
@@ -461,7 +461,25 @@ pub fn OnePassSigPacket::to_body(self : OnePassSigPacket) -> Bytes {
   w.u8(self.sig_type.number())
   w.u8(self.hash_algo)
   w.u8(self.pub_algo.number())
-  w.bytes(self.key_id.view())
+  w.bytes(self.key_id.exact_view())
   w.u8(if self.nested { 1 } else { 0 })
   w.to_bytes()
 }
+
+///|
+pub extend OnePassSigPacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SigSubpacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SigSubpacket with Eq::{not_equal, equal}
+
+///|
+pub extend SigType with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SigType with Eq::{not_equal, equal}
+
+///|
+pub extend SignaturePacket with @moonbitlang/core/debug.Debug::{to_repr}

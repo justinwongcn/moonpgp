@@ -50,11 +50,13 @@ test "our ECDH encrypt/decrypt roundtrip against gpg vectors" {
   // The message we produced for gpg (live-verified) must parse with an
   // ECDH PKESK aimed at gpg's subkey.
   let block = @armor.decode(read_testdata("interop_our_ecdh_message.asc"))
-  let packets = @packet.parse_packets(@armor.ArmorBlock::data(block).view())
+  let packets = @packet.parse_packets(
+    @armor.ArmorBlock::data(block).exact_view(),
+  )
   let mut saw_ecdh_pkesk = false
   for p in packets {
     if p.tag() == @packet.Pkesk {
-      let pkesk = @packet.PkeskPacket::parse(p.body().view())
+      let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
       assert_eq(pkesk.pub_algo(), @packet.Ecdh)
       assert_eq(pkesk.ecdh_ephemeral().length(), 33)
       assert_eq(pkesk.ecdh_ephemeral()[0], b'\x40')

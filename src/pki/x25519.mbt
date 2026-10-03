@@ -137,3 +137,6 @@ pub fn ecdh_kdf_sha256(
 pub fn ecdh_anonymous_sender() -> Bytes {
   @primitives.utf8_bytes("Anonymous Sender    ")
 }
+
+///|
+pub extend X25519SecretKey with @moonbitlang/core/debug.Debug::{to_repr}

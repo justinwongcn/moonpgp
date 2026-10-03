@@ -33,12 +33,15 @@ test "hmac-sha256 (RFC 4231 case 2)" {
 ///|
 test "aes block roundtrip via trait object" {
   let key = @primitives.random_bytes(32)
-  let cipher = @primitives.new_block_cipher(@primitives.Aes256, key.view())
+  let cipher = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    key.exact_view(),
+  )
   let block = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
-  let enc = cipher.encrypt_block(block.view())
+  let enc = cipher.encrypt_block(block.exact_view())
   assert_eq(enc.length(), 16)
   assert_false(enc.equal(block))
-  let dec = cipher.decrypt_block(enc.view())
+  let dec = cipher.decrypt_block(enc.exact_view())
   assert_true(dec.equal(block))
 }
 

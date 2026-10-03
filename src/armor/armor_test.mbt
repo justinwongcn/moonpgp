@@ -63,14 +63,19 @@ test "decode real gopenpgp armored message" {
 ///|
 test "corrupted CRC is rejected" {
   let corrupted = GOPENPGP_SED_MESSAGE.replace(old="=meER", new="=meES")
-  let result = try? @armor.decode(corrupted)
-  assert_true(result.is_err())
+  let raised = try {
+    let _ = @armor.decode(corrupted)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }
 
 ///|
 test "decode concatenated blocks" {
-  let data1 = Bytes::of_string("hello")
-  let data2 = Bytes::of_string("world")
+  let data1 = @utf8.encode("hello")
+  let data2 = @utf8.encode("world")
   let key_block = @armor.PublicKey.encode(data1)
   let sig_block = @armor.Signature.encode(data2)
   let both = key_block + sig_block
@@ -84,6 +89,11 @@ test "decode concatenated blocks" {
 
 ///|
 test "no armor block found raises" {
-  let result = try? @armor.decode("no armor here")
-  assert_true(result.is_err())
+  let raised = try {
+    let _ = @armor.decode("no armor here")
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }

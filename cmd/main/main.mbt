@@ -13,10 +13,9 @@ fn main {
   if args.length() < 2 {
     usage()
   }
-  let rest : Array[String] = args[2:args.length()].to_array()
-  match (try? run(args[1], rest)) {
-    Ok(_) => ()
-    Err(e) => {
+  let rest : Array[String] = args[2:args.length()].to_owned()
+  run(args[1], rest) catch {
+    e => {
       println("error: \{e}")
       abort("command failed")
     }
@@ -85,7 +84,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
     check_args(rest.length(), 3)
     let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(rest[0]))
     let data = @fs.read_file_to_bytes(rest[1])
-    let sig = @api.sign_detached(data.view(), key)
+    let sig = @api.sign_detached(data.exact_view(), key)
     @fs.write_string_to_file(rest[2], sig)
     println("wrote \{rest[2]}")
     return
@@ -95,7 +94,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
     let key = @api.PublicKey::from_armored(@fs.read_file_to_string(rest[0]))
     let data = @fs.read_file_to_bytes(rest[1])
     let sig = @fs.read_file_to_string(rest[2])
-    match @api.verify_detached(data.view(), sig, key) {
+    match @api.verify_detached(data.exact_view(), sig, key) {
       @api.Ok => println("Good signature")
       @api.NotSigned => {
         println("No signature found")
@@ -124,12 +123,8 @@ fn check_args(got : Int, want : Int) -> Unit {
 
 ///|
 fn parse_bits(rest : Array[String], default : Int) -> Int {
-  match rest[3:rest.length()].to_array() {
-    [b, ..] =>
-      match (try? @string.parse_int(b)) {
-        Ok(v) => v
-        Err(_) => default
-      }
+  match rest[3:rest.length()].to_owned() {
+    [b, ..] => @string.parse_int(b) catch { _ => default }
     _ => default
   }
 }

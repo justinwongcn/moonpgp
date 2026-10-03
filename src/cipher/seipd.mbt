@@ -9,10 +9,10 @@ pub fn seipd_v1_encrypt(
   let prefix = random_prefix()
   let tail = Bytes::from_array([0xD3, 0x14])
   let hashed = prefix.add(inner.to_owned()).add(tail)
-  let mdc = @primitives.Sha1.digest(hashed.view())
+  let mdc = @primitives.Sha1.digest(hashed.exact_view())
   let plaintext = hashed.add(mdc)
   let zeros = Bytes::make(bc.block_size(), b'\x00')
-  cfb_encrypt(bc, zeros, plaintext.view())
+  cfb_encrypt(bc, zeros, plaintext.exact_view())
 }
 
 ///|
@@ -36,8 +36,8 @@ pub fn seipd_v1_decrypt(
   guard hashed[len - 22] == b'\xD3' && hashed[len - 21] == b'\x14' else {
     raise @error.PgpError::PgpError(msg="seipd: missing MDC header octets")
   }
-  let computed = @primitives.Sha1.digest(hashed.view())
-  guard @primitives.ct_equal(computed.view(), stored_mdc.view()) else {
+  let computed = @primitives.Sha1.digest(hashed.exact_view())
+  guard @primitives.ct_equal(computed.exact_view(), stored_mdc.exact_view()) else {
     raise @error.PgpError::PgpError(
       msg="seipd: MDC mismatch (message modified)",
     )

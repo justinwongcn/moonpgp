@@ -10,7 +10,7 @@ test "verify gpg-signed pgp/mime message" {
   let message = @fs.read_file_to_string("testdata/interop_gpg_pgp_mime.eml")
   let signed = @mime.extract_pgp_signed(message)
   let status = @api.verify_detached(
-    signed.signed_bytes.view(),
+    signed.signed_bytes.exact_view(),
     signed.signature_armor,
     key.to_public(),
   )

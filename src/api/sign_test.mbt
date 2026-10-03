@@ -1,7 +1,7 @@
 ///|
 test "stress: repeated keygen with verification" {
   for i in 0..<6 {
-    let result = try? ({
+    try {
       let key = @api.generate_key("Stress <s\{i}@example.com>", bits=1024)
       let ok1 = @api.verify_key_signature(
         key.self_signature,
@@ -14,16 +14,12 @@ test "stress: repeated keygen with verification" {
         key.primary.public,
         key.encryption_subkey.unwrap().public,
       )
-      (ok1, ok2)
-    })
-    match result {
-      Err(e) => {
+      assert_true(ok1)
+      assert_true(ok2)
+    } catch {
+      e => {
         println("STRESS-ERR at \{i}: \{e}")
         abort("stress failed")
-      }
-      Ok((ok1, ok2)) => {
-        assert_true(ok1)
-        assert_true(ok2)
       }
     }
   }
@@ -57,18 +53,8 @@ test "text mode signature canonicalizes newlines" {
 test "inline signature roundtrip" {
   let key = @api.generate_key("Signer <s@example.com>", bits=1024)
   let data = @primitives.utf8_bytes("signed payload")
-  let r1 = try? @api.sign_inline(data, key)
-  match r1 {
-    Err(@error.PgpError(msg~)) => println("INLINE-ERR-SIGN: \{msg}")
-    _ => ()
-  }
-  let armored = r1.unwrap()
-  let r2 = try? @api.verify_inline(armored, key.to_public())
-  match r2 {
-    Err(@error.PgpError(msg~)) => println("INLINE-ERR-VERIFY: \{msg}")
-    _ => ()
-  }
-  let (extracted, status) = r2.unwrap()
+  let armored = @api.sign_inline(data, key)
+  let (extracted, status) = @api.verify_inline(armored, key.to_public())
   assert_eq(extracted, data)
   assert_eq(status, @api.Ok)
 }
@@ -79,18 +65,11 @@ test "sign and encrypt, then decrypt and verify" {
   let recipient = @api.generate_key("Recipient <to@example.com>", bits=1024)
   let data = @primitives.utf8_bytes("confidential and authenticated")
   let armored = @api.sign_and_encrypt(data, signer, [recipient.to_public()])
-  println("STAGE: encrypted ok")
-  let result = try? @api.decrypt_and_verify(
+  let (extracted, status) = @api.decrypt_and_verify(
     armored,
     [recipient],
     Some(signer.to_public()),
   )
-  println("STAGE: decrypt returned: \{result is Ok(_)}")
-  match result {
-    Err(@error.PgpError(msg~)) => println("DBG: \{msg}")
-    _ => ()
-  }
-  let (extracted, status) = result.unwrap()
   assert_eq(extracted, data)
   assert_eq(status, @api.Ok)
 }
@@ -117,7 +96,7 @@ test "builder: password encryption and decryption" {
   let decrypt = @api.pgp().decryption().password("pw1").finish()
   match decrypt(armored) {
     @api.Data(d) => assert_eq(d, data)
-    other => abort("unexpected decrypt result")
+    _ => abort("unexpected decrypt result")
   }
 }
 
@@ -139,7 +118,7 @@ test "builder: public key path with signature verification" {
     .finish()
   match decrypt(armored) {
     @api.Verified(d) => assert_eq(d, data)
-    other => abort("unexpected decrypt result")
+    _ => abort("unexpected decrypt result")
   }
 }
 

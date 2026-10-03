@@ -22,7 +22,7 @@ test "parse gpg ed25519 key with ecdh subkey" {
   assert_eq(@packet.PublicKeyPacket::algo(sub), @packet.Ecdh)
   // Subkey round-trips to the exact wire bytes gpg wrote.
   let body = sub.to_body()
-  let re = @packet.PublicKeyPacket::parse(body.view())
+  let re = @packet.PublicKeyPacket::parse(body.exact_view())
   assert_eq(@packet.PublicKeyPacket::algo(re), @packet.Ecdh)
   assert_eq(re.params()[2][3].to_int(), 7) // AES-128 key wrap
 }

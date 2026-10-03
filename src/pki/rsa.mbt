@@ -56,7 +56,7 @@ pub fn os2ip(data : BytesView) -> BigInt {
 ///|
 /// i2osp: integer to fixed-width octet string.
 pub fn i2osp(v : BigInt, length : Int) -> Bytes {
-  @primitives.pad_left(v.to_octets().view(), length)
+  @primitives.pad_left(v.to_octets().exact_view(), length)
 }
 
 ///|
@@ -83,11 +83,11 @@ pub fn RsaPublicKey::pkcs1_v15_encrypt(
   let w = @packet.Writer::new()
   w.u8(0)
   w.u8(2)
-  w.bytes(Bytes::from_array(ps).view())
+  w.bytes(Bytes::from_array(ps).exact_view())
   w.u8(0)
   w.bytes(message)
   let em = w.to_bytes()
-  i2osp(self.raw_encrypt(os2ip(em.view())), k)
+  i2osp(self.raw_encrypt(os2ip(em.exact_view())), k)
 }
 
 ///|
@@ -145,9 +145,9 @@ pub fn RsaPrivateKey::pkcs1_v15_sign(
     w.u8(255)
   }
   w.u8(0)
-  w.bytes(digest_info.view())
+  w.bytes(digest_info.exact_view())
   let em = w.to_bytes()
-  i2osp(os2ip(em.view()).pow(self.d, modulus=self.public.n), k)
+  i2osp(os2ip(em.exact_view()).pow(self.d, modulus=self.public.n), k)
 }
 
 ///|
@@ -165,7 +165,7 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
   // The wire MPI of a signature may have lost leading zero octets; the
   // value itself is what matters, so pad back to k before checking.
   guard signature.length() <= k else { return false }
-  let s = os2ip(@primitives.pad_left(signature, k).view())
+  let s = os2ip(@primitives.pad_left(signature, k).exact_view())
   guard s < self.n else { return false }
   let em = i2osp(s.pow(self.e, modulus=self.n), k)
   let digest_info = @primitives.concat2(hash.der_prefix(), digest)
@@ -178,8 +178,8 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
     w.u8(255)
   }
   w.u8(0)
-  w.bytes(digest_info.view())
-  @primitives.ct_equal(em.view(), w.to_bytes().view())
+  w.bytes(digest_info.exact_view())
+  @primitives.ct_equal(em.exact_view(), w.to_bytes().exact_view())
 }
 
 ///|
@@ -206,7 +206,7 @@ pub fn generate_rsa_key(bits~ : Int) -> RsaPrivateKey raise {
   while too_close {
     let diff = if p.compare(q) == -1 { q.sub(p) } else { p.sub(q) }
     too_close = diff.compare(min_diff) == -1
-    if not(too_close) {
+    if !too_close {
       break
     }
     p = random_prime(bits / 2, coprime=e, rounds=40)
@@ -224,3 +224,9 @@ pub fn generate_rsa_key(bits~ : Int) -> RsaPrivateKey raise {
   let u = mod_inverse(p, q)
   RsaPrivateKey::{ public: { n, e, }, d, p, q, u, }
 }
+
+///|
+pub extend RsaPrivateKey with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend RsaPublicKey with @moonbitlang/core/debug.Debug::{to_repr}

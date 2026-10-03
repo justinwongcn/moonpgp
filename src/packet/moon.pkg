@@ -3,4 +3,5 @@ import {
   "justinwongcn/openpgp/src/primitives",
   "justinwongcn/openpgp/src/s2k",
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/debug",
 }

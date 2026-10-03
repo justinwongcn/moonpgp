@@ -148,3 +148,9 @@ pub fn S2k::derive_key(
   }
   Bytes::from_array(out)
 }
+
+///|
+pub extend S2k with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend S2k with Eq::{not_equal, equal}

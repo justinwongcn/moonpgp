@@ -1,4 +1,5 @@
 import {
   "justinwongcn/openpgp/src/error",
   "justinwongcn/openpgp/src/primitives",
+  "moonbitlang/core/debug",
 }

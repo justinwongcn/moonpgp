@@ -17,7 +17,7 @@ pub(all) struct EncryptionBuilder {
 }
 
 ///|
-pub fn Pgp::encryption(self : Pgp) -> EncryptionBuilder {
+pub fn Pgp::encryption(_self : Pgp) -> EncryptionBuilder {
   EncryptionBuilder::{
     passwords: [],
     recipients: [],
@@ -73,7 +73,7 @@ pub fn EncryptionBuilder::finish(
   let signer = self.signer
   let file_name = self.file_name
   fn(data : BytesView) -> String raise {
-    if not(recipients.is_empty()) {
+    if !recipients.is_empty() {
       // Public-key path; wrap an inline signature when a signer is set.
       let armored = match signer {
         Some(sk) => sign_and_encrypt(data, sk, recipients)
@@ -81,7 +81,7 @@ pub fn EncryptionBuilder::finish(
       }
       return armored
     }
-    if not(passwords.is_empty()) {
+    if !passwords.is_empty() {
       return encrypt_with_password(data, passwords[0], file_name~)
     }
     raise @error.PgpError::PgpError(
@@ -99,7 +99,7 @@ pub(all) struct DecryptionBuilder {
 }
 
 ///|
-pub fn Pgp::decryption(self : Pgp) -> DecryptionBuilder {
+pub fn Pgp::decryption(_self : Pgp) -> DecryptionBuilder {
   DecryptionBuilder::{ passwords: [], private_keys: [], verifiers: [], }
 }
 
@@ -152,7 +152,7 @@ pub fn DecryptionBuilder::finish(
   let private_keys = self.private_keys
   let verifiers = self.verifiers
   fn(message : String) -> DecryptResult raise {
-    if not(private_keys.is_empty()) {
+    if !private_keys.is_empty() {
       let (d, status) = decrypt_and_verify_list(
         message, private_keys, verifiers,
       )
@@ -163,7 +163,7 @@ pub fn DecryptionBuilder::finish(
         NoVerifier | NotSigned => Data(d)
       }
     }
-    if not(passwords.is_empty()) {
+    if !passwords.is_empty() {
       return Data(decrypt_with_password(message, passwords[0]))
     }
     raise @error.PgpError::PgpError(
@@ -187,9 +187,11 @@ fn decrypt_and_verify_list(
     // Try each key until one matches.
     let mut last_error : String? = None
     for key in keys {
-      match (try? decrypt_and_verify(message, [key], None)) {
-        Ok((d, s)) => return (d, s)
-        Err(e) => last_error = Some(e.to_string())
+      try {
+        let (d, s) = decrypt_and_verify(message, [key], None)
+        return (d, s)
+      } catch {
+        e => last_error = Some(e.to_string())
       }
     }
     match last_error {
@@ -207,7 +209,7 @@ pub(all) struct KeyGenBuilder {
 }
 
 ///|
-pub fn Pgp::key_generation(self : Pgp) -> KeyGenBuilder {
+pub fn Pgp::key_generation(_self : Pgp) -> KeyGenBuilder {
   KeyGenBuilder::{ user_id: "", bits: 3072, }
 }
 
@@ -234,3 +236,6 @@ pub fn KeyGenBuilder::generate(self : KeyGenBuilder) -> PrivateKey raise {
   }
   generate_key(self.user_id, bits=self.bits)
 }
+
+///|
+pub extend DecryptResult with @moonbitlang/core/debug.Debug::{to_repr}

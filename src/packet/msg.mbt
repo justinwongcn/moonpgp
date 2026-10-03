@@ -80,15 +80,15 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
 pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
   let w = Writer::new()
   w.u8(3)
-  w.bytes(self.key_id.view())
+  w.bytes(self.key_id.exact_view())
   w.u8(self.pub_algo.number())
   match self.pub_algo {
     Ecdh => {
-      w.mpi(self.ecdh_ephemeral.view())
+      w.mpi(self.ecdh_ephemeral.exact_view())
       w.u8(self.encrypted.length())
-      w.bytes(self.encrypted.view())
+      w.bytes(self.encrypted.exact_view())
     }
-    _ => w.mpi(self.encrypted.view())
+    _ => w.mpi(self.encrypted.exact_view())
   }
   w.to_bytes()
 }
@@ -141,8 +141,8 @@ pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes {
   let w = Writer::new()
   w.u8(4)
   w.u8(self.cipher_algo)
-  w.bytes(self.s2k.encode().view())
-  w.bytes(self.encrypted_session_key.view())
+  w.bytes(self.s2k.encode().exact_view())
+  w.bytes(self.encrypted_session_key.exact_view())
   w.to_bytes()
 }
 
@@ -192,11 +192,7 @@ pub fn LiteralPacket::parse(body : BytesView) -> LiteralPacket raise {
     0x6c => 'b'
     _ => 'b'
   }
-  let file_name = try? @utf8.decode(name_bytes.view())
-  let name : String = match file_name {
-    Ok(s) => s
-    Err(_) => ""
-  }
+  let name : String = @utf8.decode(name_bytes.exact_view()) catch { _ => "" }
   LiteralPacket::{ format, file_name: name, date, data, }
 }
 
@@ -212,9 +208,9 @@ pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes {
   let name = @primitives.utf8_bytes(self.file_name)
   guard name.length() <= 255 else { abort("literal: file name too long") }
   w.u8(name.length())
-  w.bytes(name.view())
+  w.bytes(name.exact_view())
   w.u32(self.date)
-  w.bytes(self.data.view())
+  w.bytes(self.data.exact_view())
   w.to_bytes()
 }
 
@@ -256,7 +252,7 @@ pub fn CompressedPacket::parse(body : BytesView) -> CompressedPacket raise {
 pub fn CompressedPacket::to_body(self : CompressedPacket) -> Bytes {
   let w = Writer::new()
   w.u8(self.algo)
-  w.bytes(self.data.view())
+  w.bytes(self.data.exact_view())
   w.to_bytes()
 }
 
@@ -279,7 +275,7 @@ pub fn SeipdPacket::parse(body : BytesView) -> SeipdPacket raise {
 pub fn SeipdPacket::to_body(self : SeipdPacket) -> Bytes {
   let w = Writer::new()
   w.u8(self.version)
-  w.bytes(self.ciphertext.view())
+  w.bytes(self.ciphertext.exact_view())
   w.to_bytes()
 }
 
@@ -292,3 +288,18 @@ pub fn session_key_checksum(key : BytesView) -> Int {
   }
   sum
 }
+
+///|
+pub extend CompressedPacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend LiteralPacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend PkeskPacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SeipdPacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SkeskPacket with @moonbitlang/core/debug.Debug::{to_repr}

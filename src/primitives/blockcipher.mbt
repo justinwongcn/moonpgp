@@ -68,3 +68,9 @@ pub fn new_block_cipher(
   }
   new_aes(key)
 }
+
+///|
+pub extend CipherAlgo with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend CipherAlgo with Eq::{not_equal, equal}

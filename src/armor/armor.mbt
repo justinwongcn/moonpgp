@@ -105,7 +105,7 @@ pub fn ArmorType::encode(
       }
     None => ()
   }
-  if not(have_version) {
+  if !have_version {
     buf.write_string("Version: ")
     buf.write_string(VERSION_STRING)
     buf.write_char('\n')
@@ -162,18 +162,18 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
         i = i + 1
         // Armor headers until a blank line (or directly the body if none).
         let headers : Array[(String, String)] = []
-        while i < n && not(lines[i].has_prefix("-----")) {
+        while i < n && !lines[i].has_prefix("-----") {
           let l = lines[i]
           if l == "" {
             i = i + 1
             break
           }
           match l.split_once(": ") {
-            Some((k, v)) => headers.push((k.to_string(), v.to_string()))
+            Some((k, v)) => headers.push((k.to_owned(), v.to_owned()))
             None =>
               // Tolerate headers without a space after the colon.
               match l.split_once(":") {
-                Some((k, v)) => headers.push((k.to_string(), v.to_string()))
+                Some((k, v)) => headers.push((k.to_owned(), v.to_owned()))
                 None => ()
               }
           }
@@ -202,7 +202,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
           }
           i = i + 1
         }
-        if not(closed) {
+        if !closed {
           raise @error.PgpError::PgpError(
             msg="armor: missing END marker after \{armor_type.begin_marker()}",
           )
@@ -212,7 +212,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
         }
         match crc {
           Some(expected) =>
-            if expected != crc24(data.view()) {
+            if expected != crc24(data.exact_view()) {
               raise @error.PgpError::PgpError(msg="armor: CRC-24 mismatch")
             }
           None => ()
@@ -234,7 +234,7 @@ fn parse_crc_line(line : StringView) -> Int? {
     None => None
     Some(s) =>
       try {
-        let b = @base64.decode(s.to_string())
+        let b = @base64.decode(s.to_owned())
         if b.length() == 3 {
           Some((b[0].to_int() << 16) | (b[1].to_int() << 8) | b[2].to_int())
         } else {
@@ -245,3 +245,12 @@ fn parse_crc_line(line : StringView) -> Int? {
       }
   }
 }
+
+///|
+pub extend ArmorBlock with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend ArmorType with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend ArmorType with Eq::{not_equal, equal}

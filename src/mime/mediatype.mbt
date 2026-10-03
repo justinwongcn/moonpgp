@@ -163,3 +163,6 @@ pub fn parse_content_type(value : String) -> MediaType raise {
   }
   MediaType::{ main_type, sub_type, params, }
 }
+
+///|
+pub extend MediaType with @moonbitlang/core/debug.Debug::{to_repr}

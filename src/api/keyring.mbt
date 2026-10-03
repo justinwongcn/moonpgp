@@ -47,16 +47,16 @@ fn all_public_packets(key : PublicKey) -> Array[@packet.PublicKeyPacket] {
 pub fn KeyRing::find_encryption_key(
   self : KeyRing,
   key_id : BytesView,
-) -> @packet.PublicKeyPacket? raise {
+) -> @packet.PublicKeyPacket? {
   for key in self.public_keys {
     for p in all_public_packets(key) {
-      let id = try? p.key_id()
-      match id {
-        Ok(id) =>
-          if id.equal(key_id.to_owned()) && p.algo().is_rsa() {
-            return Some(p)
-          }
-        Err(_) => ()
+      try {
+        let id = p.key_id()
+        if id.equal(key_id.to_owned()) && p.algo().is_rsa() {
+          return Some(p)
+        }
+      } catch {
+        _ => ()
       }
     }
   }
@@ -68,7 +68,7 @@ pub fn KeyRing::find_encryption_key(
 pub fn KeyRing::find_decryption_key(
   self : KeyRing,
   key_id : BytesView,
-) -> @packet.SecretKeyPacket? raise {
+) -> @packet.SecretKeyPacket? {
   for key in self.private_keys {
     let candidates = [key.primary]
     match key.encryption_subkey {
@@ -76,13 +76,13 @@ pub fn KeyRing::find_decryption_key(
       None => ()
     }
     for sk in candidates {
-      let id = try? sk.public.key_id()
-      match id {
-        Ok(id) =>
-          if id.equal(key_id.to_owned()) && not(sk.s2k_usage != 0) {
-            return Some(sk)
-          }
-        Err(_) => ()
+      try {
+        let id = sk.public.key_id()
+        if id.equal(key_id.to_owned()) && !(sk.s2k_usage != 0) {
+          return Some(sk)
+        }
+      } catch {
+        _ => ()
       }
     }
   }
@@ -95,15 +95,21 @@ pub fn KeyRing::find_decryption_key(
 pub fn KeyRing::find_verification_key(
   self : KeyRing,
   key_id : BytesView,
-) -> PublicKey? raise {
+) -> PublicKey? {
   for key in self.public_keys {
     for p in all_public_packets(key) {
-      let id = try? p.key_id()
-      match id {
-        Ok(id) => if id.equal(key_id.to_owned()) { return Some(key) }
-        Err(_) => ()
+      try {
+        let id = p.key_id()
+        if id.equal(key_id.to_owned()) {
+          return Some(key)
+        }
+      } catch {
+        _ => ()
       }
     }
   }
   None
 }
+
+///|
+pub extend KeyRing with @moonbitlang/core/debug.Debug::{to_repr}

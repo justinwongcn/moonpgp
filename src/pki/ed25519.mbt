@@ -125,3 +125,9 @@ pub fn Ed25519PublicKeyValue::verify(
   }
   ed_equal(left, right, ctx)
 }
+
+///|
+pub extend Ed25519PublicKeyValue with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend Ed25519SecretKey with @moonbitlang/core/debug.Debug::{to_repr}

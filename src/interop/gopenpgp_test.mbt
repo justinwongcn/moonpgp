@@ -30,8 +30,13 @@ test "unlock gopenpgp keyring_privateKey (RSA, passphrase 'apple')" {
 /// Wrong passphrase must be rejected with a clear error.
 test "wrong passphrase on gopenpgp key fails" {
   let key = @api.PrivateKey::from_armored(read_testdata("keyring_privateKey"))
-  let result = try? key.unlock("wrong passphrase")
-  assert_true(result.is_err())
+  let raised = try {
+    let _ = key.unlock("wrong passphrase")
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }
 
 ///|
@@ -52,7 +57,7 @@ test "decrypt gopenpgp message_signed to message_plaintext" {
   while end > 0 && (expected[end - 1] == '\n' || expected[end - 1] == '\r') {
     end = end - 1
   }
-  assert_eq(data, @primitives.utf8_bytes(expected[0:end].to_string()))
+  assert_eq(data, @primitives.utf8_bytes(expected[0:end].to_owned()))
 }
 
 ///|
@@ -78,6 +83,11 @@ test "verify self-certification of gopenpgp key" {
 test "parse gopenpgp key_dummy (GnuPG smartcard dummy)" {
   let key = @api.PrivateKey::from_armored(read_testdata("key_dummy"))
   assert_true(key.is_locked())
-  let unlocked = try? key.unlock("")
-  assert_true(unlocked is Err(_))
+  let raised = try {
+    let _ = key.unlock("")
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }

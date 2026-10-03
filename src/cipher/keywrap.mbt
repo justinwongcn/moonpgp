@@ -55,7 +55,7 @@ pub fn aes_key_wrap(kek : BytesView, plaintext : BytesView) -> Bytes raise {
         b[k] = a[k]
         b[8 + k] = r[i - 1][k]
       }
-      let out = bc.encrypt_block(Bytes::from_array(b).view())
+      let out = bc.encrypt_block(Bytes::from_array(b).exact_view())
       // A = MSB_64(B) XOR t (64-bit big-endian counter, t = n*j + i).
       // t always fits well under 2^32, so only the low four octets can
       // be nonzero; shifts stay below 32 bits.
@@ -126,7 +126,7 @@ pub fn aes_key_unwrap(kek : BytesView, ciphertext : BytesView) -> Bytes raise {
       for k in 0..<8 {
         b[8 + k] = ri[k]
       }
-      let out = bc.decrypt_block(Bytes::from_array(b).view())
+      let out = bc.decrypt_block(Bytes::from_array(b).exact_view())
       for k in 0..<8 {
         a[k] = out[k]
       }

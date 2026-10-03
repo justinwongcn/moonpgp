@@ -67,13 +67,13 @@ pub fn HashId::block_size(self : HashId) -> Int {
 /// Digest a single buffer.
 pub fn HashId::digest(self : HashId, data : BytesView) -> Bytes {
   match self {
-    Md5 => Bytes::from_fixedarray(@xcrypto.md5(data))
-    Sha1 => Bytes::from_fixedarray(@xcrypto.sha1(data))
-    Ripemd160 => Bytes::from_fixedarray(@xcrypto.ripemd160(data))
-    Sha224 => Bytes::from_fixedarray(@xcrypto.sha224(data))
-    Sha256 => Bytes::from_fixedarray(@xcrypto.sha256(data))
-    Sha384 => Bytes::from_fixedarray(@xcrypto.sha384(data))
-    Sha512 => Bytes::from_fixedarray(@xcrypto.sha512(data))
+    Md5 => Bytes::from_iter(@xcrypto.md5(data).iter())
+    Sha1 => Bytes::from_iter(@xcrypto.sha1(data).iter())
+    Ripemd160 => Bytes::from_iter(@xcrypto.ripemd160(data).iter())
+    Sha224 => Bytes::from_iter(@xcrypto.sha224(data).iter())
+    Sha256 => Bytes::from_iter(@xcrypto.sha256(data).iter())
+    Sha384 => Bytes::from_iter(@xcrypto.sha384(data).iter())
+    Sha512 => Bytes::from_iter(@xcrypto.sha512(data).iter())
   }
 }
 
@@ -84,7 +84,7 @@ pub fn HashId::hmac(self : HashId, key : BytesView, data : BytesView) -> Bytes {
   let k : Bytes = if key.length() > bs {
     self.digest(key)
   } else {
-    key.to_bytes()
+    key.to_owned()
   }
   let kp = pad_right(k, bs)
   let ipad = Bytes::makei(bs, i => kp[i] ^ b'\x36')
@@ -120,8 +120,11 @@ fn from_hex_unchecked(s : String) -> Bytes {
 
 ///|
 fn hex_decode_const(s : String) -> Bytes? {
-  match (try? @hex.decode(s)) {
-    Ok(b) => Some(b)
-    Err(_) => None
-  }
+  Some(@hex.decode(s) catch { _ => return None })
 }
+
+///|
+pub extend HashId with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend HashId with Eq::{not_equal, equal}

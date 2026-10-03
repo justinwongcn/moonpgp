@@ -60,20 +60,22 @@ test "primality test" {
 ///|
 test "openssl RSA signature reproduces exactly" {
   let key = test_private_key()
-  let digest = @primitives.Sha256.digest(@primitives.utf8_bytes("abc").view())
-  let sig = key.pkcs1_v15_sign(@primitives.Sha256, digest.view())
+  let digest = @primitives.Sha256.digest(
+    @primitives.utf8_bytes("abc").exact_view(),
+  )
+  let sig = key.pkcs1_v15_sign(@primitives.Sha256, digest.exact_view())
   assert_eq(@primitives.to_hex(sig), TEST_SIG)
   // And the public half verifies both ours and openssl's bytes.
   let ok = key.public.pkcs1_v15_verify(
     @primitives.Sha256,
-    digest.view(),
-    sig.view(),
+    digest.exact_view(),
+    sig.exact_view(),
   )
   assert_true(ok)
   let ok2 = key.public.pkcs1_v15_verify(
     @primitives.Sha256,
-    digest.view(),
-    @primitives.from_hex(TEST_SIG).view(),
+    digest.exact_view(),
+    @primitives.from_hex(TEST_SIG).exact_view(),
   )
   assert_true(ok2)
 }
@@ -82,46 +84,61 @@ test "openssl RSA signature reproduces exactly" {
 test "openssl RSA encryption decrypts" {
   let key = test_private_key()
   let ct = @primitives.from_hex(TEST_CT)
-  let pt = key.pkcs1_v15_decrypt(ct.view())
+  let pt = key.pkcs1_v15_decrypt(ct.exact_view())
   assert_eq(pt, @primitives.utf8_bytes("test secret"))
 }
 
 ///|
 test "verify rejects tampered signature" {
   let key = test_private_key()
-  let digest = @primitives.Sha256.digest(@primitives.utf8_bytes("abc").view())
+  let digest = @primitives.Sha256.digest(
+    @primitives.utf8_bytes("abc").exact_view(),
+  )
   let sig = @primitives.from_hex(TEST_SIG)
   // Flip last octet.
   let bad = sig[0:sig.length() - 1]
     .to_owned()
     .add(Bytes::from_array([sig[sig.length() - 1] ^ b'\x01']))
   assert_false(
-    key.public.pkcs1_v15_verify(@primitives.Sha256, digest.view(), bad.view()),
+    key.public.pkcs1_v15_verify(
+      @primitives.Sha256,
+      digest.exact_view(),
+      bad.exact_view(),
+    ),
   )
   // A SHA-1 digest under SHA-256 framing must not verify (returns false,
   // no raise).
   let digest_other = @primitives.Sha1.digest(
-    @primitives.utf8_bytes("abc").view(),
+    @primitives.utf8_bytes("abc").exact_view(),
   )
-  let result = try? key.public.pkcs1_v15_verify(
-    @primitives.Sha256,
-    digest_other.view(),
-    sig.view(),
-  )
-  assert_true(result.is_err())
+  let raised = try {
+    let _ = key.public.pkcs1_v15_verify(
+      @primitives.Sha256,
+      digest_other.exact_view(),
+      sig.exact_view(),
+    )
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
 }
 
 ///|
 test "generated key roundtrip (1024-bit)" {
   let key = @pki.generate_rsa_key(bits=1024)
   let msg = @primitives.utf8_bytes("roundtrip message for our own key")
-  let ct = key.public.pkcs1_v15_encrypt(msg.view())
+  let ct = key.public.pkcs1_v15_encrypt(msg.exact_view())
   assert_eq(ct.length(), 128)
-  let pt = key.pkcs1_v15_decrypt(ct.view())
+  let pt = key.pkcs1_v15_decrypt(ct.exact_view())
   assert_eq(pt, msg)
-  let digest = @primitives.Sha256.digest(msg.view())
-  let sig = key.pkcs1_v15_sign(@primitives.Sha256, digest.view())
+  let digest = @primitives.Sha256.digest(msg.exact_view())
+  let sig = key.pkcs1_v15_sign(@primitives.Sha256, digest.exact_view())
   assert_true(
-    key.public.pkcs1_v15_verify(@primitives.Sha256, digest.view(), sig.view()),
+    key.public.pkcs1_v15_verify(
+      @primitives.Sha256,
+      digest.exact_view(),
+      sig.exact_view(),
+    ),
   )
 }

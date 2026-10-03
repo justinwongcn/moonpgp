@@ -83,8 +83,8 @@ fn rsa_public_parts(p : @packet.PublicKeyPacket) -> (BigInt, BigInt) raise {
     raise @error.PgpError::PgpError(msg="api: bad RSA public parameters")
   }
   (
-    BigInt::from_octets(params[0].view(), signum=1),
-    BigInt::from_octets(params[1].view(), signum=1),
+    BigInt::from_octets(params[0].exact_view(), signum=1),
+    BigInt::from_octets(params[1].exact_view(), signum=1),
   )
 }
 
@@ -96,11 +96,11 @@ fn rsa_secret_parts(p : @packet.SecretKeyPacket) -> @pki.RsaPrivateKey raise {
     )
   }
   let (n, e) = rsa_public_parts(p.public)
-  let r = @packet.Reader::new(p.secret_material.view())
-  let d = BigInt::from_octets(r.read_mpi().view(), signum=1)
-  let pbig = BigInt::from_octets(r.read_mpi().view(), signum=1)
-  let qbig = BigInt::from_octets(r.read_mpi().view(), signum=1)
-  let u = BigInt::from_octets(r.read_mpi().view(), signum=1)
+  let r = @packet.Reader::new(p.secret_material.exact_view())
+  let d = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
+  let pbig = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
+  let qbig = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
+  let u = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
   @pki.RsaPrivateKey::{ public: { n, e, }, d, p: pbig, q: qbig, u, }
 }
 
@@ -116,7 +116,7 @@ fn eddsa_secret_parts(
       msg="api: secret key material is locked; unlock it first",
     )
   }
-  let r = @packet.Reader::new(p.secret_material.view())
+  let r = @packet.Reader::new(p.secret_material.exact_view())
   let seed = r.read_mpi()
   let point = p.public.params()[1]
   guard point.length() == 33 else {
@@ -159,17 +159,17 @@ pub fn verify_sig_material(
       guard sig_params.length() == 2 else { return false }
       let point = pub_packet.params()[1]
       guard point.length() == 33 && point[0] == b'\x40' else { return false }
-      let r = @primitives.pad_left(sig_params[0].view(), 32)
-      let sv = @primitives.pad_left(sig_params[1].view(), 32)
+      let r = @primitives.pad_left(sig_params[0].exact_view(), 32)
+      let sv = @primitives.pad_left(sig_params[1].exact_view(), 32)
       let pub_bytes = point[1:point.length()]
-      let pk = @pki.ed25519_public_key(pub_bytes.view())
+      let pk = @pki.ed25519_public_key(pub_bytes.exact_view())
       let sig64 = r.add(sv)
-      pk.verify(digest, sig64.view())
+      pk.verify(digest, sig64.exact_view())
     }
     _ => {
       guard sig_params.length() == 1 else { return false }
       let rsa = rsa_public_key(pub_packet)
-      rsa.pkcs1_v15_verify(hash, digest, sig_params[0].view())
+      rsa.pkcs1_v15_verify(hash, digest, sig_params[0].exact_view())
     }
   }
 }
@@ -179,7 +179,7 @@ fn build_eddsa_secret_key_packet(
   seed : Bytes,
   creation : Int,
 ) -> @packet.SecretKeyPacket raise {
-  let ed = @pki.ed25519_public_of_seed(seed.view())
+  let ed = @pki.ed25519_public_of_seed(seed.exact_view())
   // Public params: length-prefixed OID, MPI of the point (0x40 || key).
   let point = Bytes::from_array([0x40]).add(ed.public)
   let params : Array[Bytes] = [@pki.ed25519_oid(), point]
@@ -191,11 +191,11 @@ fn build_eddsa_secret_key_packet(
   }
   // Secret material: MPI(seed) + 2-octet checksum.
   let sw = @packet.Writer::new()
-  sw.mpi(seed.view())
+  sw.mpi(seed.exact_view())
   let mpi_bytes = sw.to_bytes()
   let w2 = @packet.Writer::new()
-  w2.bytes(mpi_bytes.view())
-  w2.u16(@packet.session_key_checksum(mpi_bytes.view()))
+  w2.bytes(mpi_bytes.exact_view())
+  w2.u16(@packet.session_key_checksum(mpi_bytes.exact_view()))
   @packet.SecretKeyPacket::{
     public: pub_packet,
     s2k_usage: 0,
@@ -211,7 +211,7 @@ fn build_eddsa_secret_key_packet(
 fn build_rsa_secret_key_packet(
   key : @pki.RsaPrivateKey,
   creation : Int,
-) -> @packet.SecretKeyPacket raise {
+) -> @packet.SecretKeyPacket {
   // Public part: MPI(n), MPI(e).
   let params : Array[Bytes] = [
     @pki.i2osp(key.public.n, (key.public.n.bit_length() + 7) / 8),
@@ -225,14 +225,14 @@ fn build_rsa_secret_key_packet(
   }
   // Secret material: MPI(d) MPI(p) MPI(q) MPI(u) + 2-octet checksum.
   let sw = @packet.Writer::new()
-  sw.mpi(@pki.i2osp(key.d, (key.d.bit_length() + 7) / 8).view())
-  sw.mpi(@pki.i2osp(key.p, (key.p.bit_length() + 7) / 8).view())
-  sw.mpi(@pki.i2osp(key.q, (key.q.bit_length() + 7) / 8).view())
-  sw.mpi(@pki.i2osp(key.u, (key.u.bit_length() + 7) / 8).view())
+  sw.mpi(@pki.i2osp(key.d, (key.d.bit_length() + 7) / 8).exact_view())
+  sw.mpi(@pki.i2osp(key.p, (key.p.bit_length() + 7) / 8).exact_view())
+  sw.mpi(@pki.i2osp(key.q, (key.q.bit_length() + 7) / 8).exact_view())
+  sw.mpi(@pki.i2osp(key.u, (key.u.bit_length() + 7) / 8).exact_view())
   let mpi_bytes = sw.to_bytes()
   let w2 = @packet.Writer::new()
-  w2.bytes(mpi_bytes.view())
-  w2.u16(@packet.session_key_checksum(mpi_bytes.view()))
+  w2.bytes(mpi_bytes.exact_view())
+  w2.u16(@packet.session_key_checksum(mpi_bytes.exact_view()))
   @packet.SecretKeyPacket::{
     public: pub_packet,
     s2k_usage: 0,
@@ -335,7 +335,7 @@ fn make_self_signature(
     sig_params: [],
   }
   let digest = hash_certification(sig, pub_packet, user_id)
-  finish_signature(sig, secret_packet, @primitives.Sha256, digest.view())
+  finish_signature(sig, secret_packet, @primitives.Sha256, digest.exact_view())
 }
 
 ///|
@@ -369,7 +369,7 @@ fn make_binding_signature(
     sig_params: [],
   }
   let digest = hash_binding(sig, primary_pub, subkey_pub)
-  finish_signature(sig, secret_packet, @primitives.Sha256, digest.view())
+  finish_signature(sig, secret_packet, @primitives.Sha256, digest.exact_view())
 }
 
 ///|
@@ -384,13 +384,13 @@ fn hash_certification(
   let w = @packet.Writer::new()
   w.u8(0x99)
   w.u16(key_body.length())
-  w.bytes(key_body.view())
+  w.bytes(key_body.exact_view())
   w.u8(0xB4)
   w.u32(uid.length())
-  w.bytes(uid.view())
-  w.bytes(sig.hash_prefix().view())
-  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).view())
-  signature_digest(sig, w.to_bytes().view())
+  w.bytes(uid.exact_view())
+  w.bytes(sig.hash_prefix().exact_view())
+  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).exact_view())
+  signature_digest(sig, w.to_bytes().exact_view())
 }
 
 ///|
@@ -420,13 +420,13 @@ fn hash_binding(
   let w = @packet.Writer::new()
   w.u8(0x99)
   w.u16(primary_body.length())
-  w.bytes(primary_body.view())
+  w.bytes(primary_body.exact_view())
   w.u8(0x99)
   w.u16(subkey_body.length())
-  w.bytes(subkey_body.view())
-  w.bytes(sig.hash_prefix().view())
-  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).view())
-  signature_digest(sig, w.to_bytes().view())
+  w.bytes(subkey_body.exact_view())
+  w.bytes(sig.hash_prefix().exact_view())
+  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).exact_view())
+  signature_digest(sig, w.to_bytes().exact_view())
 }
 
 ///|
@@ -445,15 +445,13 @@ pub fn verify_key_signature(
     Some(h) => h
     None => return false
   }
-  match
-    (try? verify_sig_material(
-      signer_pub,
-      hash_id,
-      digest.view(),
-      sig.sig_params(),
-    )) {
-    Ok(v) => v
-    Err(_) => false
+  verify_sig_material(
+    signer_pub,
+    hash_id,
+    digest.exact_view(),
+    sig.sig_params(),
+  ) catch {
+    _ => false
   }
 }
 
@@ -486,28 +484,39 @@ pub fn generate_key(user_id : String, bits? : Int = 3072) -> PrivateKey raise {
 ///|
 /// Serialize to binary packets: SecretKey || UserID || cert || [
 /// SecretSubkey || binding ].
-pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes raise {
+pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
   let w = @packet.Writer::new()
   w.bytes(
-    @packet.serialize_packet(@packet.SecretKey, self.primary.to_body().view()).view(),
+    @packet.serialize_packet(
+      @packet.SecretKey,
+      self.primary.to_body().exact_view(),
+    ).exact_view(),
   )
   let uid = @primitives.utf8_bytes(self.user_id)
-  w.bytes(@packet.serialize_packet(@packet.UserId, uid.view()).view())
+  w.bytes(
+    @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
+  )
   w.bytes(
     @packet.serialize_packet(
       @packet.Signature,
-      self.self_signature.to_body().view(),
-    ).view(),
+      self.self_signature.to_body().exact_view(),
+    ).exact_view(),
   )
   match self.encryption_subkey {
     Some(subkey) => {
       w.bytes(
-        @packet.serialize_packet(@packet.SecretSubkey, subkey.to_body().view()).view(),
+        @packet.serialize_packet(
+          @packet.SecretSubkey,
+          subkey.to_body().exact_view(),
+        ).exact_view(),
       )
       match self.subkey_binding {
         Some(b) =>
           w.bytes(
-            @packet.serialize_packet(@packet.Signature, b.to_body().view()).view(),
+            @packet.serialize_packet(
+              @packet.Signature,
+              b.to_body().exact_view(),
+            ).exact_view(),
           )
         None => ()
       }
@@ -519,34 +528,45 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes raise {
 
 ///|
 /// Export as ASCII-armored private key block.
-pub fn PrivateKey::to_armored(self : PrivateKey) -> String raise {
-  @armor.PrivateKey.encode(self.to_bytes().view())
+pub fn PrivateKey::to_armored(self : PrivateKey) -> String {
+  @armor.PrivateKey.encode(self.to_bytes().exact_view())
 }
 
 ///|
 /// Public half to binary packets.
-pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes raise {
+pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
   let w = @packet.Writer::new()
   w.bytes(
-    @packet.serialize_packet(@packet.PublicKey, self.primary.to_body().view()).view(),
+    @packet.serialize_packet(
+      @packet.PublicKey,
+      self.primary.to_body().exact_view(),
+    ).exact_view(),
   )
   let uid = @primitives.utf8_bytes(self.user_id)
-  w.bytes(@packet.serialize_packet(@packet.UserId, uid.view()).view())
+  w.bytes(
+    @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
+  )
   w.bytes(
     @packet.serialize_packet(
       @packet.Signature,
-      self.self_signature.to_body().view(),
-    ).view(),
+      self.self_signature.to_body().exact_view(),
+    ).exact_view(),
   )
   match self.encryption_subkey {
     Some(subkey) => {
       w.bytes(
-        @packet.serialize_packet(@packet.PublicSubkey, subkey.to_body().view()).view(),
+        @packet.serialize_packet(
+          @packet.PublicSubkey,
+          subkey.to_body().exact_view(),
+        ).exact_view(),
       )
       match self.subkey_binding {
         Some(b) =>
           w.bytes(
-            @packet.serialize_packet(@packet.Signature, b.to_body().view()).view(),
+            @packet.serialize_packet(
+              @packet.Signature,
+              b.to_body().exact_view(),
+            ).exact_view(),
           )
         None => ()
       }
@@ -558,8 +578,8 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes raise {
 
 ///|
 /// Export as ASCII-armored public key block.
-pub fn PublicKey::to_armored(self : PublicKey) -> String raise {
-  @armor.PublicKey.encode(self.to_bytes().view())
+pub fn PublicKey::to_armored(self : PublicKey) -> String {
+  @armor.PublicKey.encode(self.to_bytes().exact_view())
 }
 
 ///|
@@ -577,18 +597,15 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
   for p in packets {
     match p.tag() {
       @packet.PublicKey =>
-        primary = Some(@packet.PublicKeyPacket::parse(p.body().view()))
+        primary = Some(@packet.PublicKeyPacket::parse(p.body().exact_view()))
       @packet.SecretKey => {
-        let sk = @packet.SecretKeyPacket::parse(p.body().view())
+        let sk = @packet.SecretKeyPacket::parse(p.body().exact_view())
         primary = Some(sk.public)
       }
       @packet.UserId =>
-        user_id = match (try? @utf8.decode(p.body().view())) {
-          Ok(s) => s
-          Err(_) => ""
-        }
+        user_id = @utf8.decode(p.body().exact_view()) catch { _ => "" }
       @packet.Signature => {
-        let s = @packet.SignaturePacket::parse(p.body().view())
+        let s = @packet.SignaturePacket::parse(p.body().exact_view())
         match s.sig_type() {
           @packet.PositiveCertification | @packet.GenericCertification =>
             self_sig = Some(s)
@@ -597,9 +614,9 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
         }
       }
       @packet.PublicSubkey =>
-        subkey = Some(@packet.PublicKeyPacket::parse(p.body().view()))
+        subkey = Some(@packet.PublicKeyPacket::parse(p.body().exact_view()))
       @packet.SecretSubkey => {
-        let sk = @packet.SecretKeyPacket::parse(p.body().view())
+        let sk = @packet.SecretKeyPacket::parse(p.body().exact_view())
         subkey = Some(sk.public)
       }
       _ => ()
@@ -643,11 +660,11 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
   for p in packets {
     match p.tag() {
       @packet.SecretKey =>
-        primary = Some(@packet.SecretKeyPacket::parse(p.body().view()))
+        primary = Some(@packet.SecretKeyPacket::parse(p.body().exact_view()))
       @packet.SecretSubkey =>
-        subkey = Some(@packet.SecretKeyPacket::parse(p.body().view()))
+        subkey = Some(@packet.SecretKeyPacket::parse(p.body().exact_view()))
       @packet.Signature => {
-        let s = @packet.SignaturePacket::parse(p.body().view())
+        let s = @packet.SignaturePacket::parse(p.body().exact_view())
         if s.sig_type() == @packet.SubkeyBinding {
           binding = Some(s)
         }
@@ -675,7 +692,7 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
 pub fn PrivateKey::from_armored(text : String) -> PrivateKey raise {
   let block = @armor.decode(text)
   match block.armor_type() {
-    @armor.PrivateKey => PrivateKey::from_bytes(block.data().view())
+    @armor.PrivateKey => PrivateKey::from_bytes(block.data().exact_view())
     _ =>
       raise @error.PgpError::PgpError(msg="api: not a private key armor block")
   }
@@ -685,8 +702,9 @@ pub fn PrivateKey::from_armored(text : String) -> PrivateKey raise {
 pub fn PublicKey::from_armored(text : String) -> PublicKey raise {
   let block = @armor.decode(text)
   match block.armor_type() {
-    @armor.PublicKey => PublicKey::from_bytes(block.data().view())
-    @armor.PrivateKey => PrivateKey::from_bytes(block.data().view()).to_public()
+    @armor.PublicKey => PublicKey::from_bytes(block.data().exact_view())
+    @armor.PrivateKey =>
+      PrivateKey::from_bytes(block.data().exact_view()).to_public()
     _ => raise @error.PgpError::PgpError(msg="api: not a key armor block")
   }
 }
@@ -725,3 +743,9 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
     subkey_binding: Some(binding),
   }
 }
+
+///|
+pub extend PrivateKey with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend PublicKey with @moonbitlang/core/debug.Debug::{to_repr}

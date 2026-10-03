@@ -8,4 +8,5 @@ import {
   "justinwongcn/openpgp/src/compress",
   "justinwongcn/openpgp/src/pki",
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/debug",
 }

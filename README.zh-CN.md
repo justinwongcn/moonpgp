@@ -39,7 +39,7 @@
 ./scripts/interop_check.sh
 ```
 
-自动化测试：`moon test`（123 个测试，含上述全部向量）。
+自动化测试：`moon test`（246 个测试，含上述全部向量；wasm 目标 238 个）。
 
 ## 快速上手（CLI 演示）
 

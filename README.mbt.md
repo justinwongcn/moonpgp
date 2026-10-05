@@ -47,7 +47,7 @@ generated key every run):
 ./scripts/interop_check.sh
 ```
 
-Automated tests: `moon test` (123 tests covering all vectors above).
+Automated tests: `moon test` (246 tests covering all vectors above; 238 on wasm).
 
 ## Quick start (CLI demo)
 

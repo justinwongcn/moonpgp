@@ -93,3 +93,32 @@ test "encode_count reaches target" {
 fn test_salt() -> Bytes {
   Bytes::from_array([0, 1, 2, 3, 4, 5, 6, 7])
 }
+
+///|
+test "s2k encode rejects malformed salt instead of aborting" {
+  // S2k is pub(all): a caller-constructed specifier with a wrong-length
+  // salt must raise like derive_key does, not kill the process.
+  let bad : @s2k.S2k = @s2k.Salted(
+    @primitives.Sha256,
+    Bytes::from_array([b'\x01', b'\x02']),
+  )
+  let raised = try {
+    let _ = bad.encode()
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+  let bad_iterated : @s2k.S2k = @s2k.Iterated(
+    @primitives.Sha256,
+    Bytes::new(0),
+    96,
+  )
+  let raised2 = try {
+    let _ = bad_iterated.encode()
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised2)
+}

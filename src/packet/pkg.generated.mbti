@@ -94,7 +94,7 @@ pub fn LiteralPacket::date(Self) -> Int
 pub fn LiteralPacket::file_name(Self) -> String
 pub fn LiteralPacket::format(Self) -> Char
 pub fn LiteralPacket::parse(BytesView) -> Self raise
-pub fn LiteralPacket::to_body(Self) -> Bytes
+pub fn LiteralPacket::to_body(Self) -> Bytes raise
 pub fn LiteralPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OnePassSigPacket {
@@ -296,7 +296,7 @@ pub fn SkeskPacket::cipher_algo(Self) -> Int
 pub fn SkeskPacket::encrypted_session_key(Self) -> Bytes
 pub fn SkeskPacket::parse(BytesView) -> Self raise
 pub fn SkeskPacket::s2k(Self) -> @s2k.S2k
-pub fn SkeskPacket::to_body(Self) -> Bytes
+pub fn SkeskPacket::to_body(Self) -> Bytes raise
 pub fn SkeskPacket::to_repr(Self) -> @debug.Repr
 
 pub struct Writer {

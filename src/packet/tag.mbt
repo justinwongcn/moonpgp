@@ -192,11 +192,19 @@ fn read_one_packet(r : Reader) -> RawPacket raise {
   let body : Bytes = if chunks.length() == 1 {
     chunks[0]
   } else {
-    let mut all = Bytes::new(0)
+    // Partial-length reassembly in one pass: repeated Bytes::add would
+    // copy the whole prefix per chunk (O(n^2) on attacker-chosen input).
+    let mut total = 0
     for c in chunks {
-      all = all.add(c)
+      total = total + c.length()
     }
-    all
+    let out : Array[Byte] = Array(capacity=total)
+    for c in chunks {
+      for b in c {
+        out.push(b)
+      }
+    }
+    Bytes::from_array(out)
   }
   RawPacket::{ tag, body, }
 }

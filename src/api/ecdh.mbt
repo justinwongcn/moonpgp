@@ -52,8 +52,17 @@ fn ecdh_kdf_param(pub_packet : @packet.PublicKeyPacket) -> Bytes raise {
 ///|
 /// The symmetric algorithm id carried in the key's KDF parameters
 /// (the key-wrap KEK size selector).
-fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int {
-  let kdf_field = pub_packet.params()[2]
+fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int raise {
+  // Index only after the guards: the packet layer accepts keys whose KDF
+  // field is shorter than 4 octets, and callers hand them straight here.
+  let params = pub_packet.params()
+  guard params.length() == 3 else {
+    raise @error.PgpError::PgpError(msg="api: bad ECDH public parameters")
+  }
+  let kdf_field = params[2]
+  guard kdf_field.length() >= 4 else {
+    raise @error.PgpError::PgpError(msg="api: bad ECDH KDF parameters")
+  }
   kdf_field[3].to_int()
 }
 

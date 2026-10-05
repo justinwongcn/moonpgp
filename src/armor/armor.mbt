@@ -192,10 +192,13 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
           } else if l.has_prefix("-----BEGIN PGP") {
             // Malformed input; treat as end to avoid an infinite mess.
             break
-          } else if l.has_prefix("=") && body.to_string().length() > 0 {
+          } else if l.has_prefix("=") && !body.is_empty() {
             match parse_crc_line(l) {
               Some(c) => crc = Some(c)
-              None => ()
+              // A "=" line that does not parse as a CRC must not be dropped:
+              // silently skipping it would bypass the integrity check.
+              None =>
+                raise @error.PgpError::PgpError(msg="armor: malformed CRC line")
             }
           } else {
             body.write_stringview(l)

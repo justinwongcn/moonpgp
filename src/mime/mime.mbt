@@ -255,9 +255,13 @@ pub fn build_pgp_mime_signed(
   // Part 1: text/plain. Assemble with bare LF, then convert to CRLF once
   // so the body's own line endings are not doubled.
   let body_lf = text.replace_all(old="\r\n", new="\n")
-  let part1_lf = "Content-Type: text/plain; charset=utf-8\nContent-Transfer-Encoding: 8bit\n\n\{body_lf}"
+  let mut part1_lf = "Content-Type: text/plain; charset=utf-8\nContent-Transfer-Encoding: 8bit\n\n\{body_lf}"
+  // The verifier (extract_pgp_signed) restores the boundary-attached CRLF
+  // as part of the signed data, so the signed entity must end with exactly
+  // one CRLF for build and verify to agree on inputs without a trailing
+  // newline (mirrors the wire-side padding below).
   if !part1_lf.has_suffix("\n") {
-    ignore(part1_lf)
+    part1_lf = part1_lf + "\n"
   }
   let part1 = part1_lf.replace_all(old="\n", new="\r\n")
   let signed_bytes = @primitives.utf8_bytes(part1)

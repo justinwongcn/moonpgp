@@ -137,7 +137,7 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
 }
 
 ///|
-pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes {
+pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(4)
   w.u8(self.cipher_algo)
@@ -197,7 +197,7 @@ pub fn LiteralPacket::parse(body : BytesView) -> LiteralPacket raise {
 }
 
 ///|
-pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes {
+pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(
     match self.format {
@@ -206,7 +206,9 @@ pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes {
     },
   )
   let name = @primitives.utf8_bytes(self.file_name)
-  guard name.length() <= 255 else { abort("literal: file name too long") }
+  guard name.length() <= 255 else {
+    raise @error.PgpError::PgpError(msg="packet: literal file name too long")
+  }
   w.u8(name.length())
   w.bytes(name.exact_view())
   w.u32(self.date)

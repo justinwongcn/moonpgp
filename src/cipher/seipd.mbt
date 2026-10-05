@@ -24,7 +24,11 @@ pub fn seipd_v1_decrypt(
   ciphertext : BytesView,
 ) -> Bytes raise {
   let bs = bc.block_size()
-  guard ciphertext.length() >= bs + 2 + 2 + 20 else {
+  // Plaintext minimum: 18-octet prefix || inner || 0xD3 0x14 || 20-octet MDC
+  // = 40 octets, independent of the block size. A bs-based bound would admit
+  // ciphertexts whose inner slice [18:len-22] inverts (clamped to empty) for
+  // 64-bit ciphers, silently yielding no data instead of failing.
+  guard ciphertext.length() >= 18 + 2 + 20 else {
     raise @error.PgpError::PgpError(msg="seipd: ciphertext too short")
   }
   let zeros = Bytes::make(bs, b'\x00')

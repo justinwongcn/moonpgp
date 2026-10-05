@@ -167,9 +167,10 @@ pub fn build_pgp_mime_signed_entity(
 ///     └─ armored PGP MESSAGE
 ///         └─ multipart/signed
 ///             └─ multipart/mixed (text + attachments)
-/// Header values must be ASCII (fail-fast; see require_ascii). The
-/// entity headers (MIME-Version/Content-Type) continue the same header
-/// block, so no extra blank line is inserted.
+/// Subject and display names are RFC 2047 encoded automatically
+/// (=?utf-8?B?...?=); addr-specs and domains stay ASCII (EAI/SMTPUTF8 is
+/// out of scope). The entity headers (MIME-Version/Content-Type) continue
+/// the same header block, so no extra blank line is inserted.
 pub fn build_encrypted_mail(
   from : MailAddress,
   to : Array[MailAddress],
@@ -188,7 +189,7 @@ pub fn build_encrypted_mail(
   guard !recipients.is_empty() else {
     raise @error.PgpError::PgpError(msg="mail: no encryption recipients")
   }
-  require_ascii(subject, "subject")
+  let subject = encode_rfc2047(subject)
   let now = now_unix.unwrap_or(@primitives.unix_now())
   let tz = match tz_offset_minutes {
     Some(t) => t

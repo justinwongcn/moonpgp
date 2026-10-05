@@ -8,11 +8,11 @@ import {
 // Values
 pub fn compressed_algo_of_number(Int) -> CompressedAlgo?
 
-pub fn zip_compress(BytesView) -> Bytes raise
+pub fn zip_compress(BytesView) -> Bytes
 
 pub fn zip_decompress(BytesView) -> Bytes raise
 
-pub fn zlib_compress(BytesView) -> Bytes raise
+pub fn zlib_compress(BytesView) -> Bytes
 
 pub fn zlib_decompress(BytesView) -> Bytes raise
 
@@ -25,7 +25,10 @@ pub(all) enum CompressedAlgo {
   Zlib
   BZip2
 } derive(Eq, @debug.Debug)
+pub fn CompressedAlgo::equal(Self, Self) -> Bool
+pub fn CompressedAlgo::not_equal(Self, Self) -> Bool
 pub fn CompressedAlgo::number(Self) -> Int
+pub fn CompressedAlgo::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

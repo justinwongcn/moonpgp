@@ -1,17 +1,9 @@
 ///|
 /// SMTP client state machine (RFC 5321 minimal submission set). The
-/// machine programs against the Socket seam below, so every protocol
-/// behavior is testable offline against a scripted fake; the native
-/// socket backend (socket_native.mbt) supplies the real transport.
+/// machine programs against the Socket seam from example/mailnet, so
+/// every protocol behavior is testable offline against a scripted
+/// fake; the native socket backend supplies the real transport.
 /// Protocol rules follow the verbatim-checked table in HANDOFF §8.3.
-
-///|
-priv trait Socket {
-  fn write_all(Self, data : Bytes) -> Unit raise
-  /// One CRLF-terminated line, terminator stripped.
-  fn read_line(Self) -> String raise
-  fn close(Self) -> Unit
-}
 
 ///|
 /// RFC 5321 §4.5.2 dot-stuffing: prepend a '.' to every line that
@@ -87,7 +79,7 @@ fn read_reply(sock : &Socket) -> (Int, Array[String]) raise {
 
 ///|
 fn smtp_command(sock : &Socket, line : String) -> Unit raise {
-  sock.write_all(@primitives.utf8_bytes(line + "\r\n"))
+  sock.write_all(@utf8.encode(line + "\r\n"))
 }
 
 ///|
@@ -125,7 +117,7 @@ fn plain_auth(user : String, pass : String) -> Bytes {
 /// `recipients` are envelope addr-specs (no display names). The QUIT
 /// reply is not checked: a connection already torn down must not fail
 /// an otherwise delivered message.
-fn smtp_send(
+pub fn smtp_send(
   sock : &Socket,
   message : String,
   from : String,
@@ -168,7 +160,7 @@ fn smtp_send(
   }
   smtp_command(sock, "DATA")
   ignore(expect(sock, 354, "DATA"))
-  sock.write_all(@primitives.utf8_bytes(dot_stuff(message)))
+  sock.write_all(@utf8.encode(dot_stuff(message)))
   smtp_command(sock, ".")
   ignore(expect(sock, 250, "end of DATA"))
   smtp_command(sock, "QUIT")

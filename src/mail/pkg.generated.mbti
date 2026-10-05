@@ -13,7 +13,11 @@ pub fn build_multipart_mixed(String, Array[MailAttachment]) -> String raise
 
 pub fn build_pgp_mime_signed_entity(String, @api.PrivateKey) -> String raise
 
+pub fn decode_rfc2047(String) -> String
+
 pub fn encode_quoted_printable(BytesView) -> Bytes
+
+pub fn encode_rfc2047(String) -> String raise
 
 pub fn format_address(MailAddress) -> String raise
 
@@ -30,12 +34,14 @@ pub(all) struct MailAddress {
   display_name : String
   addr : String
 } derive(@debug.Debug)
+pub fn MailAddress::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MailAttachment {
   filename : String
   content_type : String
   data : Bytes
 } derive(@debug.Debug)
+pub fn MailAttachment::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

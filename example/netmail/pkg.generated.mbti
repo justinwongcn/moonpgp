@@ -1,0 +1,78 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/example/netmail"
+
+import {
+  "justinwongcn/openpgp/src/api",
+}
+
+// Values
+pub fn bytes_lossy(Bytes) -> String
+
+pub fn connect_imap(String, Int, Bool) -> ImapClient raise
+
+pub fn connect_socket(String, Int) -> &Socket raise
+
+pub fn is_local_host(String) -> Bool
+
+pub fn parse_int(String) -> Int?
+
+pub fn smtp_send(&Socket, String, String, Array[String], String, (String, String)?) -> Unit raise
+
+pub fn status_names(Array[@api.VerifyStatus]) -> String
+
+pub fn with_imap_session(String, Int, Bool, String, String, String, (ImapClient) -> Unit raise) -> Unit raise
+
+// Errors
+
+// Types and methods
+pub(all) struct FileTransport {
+  out_path : String
+}
+pub fn FileTransport::send(Self, String, String, Array[String]) -> Unit raise
+
+pub(all) struct ImapClient {
+  sock : &Socket
+  mut tag_n : Int
+  state : MailboxState
+}
+pub fn ImapClient::imap_fetch_message(Self, Int) -> Bytes raise
+pub fn ImapClient::imap_fetch_recent(Self, Int) -> Array[MailSummary] raise
+pub fn ImapClient::imap_id(Self) -> Unit raise
+pub fn ImapClient::imap_login(Self, String, String) -> Unit raise
+pub fn ImapClient::imap_logout(Self) -> Unit
+pub fn ImapClient::imap_select(Self, String) -> Unit raise
+pub fn ImapClient::read_greeting(Self) -> Unit raise
+
+pub(all) struct MailSummary {
+  seq : Int
+  uid : Int
+  flags : String
+  internaldate : String
+  size : Int
+  headers : Bytes
+}
+
+pub(all) struct MailboxState {
+  mut exists : Int
+  mut uidvalidity : Int
+}
+
+pub(all) struct SmtpTransport {
+  host : String
+  port : Int
+  ehlo_domain : String
+  user : String?
+  password : String?
+}
+pub fn SmtpTransport::send(Self, String, String, Array[String]) -> Unit raise
+
+// Type aliases
+
+// Traits
+pub(open) trait Socket {
+  fn write_all(Self, Bytes) -> Unit raise
+  fn read_line(Self) -> String raise
+  fn read_raw_line(Self) -> Bytes raise
+  fn read_exact(Self, Int) -> Bytes raise
+  fn close(Self) -> Unit
+}

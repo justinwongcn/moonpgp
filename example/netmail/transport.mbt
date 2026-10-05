@@ -2,11 +2,14 @@
 /// Transport seam: how a composed .eml reaches the world. Two backends
 /// per plan v2 — SMTP for local/relay submission (native, no TLS), and
 /// file hand-off to a real MTA (msmtp) for the internet.
-
-///|
-pub(open) trait MailTransport {
-  fn send(Self, message : String, from : String, recipients : Array[String]) -> Unit raise
-}
+///
+/// NOTE (toolchain, 2026-10-04): these are INHERENT methods, not a
+/// trait — this moon build does not promote trait-impl methods across
+/// packages (a value whose impl lives in this package cannot be
+/// upcast/called from a consumer package), so a `MailTransport` trait
+/// here would be unusable from external projects. The `Socket` seam
+/// keeps its `pub(open)` trait: consumers implementing it upcast from
+/// their OWN package, which works (same as @mime.MimeCallbacks).
 
 ///|
 /// Writes the .eml to disk and prints the msmtp hand-off command. This
@@ -17,12 +20,12 @@ pub(all) struct FileTransport {
 }
 
 ///|
-impl MailTransport for FileTransport with fn send(
-  self,
-  message,
-  from,
-  recipients,
-) {
+pub fn FileTransport::send(
+  self : FileTransport,
+  message : String,
+  from : String,
+  recipients : Array[String],
+) -> Unit raise {
   ignore(from)
   ignore(recipients)
   @fs.write_string_to_file(self.out_path, message)
@@ -43,17 +46,12 @@ pub(all) struct SmtpTransport {
 }
 
 ///|
-fn is_local_host(host : String) -> Bool {
-  host == "127.0.0.1" || host == "localhost" || host == "::1"
-}
-
-///|
-impl MailTransport for SmtpTransport with fn send(
-  self,
-  message,
-  from,
-  recipients,
-) {
+pub fn SmtpTransport::send(
+  self : SmtpTransport,
+  message : String,
+  from : String,
+  recipients : Array[String],
+) -> Unit raise {
   let auth : (String, String)? = match (self.user, self.password) {
     (Some(u), Some(p)) => Some((u, p))
     (Some(_), None) =>

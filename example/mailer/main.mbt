@@ -308,7 +308,7 @@ fn run(cfg : Config) -> Unit raise {
         return
       }
       other => {
-        println("roundtrip status: \{status_name(other)}")
+        println("roundtrip status: \{@netmail.status_names(other)}")
         abort("roundtrip FAILED")
       }
     }
@@ -320,11 +320,11 @@ fn run(cfg : Config) -> Unit raise {
   }
   match cfg.mode {
     "file" => {
-      let t = FileTransport::{ out_path: cfg.out, }
-      MailTransport::send(t, message, envelope_from, envelope_rcpts)
+      let t = @netmail.FileTransport::{ out_path: cfg.out, }
+      t.send(message, envelope_from, envelope_rcpts)
     }
     "smtp" => {
-      let t = SmtpTransport::{
+      let t = @netmail.SmtpTransport::{
         host: cfg.smtp_host,
         port: cfg.smtp_port,
         ehlo_domain: domain,
@@ -334,27 +334,11 @@ fn run(cfg : Config) -> Unit raise {
           None => None
         },
       }
-      MailTransport::send(t, message, envelope_from, envelope_rcpts)
+      t.send(message, envelope_from, envelope_rcpts)
     }
     other => abort("mailer: unknown mode '\{other}'")
   }
   println("delivered via \{cfg.mode} transport")
-}
-
-///|
-fn status_name(status : Array[@api.VerifyStatus]) -> String {
-  let parts : Array[String] = []
-  for s in status {
-    parts.push(
-      match s {
-        @api.Ok => "Ok"
-        @api.NotSigned => "NotSigned"
-        @api.NoVerifier => "NoVerifier"
-        @api.Failed => "Failed"
-      },
-    )
-  }
-  "[\{parts.join(", ")}]"
 }
 
 ///|

@@ -25,6 +25,7 @@ pub struct ArmorBlock {
 pub fn ArmorBlock::armor_type(Self) -> ArmorType
 pub fn ArmorBlock::data(Self) -> Bytes
 pub fn ArmorBlock::header(Self, String) -> String?
+pub fn ArmorBlock::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ArmorType {
   Message
@@ -36,6 +37,9 @@ pub(all) enum ArmorType {
 pub fn ArmorType::begin_marker(Self) -> String
 pub fn ArmorType::encode(Self, BytesView, headers? : Array[(String, String)]) -> String
 pub fn ArmorType::end_marker(Self) -> String
+pub fn ArmorType::equal(Self, Self) -> Bool
+pub fn ArmorType::not_equal(Self, Self) -> Bool
+pub fn ArmorType::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

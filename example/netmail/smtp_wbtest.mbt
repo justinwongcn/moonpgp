@@ -1,8 +1,10 @@
 ///|
 /// Offline SMTP state-machine tests: a scripted fake Socket drives
 /// read_reply/smtp_send and records every client write, so the full
-/// wire conversation is asserted without any network. White-box file
-/// (the priv Socket trait is not visible to black-box _test.mbt).
+/// wire conversation is asserted without any network. White-box file:
+/// the state machine's helpers are package-private. The Socket trait
+/// now lives in example/mailnet; read_raw_line/read_exact are IMAP
+/// disciplines and never fire in SMTP flows, hence the raise stubs.
 
 ///|
 priv struct FakeSock {
@@ -32,6 +34,18 @@ impl Socket for FakeSock with fn read_line(self) -> String raise {
 ///|
 impl Socket for FakeSock with fn write_all(self, data : Bytes) -> Unit raise {
   self.sent_raw.push(data)
+}
+
+///|
+impl Socket for FakeSock with fn read_raw_line(_self) -> Bytes raise {
+  raise @error.PgpError::PgpError(
+    msg="fake: read_raw_line unused in SMTP tests",
+  )
+}
+
+///|
+impl Socket for FakeSock with fn read_exact(_self, _n : Int) -> Bytes raise {
+  raise @error.PgpError::PgpError(msg="fake: read_exact unused in SMTP tests")
 }
 
 ///|
@@ -204,7 +218,7 @@ test "transport: AUTH refused on non-local plaintext host" {
     password: Some("p"),
   }
   let raised = try {
-    MailTransport::send(t, "m\r\n", "a@b.example", ["c@d.example"])
+    t.send("m\r\n", "a@b.example", ["c@d.example"])
     false
   } catch {
     _ => true
@@ -220,7 +234,7 @@ test "transport: AUTH refused on non-local plaintext host" {
   }
   let raised2 = try {
     // port 1 refuses at connect time; the AUTH guard must NOT fire first
-    MailTransport::send(t2, "m\r\n", "a@b.example", ["c@d.example"])
+    t2.send("m\r\n", "a@b.example", ["c@d.example"])
     false
   } catch {
     e => !e.to_string().contains("refusing AUTH")

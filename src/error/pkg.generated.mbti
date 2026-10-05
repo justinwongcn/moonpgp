@@ -10,6 +10,8 @@ pub fn[T] require(T?, String) -> T raise PgpError
 pub(all) suberror PgpError {
   PgpError(msg~ : String)
 }
+pub fn PgpError::output(Self, &Logger) -> Unit
+pub fn PgpError::to_string(Self) -> String
 pub impl Show for PgpError
 
 // Types and methods

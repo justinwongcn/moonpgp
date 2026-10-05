@@ -50,8 +50,11 @@ pub(all) enum CipherAlgo {
   Aes192
   Aes256
 } derive(Eq, @debug.Debug)
+pub fn CipherAlgo::equal(Self, Self) -> Bool
 pub fn CipherAlgo::key_size(Self) -> Int
+pub fn CipherAlgo::not_equal(Self, Self) -> Bool
 pub fn CipherAlgo::number(Self) -> Int
+pub fn CipherAlgo::to_repr(Self) -> @debug.Repr
 
 pub(all) enum HashId {
   Md5
@@ -66,8 +69,11 @@ pub fn HashId::block_size(Self) -> Int
 pub fn HashId::der_prefix(Self) -> Bytes
 pub fn HashId::digest(Self, BytesView) -> Bytes
 pub fn HashId::digest_size(Self) -> Int
+pub fn HashId::equal(Self, Self) -> Bool
 pub fn HashId::hmac(Self, BytesView, BytesView) -> Bytes
+pub fn HashId::not_equal(Self, Self) -> Bool
 pub fn HashId::number(Self) -> Int
+pub fn HashId::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

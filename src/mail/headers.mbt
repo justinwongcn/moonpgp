@@ -11,9 +11,11 @@ pub(all) struct MailAddress {
 } derive(Debug)
 
 ///|
-/// Header values are ASCII-only this generation (RFC 2047/6532 are not
-/// implemented): anything non-ASCII, or any CR/LF (header injection),
-/// fails fast instead of producing a corrupt message.
+/// ASCII-only for addr-spec/domain/attachment metadata (RFC 2047 does
+/// not apply to addr-specs; EAI/SMTPUTF8 is out of scope). CR/LF and
+/// control characters fail fast everywhere — header injection guard.
+/// Free-text header values (Subject, display names) go through
+/// `encode_rfc2047` instead.
 fn require_ascii(s : String, what : String) -> Unit raise {
   for c in s {
     let v = c.to_int()
@@ -86,14 +88,19 @@ fn is_atext(c : Char) -> Bool {
 /// outside atext (including spaces and dots) are quoted-string encoded
 /// with `"`/`\` escapes.
 pub fn format_address(a : MailAddress) -> String raise {
+  // addr-spec is never RFC 2047 encoded (EAI/SMTPUTF8 out of scope).
   require_ascii(a.addr, "address")
-  require_ascii(a.display_name, "display name")
   validate_addr_spec(a.addr)
   guard a.addr != "" else {
     raise @error.PgpError::PgpError(msg="mail: empty address")
   }
   if a.display_name == "" {
     return a.addr
+  }
+  // Non-ASCII display names become RFC 2047 encoded words (an
+  // encoded-word is a valid atom in phrase position — no quoting).
+  if !is_ascii_printable(a.display_name) {
+    return "\{encode_rfc2047(a.display_name)} <\{a.addr}>"
   }
   let mut quoted = false
   for c in a.display_name {
@@ -146,6 +153,8 @@ fn civil_from_days(z0 : Int64) -> (Int, Int, Int) {
 }
 
 ///|
+/// Native-only: its only caller is the libc localtime_r bridge.
+#cfg(target="native")
 fn i64_le_bytes(v : Int64) -> Bytes {
   Bytes::from_array([
     (v & 0xFF).to_byte(),

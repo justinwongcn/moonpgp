@@ -14,7 +14,7 @@
 `Good signature` → ③ 正文/附件字节级比对 → ④ `--roundtrip` 自产自解。
 零外部依赖(python3 标准库)。
 
-## 组装库(src/mail)
+## 库 API(src/mail 组装;传输在 example/netmail)
 
 组装能力是可复用的库 API(不含传输):
 
@@ -32,6 +32,10 @@ let message = @mail.build_encrypted_mail(
 
 编码策略(RFC 3156 §3:签名数据必须 7-bit):正文纯 ASCII → 7bit,否则
 quoted-printable;附件一律 base64。
+
+协议与传输实现位于共享演示包 `example/netmail`(socket/SMTP/IMAP 客户端),定位是
+演示与测试基建、不属于库 API——发布 API 中的邮件能力是 `src/mail`(组装)与
+`src/mime`(解析验签)。本 example 是薄壳 CLI。
 
 ## 发送
 

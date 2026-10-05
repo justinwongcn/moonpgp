@@ -85,6 +85,20 @@ let encrypt = @api.pgp().encryption().password("pw").finish()
 let decrypt = @api.pgp().decryption().password("pw").finish()
 ```
 
+### 邮件演示管线（`example/`,不属于库 API）
+
+库的邮件能力是**组装（`src/mail`）+ 解析验签（`src/mime`）**两半。线上传输——
+POSIX socket SMTP 客户端、IMAP4rev1 子集客户端（`example/netmail`）与两个
+CLI 演示（`example/mailer`、`example/mailreader`）——是**演示与测试基建**,
+不作为发布 API：它们的存在是为了端到端验证库本身（一封签名+加密邮件经
+msmtp 提交、再经 IMAP 取回、解密验签,一条命令闭环——`example/mailer/e2e.sh`
+与 `example/mailreader/e2e.sh`）。
+
+它们是功能完整的（已对真实 163 邮箱与 Proton 对端完成过互联网往返）,但有
+意保持边界：仅 native 目标、不做 TLS（经本地 stunnel 到服务商 SMTPS/IMAPS
+端口,或 .eml 交给 msmtp）、IMAP 仅 INBOX、明文连非本地主机需显式 opt-in。
+见安全声明。
+
 ## 模块布局（可替换性设计）
 
 ```
@@ -96,10 +110,14 @@ src/
 ├── cipher/      # OpenPGP-CFB 变体 + SEIPD v1/MDC + AES Key Wrap（RFC 3394）
 ├── pki/         # RSA（keygen/PKCS#1 v1.5）、Ed25519/X25519（RFC 8032/7748 自实现，`curve25519.mbt`）
 ├── compress/    # DEFLATE/ZLIB（当前走 moonbit-community/flate，可替换点）
-├── mime/        # PGP/MIME（RFC 3156）+ RFC 5322 头解析
+├── mime/        # PGP/MIME（RFC 3156）：解析、验签、收件交付
+├── mail/        # RFC 5322 邮件组装（头、QP/7bit 策略、附件）——不含传输
 ├── api/         # 密钥管理、签名、ECDH/RSA 会话密钥封装、keyring、builder
 └── interop/     # 与 gopenpgp/GnuPG/openssl 的互通测试
 ```
+
+线上传输与 CLI 演示在 `example/`（netmail、mailer、mailreader）,属演示与
+测试基建——见上文"邮件演示管线"。
 
 依赖（版本固定）：`moonbitlang/x@0.5.5`（哈希全家桶/HMAC/AES-ECB 单块原语）、
 `moonbit-community/flate@0.8.4`（DEFLATE）。Ed25519/X25519 按 RFC 8032/7748 基于
@@ -118,6 +136,10 @@ core `@bigint` 自实现（`pki/curve25519.mbt`），公钥路径无第三方依
 - GC 语言无法真正清零私钥内存；`Cipher::wipe`/密钥清零是尽力而为。
 - 支持解密侧的 v3 遗留特性有限；生成端仅产出 v4 格式（v6/AEAD-OCB/Argon2 为 P2）。
 - 非 native 后端（wasm/js）暂无时钟 API，密钥创建时间为占位值（见 `primitives/clock.mbt`）。
+- 演示传输（`example/netmail`）仅 native 目标且不做 TLS：SMTP AUTH 拒绝非 localhost,
+  IMAP 明文连非本地主机需显式 `allow_insecure`。经本地 TLS 终结（如 stunnel 到服务商
+  IMAPS/SMTPS 端口）或把 .eml 交给 MTA（msmtp）。明文暴露的只有凭据与元数据——
+  邮件内容保持端到端加密。
 
 ## P1/P2 路线
 

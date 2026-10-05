@@ -19,7 +19,17 @@ repository = "https://github.com/justinwongcn/openpgp"
 
 license = "Apache-2.0"
 
-keywords = [ "openpgp", "pgp", "encryption", "signature", "email", "crypto" ]
+keywords = [
+  "openpgp",
+  "pgp",
+  "encryption",
+  "signature",
+  "email",
+  "crypto",
+  "imap",
+  "smtp",
+  "mime",
+]
 
 preferred_target = "native"
 

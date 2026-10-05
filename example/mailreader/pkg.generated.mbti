@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/openpgp/example/mailreader"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Config
+
+type FetchRecorder
+
+// Type aliases
+
+// Traits

@@ -1,12 +1,11 @@
 import {
+  "justinwongcn/openpgp/example/netmail",
   "justinwongcn/openpgp/src/error",
-  "justinwongcn/openpgp/src/primitives",
   "justinwongcn/openpgp/src/api",
   "justinwongcn/openpgp/src/mime",
   "justinwongcn/openpgp/src/mail",
   "moonbitlang/x/fs",
   "moonbitlang/core/env",
-  "moonbitlang/core/encoding/base64",
 }
 
 pkgtype(kind: "executable")

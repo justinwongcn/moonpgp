@@ -69,6 +69,7 @@ pub(all) enum DecryptResult {
   Verified(Bytes)
   SignatureError(Bytes)
 } derive(@debug.Debug)
+pub fn DecryptResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DecryptionBuilder {
   // private fields
@@ -99,12 +100,13 @@ pub struct KeyRing {
 } derive(@debug.Debug)
 pub fn KeyRing::add_private(Self, PrivateKey) -> Unit
 pub fn KeyRing::add_public(Self, PublicKey) -> Unit
-pub fn KeyRing::find_decryption_key(Self, BytesView) -> @packet.SecretKeyPacket? raise
-pub fn KeyRing::find_encryption_key(Self, BytesView) -> @packet.PublicKeyPacket? raise
-pub fn KeyRing::find_verification_key(Self, BytesView) -> PublicKey? raise
+pub fn KeyRing::find_decryption_key(Self, BytesView) -> @packet.SecretKeyPacket?
+pub fn KeyRing::find_encryption_key(Self, BytesView) -> @packet.PublicKeyPacket?
+pub fn KeyRing::find_verification_key(Self, BytesView) -> PublicKey?
 pub fn KeyRing::new() -> Self
 pub fn KeyRing::private_count(Self) -> Int
 pub fn KeyRing::public_count(Self) -> Int
+pub fn KeyRing::to_repr(Self) -> @debug.Repr
 
 pub struct Pgp {
 }
@@ -125,9 +127,10 @@ pub fn PrivateKey::from_bytes(BytesView) -> Self raise
 pub fn PrivateKey::is_locked(Self) -> Bool
 pub fn PrivateKey::key_id(Self) -> Bytes raise
 pub fn PrivateKey::lock(Self, String) -> Self raise
-pub fn PrivateKey::to_armored(Self) -> String raise
-pub fn PrivateKey::to_bytes(Self) -> Bytes raise
+pub fn PrivateKey::to_armored(Self) -> String
+pub fn PrivateKey::to_bytes(Self) -> Bytes
 pub fn PrivateKey::to_public(Self) -> PublicKey
+pub fn PrivateKey::to_repr(Self) -> @debug.Repr
 pub fn PrivateKey::unlock(Self, String) -> Self raise
 pub fn PrivateKey::user_id(Self) -> String
 
@@ -143,8 +146,9 @@ pub fn PublicKey::fingerprint(Self) -> Bytes raise
 pub fn PublicKey::from_armored(String) -> Self raise
 pub fn PublicKey::from_bytes(BytesView) -> Self raise
 pub fn PublicKey::key_id(Self) -> Bytes raise
-pub fn PublicKey::to_armored(Self) -> String raise
-pub fn PublicKey::to_bytes(Self) -> Bytes raise
+pub fn PublicKey::to_armored(Self) -> String
+pub fn PublicKey::to_bytes(Self) -> Bytes
+pub fn PublicKey::to_repr(Self) -> @debug.Repr
 pub fn PublicKey::user_id(Self) -> String
 
 pub(all) enum VerifyStatus {
@@ -153,6 +157,9 @@ pub(all) enum VerifyStatus {
   NoVerifier
   Failed
 } derive(Eq, @debug.Debug)
+pub fn VerifyStatus::equal(Self, Self) -> Bool
+pub fn VerifyStatus::not_equal(Self, Self) -> Bool
+pub fn VerifyStatus::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

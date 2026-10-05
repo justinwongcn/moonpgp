@@ -2,30 +2,14 @@
 package "justinwongcn/openpgp/example/mailer"
 
 // Values
-pub fn dot_stuff(String) -> String
 
 // Errors
 
 // Types and methods
 type Config
 
-pub(all) struct FileTransport {
-  out_path : String
-}
-
 type RoundtripRecorder
-
-pub(all) struct SmtpTransport {
-  host : String
-  port : Int
-  ehlo_domain : String
-  user : String?
-  password : String?
-}
 
 // Type aliases
 
 // Traits
-pub(open) trait MailTransport {
-  fn send(Self, String, String, Array[String]) -> Unit raise
-}

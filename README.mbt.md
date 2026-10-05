@@ -23,7 +23,7 @@ mail submission. Built for the OSC 2026 open-source ecosystem competition.
 | Signing/verification | inline (OnePassSig), detached, cleartext (§7 canonicalization), text-mode CRLF canonicalization |
 | Compression | Compressed packet: ZIP (raw DEFLATE) / ZLIB / uncompressed; the decompressor fully supports dynamic Huffman |
 | MIME | PGP/MIME (RFC 3156): multipart/signed construction + verification, multipart/encrypted parsing, RFC 5322 header parsing; email pipeline aligned with gopenpgp v3 `mime/`: Content-Type parameter parsing, Content-Transfer-Encoding decoding (base64/quoted-printable), byte-exact MIME tree parsing, body/attachment collection (gomime semantics), one-shot `decrypt_mime` with callback delivery and gopenpgp signature-status merge (Ok/NotSigned/NoVerifier/Failed) |
-| Email sending | `src/mail`: RFC 5322 headers (Date/Message-ID/atext-quoting addresses, non-ASCII fail-fast), multipart/mixed with the RFC 3156 §3 7-bit strategy (ASCII→7bit / non-ASCII→QP / attachments base64), generalized multipart/signed over pre-built entities, one-shot `build_encrypted_mail`; `example/mailer`: SMTP submission (native sockets, no TLS by design) + file/msmtp hand-off, e2e-verified against gpg |
+| Email assembly (library) | `src/mail`: RFC 5322 headers (Date/Message-ID/atext-quoting addresses, RFC 2047 encoded words), multipart/mixed with the RFC 3156 §3 7-bit strategy (ASCII→7bit / non-ASCII→QP / attachments base64), generalized multipart/signed over pre-built entities, one-shot `build_encrypted_mail` — the composing half of PGP/MIME, symmetric with `src/mime` parsing |
 | Top-level API | `pgp().encryption()/decryption()/key_generation()` builders, KeyRing |
 
 ## Interoperability (all verified by real cross-testing)
@@ -93,6 +93,23 @@ let encrypt = @api.pgp().encryption().password("pw").finish()
 let decrypt = @api.pgp().decryption().password("pw").finish()
 ```
 
+### Email demo pipeline (`example/`, not part of the library API)
+
+The library's email scope is **assembly (`src/mail`) + parsing/verification
+(`src/mime`)**. The wire transports — a POSIX-socket SMTP client, an
+IMAP4rev1 subset client (`example/netmail`) and the two CLI demos
+(`example/mailer`, `example/mailreader`) — are **demo and test
+infrastructure**, not published API: they exist to prove the library
+end-to-end (a signed+encrypted mail is composed, submitted via msmtp,
+fetched back over IMAP, decrypted and verified in one loop —
+`example/mailer/e2e.sh`, `example/mailreader/e2e.sh`).
+
+They are functional (used for the real-internet round trip against a 163
+mailbox and a Proton peer) but carry deliberate limitations: native
+target only, no TLS (route through a local stunnel to the provider's
+SMTPS/IMAPS port, or hand .eml to msmtp), INBOX-only IMAP, plaintext to
+non-local hosts refused unless explicitly opted in. See Security notes.
+
 ## Module layout (designed for replaceability)
 
 ```
@@ -109,6 +126,9 @@ src/
 ├── api/         # key management, signing, ECDH/RSA session-key wrapping, keyring, builders
 └── interop/     # interop tests against gopenpgp/GnuPG/openssl
 ```
+
+Wire transports and the CLI demos live under `example/` (netmail, mailer,
+mailreader) as demo/test infrastructure — see "Email demo pipeline" above.
 
 ## Dependencies (version-pinned)
 
@@ -138,6 +158,13 @@ MIT attribution).
   generation side only emits v4 packets (v6/AEAD-OCB/Argon2 are roadmap items).
 - Non-native backends (wasm/js) have no clock API yet; key creation timestamps
   are placeholders (see `primitives/clock.mbt`).
+- The demo transports (`example/netmail`) are **native-only and TLS-free**:
+  SMTP AUTH is refused to non-localhost hosts, and IMAP plaintext to
+  non-local hosts requires an explicit `allow_insecure` opt-in. Route
+  through a local TLS terminator (e.g. stunnel to the provider's
+  IMAPS/SMTPS port) or hand .eml to an MTA (msmtp). Plaintext exposure is
+  limited to credentials and metadata — message content stays end-to-end
+  encrypted.
 
 ## Roadmap
 

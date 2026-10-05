@@ -117,7 +117,14 @@ fn eddsa_secret_parts(
     )
   }
   let r = @packet.Reader::new(p.secret_material.exact_view())
-  let seed = r.read_mpi()
+  // MPI strips leading zero octets; a seed whose first octet is 0x00
+  // (probability 1/256) arrives as 31 bytes. Pad back to the fixed
+  // 32-octet scalar on read.
+  let seed_mpi = r.read_mpi()
+  guard seed_mpi.length() <= 32 else {
+    raise @error.PgpError::PgpError(msg="api: bad EdDSA seed length")
+  }
+  let seed = @primitives.pad_left(seed_mpi.exact_view(), 32)
   let point = p.public.params()[1]
   guard point.length() == 33 else {
     raise @error.PgpError::PgpError(msg="api: bad EdDSA point")

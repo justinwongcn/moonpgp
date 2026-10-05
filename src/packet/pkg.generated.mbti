@@ -80,6 +80,7 @@ pub struct CompressedPacket {
 } derive(@debug.Debug)
 pub fn CompressedPacket::parse(BytesView) -> Self raise
 pub fn CompressedPacket::to_body(Self) -> Bytes
+pub fn CompressedPacket::to_repr(Self) -> @debug.Repr
 
 pub struct LiteralPacket {
   format : Char
@@ -94,6 +95,7 @@ pub fn LiteralPacket::file_name(Self) -> String
 pub fn LiteralPacket::format(Self) -> Char
 pub fn LiteralPacket::parse(BytesView) -> Self raise
 pub fn LiteralPacket::to_body(Self) -> Bytes
+pub fn LiteralPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OnePassSigPacket {
   sig_type : SigType
@@ -104,6 +106,7 @@ pub(all) struct OnePassSigPacket {
 } derive(@debug.Debug)
 pub fn OnePassSigPacket::parse(BytesView) -> Self raise
 pub fn OnePassSigPacket::to_body(Self) -> Bytes
+pub fn OnePassSigPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PacketTag {
   Pkesk
@@ -126,7 +129,10 @@ pub(all) enum PacketTag {
   AeadEncData
   Unknown(Int)
 } derive(Eq, @debug.Debug)
+pub fn PacketTag::equal(Self, Self) -> Bool
+pub fn PacketTag::not_equal(Self, Self) -> Bool
 pub fn PacketTag::number(Self) -> Int
+pub fn PacketTag::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PkeskPacket {
   key_id : Bytes
@@ -140,6 +146,7 @@ pub fn PkeskPacket::key_id(Self) -> Bytes
 pub fn PkeskPacket::parse(BytesView) -> Self raise
 pub fn PkeskPacket::pub_algo(Self) -> PubKeyAlgo
 pub fn PkeskPacket::to_body(Self) -> Bytes
+pub fn PkeskPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PubKeyAlgo {
   RsaEncryptOrSign
@@ -153,8 +160,11 @@ pub(all) enum PubKeyAlgo {
   Ed25519
   Unknown(Int)
 } derive(Eq, @debug.Debug)
+pub fn PubKeyAlgo::equal(Self, Self) -> Bool
 pub fn PubKeyAlgo::is_rsa(Self) -> Bool
+pub fn PubKeyAlgo::not_equal(Self, Self) -> Bool
 pub fn PubKeyAlgo::number(Self) -> Int
+pub fn PubKeyAlgo::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PublicKeyPacket {
   version : Int
@@ -169,6 +179,7 @@ pub fn PublicKeyPacket::key_id(Self) -> Bytes raise
 pub fn PublicKeyPacket::params(Self) -> Array[Bytes]
 pub fn PublicKeyPacket::parse(BytesView) -> Self raise
 pub fn PublicKeyPacket::to_body(Self) -> Bytes
+pub fn PublicKeyPacket::to_repr(Self) -> @debug.Repr
 pub fn PublicKeyPacket::version(Self) -> Int
 
 pub(all) struct RawPacket {
@@ -177,6 +188,7 @@ pub(all) struct RawPacket {
 } derive(@debug.Debug)
 pub fn RawPacket::body(Self) -> Bytes
 pub fn RawPacket::tag(Self) -> PacketTag
+pub fn RawPacket::to_repr(Self) -> @debug.Repr
 
 pub struct Reader {
   // private fields
@@ -191,6 +203,7 @@ pub fn Reader::read_u16(Self) -> Int raise
 pub fn Reader::read_u32(Self) -> Int raise
 pub fn Reader::read_u8(Self) -> Int raise
 pub fn Reader::remaining(Self) -> Int
+pub fn Reader::to_repr(Self) -> @debug.Repr
 pub fn Reader::view(Self) -> BytesView
 
 pub(all) struct SecretKeyPacket {
@@ -204,6 +217,7 @@ pub(all) struct SecretKeyPacket {
 } derive(@debug.Debug)
 pub fn SecretKeyPacket::parse(BytesView) -> Self raise
 pub fn SecretKeyPacket::to_body(Self) -> Bytes
+pub fn SecretKeyPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SeipdPacket {
   version : Int
@@ -211,6 +225,7 @@ pub(all) struct SeipdPacket {
 } derive(@debug.Debug)
 pub fn SeipdPacket::parse(BytesView) -> Self raise
 pub fn SeipdPacket::to_body(Self) -> Bytes
+pub fn SeipdPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SigSubpacket {
   critical : Bool
@@ -219,7 +234,10 @@ pub(all) struct SigSubpacket {
 } derive(Eq, @debug.Debug)
 pub fn SigSubpacket::body(Self) -> Bytes
 pub fn SigSubpacket::critical(Self) -> Bool
+pub fn SigSubpacket::equal(Self, Self) -> Bool
+pub fn SigSubpacket::not_equal(Self, Self) -> Bool
 pub fn SigSubpacket::sub_type(Self) -> Int
+pub fn SigSubpacket::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SigType {
   BinaryDocument
@@ -239,7 +257,10 @@ pub(all) enum SigType {
   ThirdPartyConfirmation
   Unknown(Int)
 } derive(Eq, @debug.Debug)
+pub fn SigType::equal(Self, Self) -> Bool
+pub fn SigType::not_equal(Self, Self) -> Bool
 pub fn SigType::number(Self) -> Int
+pub fn SigType::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignaturePacket {
   sig_type : SigType
@@ -263,6 +284,7 @@ pub fn SignaturePacket::pub_algo(Self) -> PubKeyAlgo
 pub fn SignaturePacket::sig_params(Self) -> Array[Bytes]
 pub fn SignaturePacket::sig_type(Self) -> SigType
 pub fn SignaturePacket::to_body(Self) -> Bytes
+pub fn SignaturePacket::to_repr(Self) -> @debug.Repr
 pub fn SignaturePacket::unhashed_subpackets(Self) -> Array[SigSubpacket]
 
 pub(all) struct SkeskPacket {
@@ -275,6 +297,7 @@ pub fn SkeskPacket::encrypted_session_key(Self) -> Bytes
 pub fn SkeskPacket::parse(BytesView) -> Self raise
 pub fn SkeskPacket::s2k(Self) -> @s2k.S2k
 pub fn SkeskPacket::to_body(Self) -> Bytes
+pub fn SkeskPacket::to_repr(Self) -> @debug.Repr
 
 pub struct Writer {
   // private fields
@@ -284,6 +307,7 @@ pub fn Writer::length(Self) -> Int
 pub fn Writer::mpi(Self, BytesView) -> Unit
 pub fn Writer::new() -> Self
 pub fn Writer::to_bytes(Self) -> Bytes
+pub fn Writer::to_repr(Self) -> @debug.Repr
 pub fn Writer::u16(Self, Int) -> Unit
 pub fn Writer::u32(Self, Int) -> Unit
 pub fn Writer::u8(Self, Int) -> Unit

@@ -68,7 +68,7 @@ fn parse_ipv4(host : String) -> (Byte, Byte, Byte, Byte) raise {
   let parts : Array[StringView] = h.split(".").collect()
   guard parts.length() == 4 else {
     raise @error.PgpError::PgpError(
-      msg="smtp: only dotted-quad IPv4 hosts are supported (no DNS); got '\{host}'",
+      msg="mailnet: only dotted-quad IPv4 hosts are supported (no DNS); got '\{host}'",
     )
   }
   let out : Array[Byte] = []
@@ -83,18 +83,20 @@ fn parse_ipv4(host : String) -> (Byte, Byte, Byte, Byte) raise {
 #cfg(target="native")
 fn parse_u8(s : StringView) -> Int raise {
   guard s.length() >= 1 && s.length() <= 3 else {
-    raise @error.PgpError::PgpError(msg="smtp: bad IPv4 octet '\{s}'")
+    raise @error.PgpError::PgpError(msg="mailnet: bad IPv4 octet '\{s}'")
   }
   let mut v = 0
   for c in s {
     let d = c.to_int() - 48
     guard d >= 0 && d <= 9 else {
-      raise @error.PgpError::PgpError(msg="smtp: bad IPv4 octet '\{s}'")
+      raise @error.PgpError::PgpError(msg="mailnet: bad IPv4 octet '\{s}'")
     }
     v = v * 10 + d
   }
   guard v <= 255 else {
-    raise @error.PgpError::PgpError(msg="smtp: IPv4 octet out of range '\{s}'")
+    raise @error.PgpError::PgpError(
+      msg="mailnet: IPv4 octet out of range '\{s}'",
+    )
   }
   v
 }
@@ -125,9 +127,7 @@ fn is_darwin() -> Bool {
 #cfg(target="native")
 priv struct NativeSock {
   fd : Int
-  rbuf : FixedArray[Byte]
-  mut rstart : Int
-  mut rend : Int
+  lb : LineBuffer
 }
 
 ///|
@@ -135,16 +135,16 @@ priv struct NativeSock {
 /// attempted (dual setsockopt — macOS and Linux disagree on the level
 /// and option name; failures are ignored as best-effort).
 #cfg(target="native")
-fn connect_socket(host : String, port : Int) -> &Socket raise {
+pub fn connect_socket(host : String, port : Int) -> &Socket raise {
   guard port > 0 && port <= 65535 else {
-    raise @error.PgpError::PgpError(msg="smtp: port out of range \{port}")
+    raise @error.PgpError::PgpError(msg="mailnet: port out of range \{port}")
   }
   c_signal(13, 1L) |> ignore
   let (a0, a1, a2, a3) = parse_ipv4(host)
   let fd = c_socket(2, 1, 0)
   guard fd >= 0 else {
-    c_perror(b"moonpgp-smtp")
-    raise @error.PgpError::PgpError(msg="smtp: socket() failed")
+    c_perror(b"moonpgp-mailnet")
+    raise @error.PgpError::PgpError(msg="mailnet: socket() failed")
   }
   // SO_RCVTIMEO: macOS (level 0xffff, name 0x1006) vs Linux (level 1,
   // name 20); try both, ignore rejections — a missed timeout only
@@ -172,13 +172,28 @@ fn connect_socket(host : String, port : Int) -> &Socket raise {
   }
   let cr = c_connect(fd, sa, 16)
   if cr < 0 {
-    c_perror(b"moonpgp-smtp")
+    c_perror(b"moonpgp-mailnet")
     c_close(fd) |> ignore
     raise @error.PgpError::PgpError(
-      msg="smtp: connect to \{host}:\{port} failed (see stderr)",
+      msg="mailnet: connect to \{host}:\{port} failed (see stderr)",
     )
   }
-  NativeSock::{ fd, rbuf: FixedArray::make(4096, b'\x00'), rstart: 0, rend: 0, }
+  let fill = fn(buf : FixedArray[Byte]) -> Int {
+    let n = c_recv(fd, buf, buf.length(), 0)
+    if n < 0 {
+      c_perror(b"moonpgp-mailnet")
+    }
+    n
+  }
+  NativeSock::{
+    fd,
+    lb: LineBuffer::{
+      buf: FixedArray::make(4096, b'\x00'),
+      rstart: 0,
+      rend: 0,
+      fill,
+    },
+  }
 }
 
 ///|
@@ -193,8 +208,8 @@ impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
       c_send(self.fd, data[off:n].to_owned(), n - off, 0)
     }
     guard sent > 0 else {
-      c_perror(b"moonpgp-smtp")
-      raise @error.PgpError::PgpError(msg="smtp: send failed mid-write")
+      c_perror(b"moonpgp-mailnet")
+      raise @error.PgpError::PgpError(msg="mailnet: send failed mid-write")
     }
     off = off + sent
   }
@@ -203,39 +218,19 @@ impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
 ///|
 #cfg(target="native")
 impl Socket for NativeSock with fn read_line(self) -> String raise {
-  let sb = StringBuilder()
-  while true {
-    while self.rstart < self.rend {
-      let v = self.rbuf[self.rstart].to_int()
-      self.rstart = self.rstart + 1
-      if v == 10 {
-        let s = sb.to_string()
-        if s.has_suffix("\r") {
-          return s[0:s.length() - 1].to_owned()
-        }
-        return s
-      }
-      match v.to_char() {
-        Some(c) => sb.write_char(c)
-        None => sb.write_char('?')
-      }
-    }
-    // buffer exhausted: refill from the top
-    self.rstart = 0
-    self.rend = 0
-    let n = c_recv(self.fd, self.rbuf, self.rbuf.length(), 0)
-    if n < 0 {
-      c_perror(b"moonpgp-smtp")
-      raise @error.PgpError::PgpError(msg="smtp: recv failed")
-    }
-    if n == 0 {
-      raise @error.PgpError::PgpError(
-        msg="smtp: connection closed by server mid-reply",
-      )
-    }
-    self.rend = n
-  }
-  abort("smtp: unreachable")
+  self.lb.read_line()
+}
+
+///|
+#cfg(target="native")
+impl Socket for NativeSock with fn read_raw_line(self) -> Bytes raise {
+  self.lb.read_raw_line()
+}
+
+///|
+#cfg(target="native")
+impl Socket for NativeSock with fn read_exact(self, n : Int) -> Bytes raise {
+  self.lb.read_exact(n)
 }
 
 ///|

@@ -133,14 +133,26 @@ test "encrypted mail: one-shot compose then decrypt_mime roundtrip" {
 }
 
 ///|
-test "encrypted mail: non-ascii subject fails fast" {
+test "encrypted mail: non-ascii subject is RFC 2047 encoded" {
   let key = @api.generate_key("Mail Build <mb@example.com>", bits=1024)
+  let mail_text = @mail.build_encrypted_mail(
+    { display_name: "", addr: "a@b.example", },
+    [{ display_name: "", addr: "c@d.example", }],
+    subject="中文主题",
+    text="x",
+    attachments=[],
+    signer=key,
+    recipients=[key.to_public()],
+    domain="x.example",
+  )
+  assert_true(mail_text.contains("Subject: =?utf-8?B?"))
+  // And a CR/LF-injecting subject still fails fast.
   let raised = try {
     ignore(
       @mail.build_encrypted_mail(
         { display_name: "", addr: "a@b.example", },
         [{ display_name: "", addr: "c@d.example", }],
-        subject="中文主题",
+        subject="x\r\nBcc: evil@example.com",
         text="x",
         attachments=[],
         signer=key,

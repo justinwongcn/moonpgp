@@ -29,7 +29,7 @@ pub fn parse_content_type(String) -> MediaType raise
 
 pub fn parse_header_params(String) -> (String, Array[(String, String)]) raise
 
-pub fn parse_message(String) -> MimeMessage raise
+pub fn parse_message(String) -> MimeMessage
 
 pub fn parse_mime_tree(Bytes) -> MimePart raise
 
@@ -47,6 +47,7 @@ pub struct MediaType {
 } derive(@debug.Debug)
 pub fn MediaType::mimetype(Self) -> String
 pub fn MediaType::param(Self, String) -> String?
+pub fn MediaType::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MimeAttachment {
   headers : Array[(String, String)]
@@ -54,17 +55,20 @@ pub(all) struct MimeAttachment {
   filename : String?
   mimetype : String
 } derive(@debug.Debug)
+pub fn MimeAttachment::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MimeBody {
   content : Bytes
   mimetype : String
 } derive(@debug.Debug)
+pub fn MimeBody::to_repr(Self) -> @debug.Repr
 
 pub struct MimeMessage {
   headers : Array[(String, String)]
   body : String
 } derive(@debug.Debug)
 pub fn MimeMessage::header(Self, String) -> String?
+pub fn MimeMessage::to_repr(Self) -> @debug.Repr
 
 pub struct MimePart {
   headers : Array[(String, String)]
@@ -76,11 +80,13 @@ pub struct MimePart {
 } derive(@debug.Debug)
 pub fn MimePart::header(Self, String) -> String?
 pub fn MimePart::is_multipart(Self) -> Bool
+pub fn MimePart::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PgpMimeSigned {
   signed_bytes : Bytes
   signature_armor : String
 } derive(@debug.Debug)
+pub fn PgpMimeSigned::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

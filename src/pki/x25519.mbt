@@ -68,14 +68,16 @@ pub fn x25519_generate() -> X25519SecretKey raise {
 pub fn x25519_secret_of_wire_mpi(
   mpi_value : BytesView,
 ) -> X25519SecretKey raise {
-  guard mpi_value.length() == 32 else {
+  // Tolerate a stripped leading zero octet (MPI semantics).
+  guard mpi_value.length() <= 32 else {
     raise @error.PgpError::PgpError(
       msg="pki: Curve25519Legacy secret MPI must be 32 octets",
     )
   }
+  let full = @primitives.pad_left(mpi_value, 32)
   let le : Array[Byte] = []
   for i = 31; i >= 0; i = i - 1 {
-    le.push(mpi_value[i])
+    le.push(full[i])
   }
   x25519_public_of_scalar(Bytes::from_array(le).exact_view())
 }

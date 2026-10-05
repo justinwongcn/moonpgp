@@ -4,3 +4,16 @@ target/
 target
 .mooncakes/
 .moonagent/
+# ---- AI 编程助手相关文件（不入库，避免推送到 GitHub）----
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.zcode/
+.claude/
+.cursor/
+.windsurf/
+.aider*
+.continue/
+.codeium/
+.github/workflows/copilot-setup-steps.yml

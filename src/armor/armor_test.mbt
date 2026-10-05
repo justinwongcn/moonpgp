@@ -97,3 +97,17 @@ test "no armor block found raises" {
   }
   assert_true(raised)
 }
+
+///|
+test "malformed CRC line raises instead of being skipped" {
+  // A "=" line that does not parse as a CRC-24 used to be dropped
+  // silently, bypassing the integrity check (F11).
+  let text = "-----BEGIN PGP MESSAGE-----\n\nQQ==\n=!!!!\n-----END PGP MESSAGE-----"
+  let raised = try {
+    let _ = @armor.decode(text)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}

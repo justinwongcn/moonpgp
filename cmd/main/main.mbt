@@ -69,9 +69,16 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
     check_args(rest.length(), 3)
     let key_text = @fs.read_file_to_string(rest[0])
     let key = @api.PrivateKey::from_armored(key_text)
-    let key = if key.is_locked() { key.unlock(rest[1]) } else { key }
-    let input = if key.is_locked() { rest[2] } else { rest[1] }
-    let output = if key.is_locked() { rest[3] } else { rest[2] }
+    // Snapshot the lock state BEFORE unlocking: unlock clears s2k_usage,
+    // so key.is_locked() is false afterwards and must not drive the
+    // argument positions (a locked key needs [key, passphrase, in, out]).
+    let was_locked = key.is_locked()
+    let key = if was_locked { key.unlock(rest[1]) } else { key }
+    if was_locked {
+      check_args(rest.length(), 4)
+    }
+    let input = if was_locked { rest[2] } else { rest[1] }
+    let output = if was_locked { rest[3] } else { rest[2] }
     let data = @api.decrypt_with_private_key(
       @fs.read_file_to_string(input),
       key,

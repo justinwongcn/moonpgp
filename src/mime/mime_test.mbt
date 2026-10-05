@@ -25,6 +25,23 @@ test "pgp/mime signed tampering detected" {
 }
 
 ///|
+test "pgp/mime signed roundtrip without trailing newline" {
+  // F04: the builder used to sign the entity without the trailing CRLF
+  // that extract_pgp_signed restores, so text without a trailing newline
+  // failed its own verification.
+  let key = @api.generate_key("Mime <m@example.com>", bits=1024)
+  let message = @mime.build_pgp_mime_signed(
+    "body without trailing newline", key,
+  )
+  let (recovered, status) = @mime.verify_pgp_mime_signed(
+    message,
+    key.to_public(),
+  )
+  assert_eq(status, @api.Ok)
+  assert_true(recovered.contains("body without trailing newline"))
+}
+
+///|
 test "pgp/mime encrypted roundtrip" {
   let key = @api.generate_key("Mime <m@example.com>", bits=1024)
   let plaintext = @primitives.utf8_bytes("encrypted mime payload\n")

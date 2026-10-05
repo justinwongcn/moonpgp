@@ -228,6 +228,11 @@ fn parse_subpackets(view : BytesView) -> Array[SigSubpacket] raise {
       r.read_u32()
     }
     let body = r.read_bytes(len)
+    guard body.length() >= 1 else {
+      raise @error.PgpError::PgpError(
+        msg="packet: zero-length signature subpacket",
+      )
+    }
     let t = body[0].to_int()
     out.push(SigSubpacket::{
       critical: (t & 0x80) != 0,

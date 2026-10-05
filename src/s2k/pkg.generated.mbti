@@ -24,7 +24,7 @@ pub(all) enum S2k {
   Iterated(@primitives.HashId, Bytes, Int)
 } derive(Eq, @debug.Debug)
 pub fn S2k::derive_key(Self, BytesView, Int) -> Bytes raise
-pub fn S2k::encode(Self) -> Bytes
+pub fn S2k::encode(Self) -> Bytes raise
 pub fn S2k::equal(Self, Self) -> Bool
 pub fn S2k::not_equal(Self, Self) -> Bool
 pub fn S2k::to_repr(Self) -> @debug.Repr

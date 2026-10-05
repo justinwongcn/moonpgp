@@ -52,11 +52,13 @@ pub fn parse(view : BytesView) -> (S2k, Int) raise {
 
 ///|
 /// Encode this specifier to its wire form.
-pub fn S2k::encode(self : S2k) -> Bytes {
+pub fn S2k::encode(self : S2k) -> Bytes raise {
   match self {
     Simple(hash_id) => Bytes::from_array([0, hash_id.number().to_byte()])
     Salted(hash_id, salt) => {
-      guard salt.length() == SALT_SIZE else { abort("s2k: bad salt length") }
+      guard salt.length() == SALT_SIZE else {
+        raise @error.PgpError::PgpError(msg="s2k: bad salt length")
+      }
       let out : Array[Byte] = [1, hash_id.number().to_byte()]
       for b in salt {
         out.push(b)
@@ -64,7 +66,9 @@ pub fn S2k::encode(self : S2k) -> Bytes {
       Bytes::from_array(out)
     }
     Iterated(hash_id, salt, count_byte) => {
-      guard salt.length() == SALT_SIZE else { abort("s2k: bad salt length") }
+      guard salt.length() == SALT_SIZE else {
+        raise @error.PgpError::PgpError(msg="s2k: bad salt length")
+      }
       let out : Array[Byte] = [3, hash_id.number().to_byte()]
       for b in salt {
         out.push(b)

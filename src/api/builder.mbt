@@ -31,7 +31,7 @@ pub fn EncryptionBuilder::password(
   self : EncryptionBuilder,
   pass : String,
 ) -> EncryptionBuilder {
-  let passwords = self.passwords
+  let passwords = self.passwords.copy()
   passwords.push(pass)
   { ..self, passwords, }
 }
@@ -41,7 +41,7 @@ pub fn EncryptionBuilder::recipient(
   self : EncryptionBuilder,
   key : PublicKey,
 ) -> EncryptionBuilder {
-  let recipients = self.recipients
+  let recipients = self.recipients.copy()
   recipients.push(key)
   { ..self, recipients, }
 }
@@ -108,7 +108,7 @@ pub fn DecryptionBuilder::password(
   self : DecryptionBuilder,
   pass : String,
 ) -> DecryptionBuilder {
-  let passwords = self.passwords
+  let passwords = self.passwords.copy()
   passwords.push(pass)
   { ..self, passwords, }
 }
@@ -118,7 +118,7 @@ pub fn DecryptionBuilder::decryption_key(
   self : DecryptionBuilder,
   key : PrivateKey,
 ) -> DecryptionBuilder {
-  let private_keys = self.private_keys
+  let private_keys = self.private_keys.copy()
   private_keys.push(key)
   { ..self, private_keys, }
 }
@@ -128,7 +128,7 @@ pub fn DecryptionBuilder::verification_key(
   self : DecryptionBuilder,
   key : PublicKey,
 ) -> DecryptionBuilder {
-  let verifiers = self.verifiers
+  let verifiers = self.verifiers.copy()
   verifiers.push(key)
   { ..self, verifiers, }
 }

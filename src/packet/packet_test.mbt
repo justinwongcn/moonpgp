@@ -204,3 +204,22 @@ test "reader truncation raises" {
   }
   assert_true(raised)
 }
+
+///|
+test "literal to_body rejects over-long file names instead of aborting" {
+  let long_name = StringBuilder()
+  for _ in 0..<300 {
+    long_name.write_char('x')
+  }
+  let lit = @packet.LiteralPacket::binary(
+    Bytes::from_array([b'\x41']),
+    file_name=long_name.to_string(),
+  )
+  let raised = try {
+    let _ = lit.to_body()
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}

@@ -78,7 +78,7 @@ pub fn decode_transfer_encoding(data : BytesView, cte : String?) -> Bytes raise 
     "base64" => {
       let text = @utf8.decode_lossy(data)
       @base64.decode(text, ignore_whitespace=true) catch {
-        _ => raise @error.PgpError::PgpError(msg="mime: invalid base64 body")
+        _ => @error.fail("mime: invalid base64 body")
       }
     }
     _ => data.to_owned()

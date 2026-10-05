@@ -8,12 +8,10 @@
 /// 255-bit clamped scalar; convert to the native little-endian form.
 fn ecdh_secret_parts(p : @packet.SecretKeyPacket) -> @pki.X25519SecretKey raise {
   guard p.s2k_usage == 0 else {
-    raise @error.PgpError::PgpError(
-      msg="api: secret key material is locked; unlock it first",
-    )
+    @error.fail("api: secret key material is locked; unlock it first")
   }
   guard p.public.algo() == @packet.Ecdh else {
-    raise @error.PgpError::PgpError(msg="api: not an ECDH key")
+    @error.fail("api: not an ECDH key")
   }
   let r = @packet.Reader::new(p.secret_material.exact_view())
   let mpi_value = r.read_mpi()
@@ -28,17 +26,17 @@ fn ecdh_secret_parts(p : @packet.SecretKeyPacket) -> @pki.X25519SecretKey raise 
 fn ecdh_kdf_param(pub_packet : @packet.PublicKeyPacket) -> Bytes raise {
   let params = pub_packet.params()
   guard params.length() == 3 else {
-    raise @error.PgpError::PgpError(msg="api: bad ECDH public parameters")
+    @error.fail("api: bad ECDH public parameters")
   }
   // Wire order: OID, point, KDF params (RFC 9580 §5.5.5.6).
   let oid = params[0]
   let kdf_field = params[2]
   guard kdf_field.length() == 4 else {
-    raise @error.PgpError::PgpError(msg="api: bad ECDH KDF parameters")
+    @error.fail("api: bad ECDH KDF parameters")
   }
   let fp = pub_packet.fingerprint()
   guard fp.length() == 20 else {
-    raise @error.PgpError::PgpError(msg="api: ECDH requires a v4 fingerprint")
+    @error.fail("api: ECDH requires a v4 fingerprint")
   }
   let w = @packet.Writer::new()
   w.bytes(oid.exact_view())
@@ -57,11 +55,11 @@ fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int raise {
   // field is shorter than 4 octets, and callers hand them straight here.
   let params = pub_packet.params()
   guard params.length() == 3 else {
-    raise @error.PgpError::PgpError(msg="api: bad ECDH public parameters")
+    @error.fail("api: bad ECDH public parameters")
   }
   let kdf_field = params[2]
   guard kdf_field.length() >= 4 else {
-    raise @error.PgpError::PgpError(msg="api: bad ECDH KDF parameters")
+    @error.fail("api: bad ECDH KDF parameters")
   }
   kdf_field[3].to_int()
 }
@@ -75,10 +73,7 @@ fn ecdh_kek(
   let sym = ecdh_kdf_sym_algo(pub_packet)
   let kek_len = match @primitives.cipher_algo_of_number(sym) {
     Some(a) => a.key_size()
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="api: unsupported ECDH KEK cipher \{sym}",
-      )
+    None => @error.fail("api: unsupported ECDH KEK cipher \{sym}")
   }
   @pki.ecdh_kdf_sha256(
     shared,
@@ -104,16 +99,14 @@ fn pkcs5_pad8(data : BytesView) -> Bytes {
 ///|
 /// Strip and verify PKCS#5 padding.
 fn pkcs5_unpad8(data : BytesView) -> Bytes raise {
-  guard data.length() > 0 else {
-    raise @error.PgpError::PgpError(msg="api: empty padded payload")
-  }
+  guard data.length() > 0 else { @error.fail("api: empty padded payload") }
   let n = data[data.length() - 1].to_int()
   guard n >= 1 && n <= 8 && data.length() >= n else {
-    raise @error.PgpError::PgpError(msg="api: bad session key padding")
+    @error.fail("api: bad session key padding")
   }
-  for i = data.length() - n; i < data.length(); i = i + 1 {
+  for i in (data.length() - n)..<data.length() {
     guard data[i].to_int() == n else {
-      raise @error.PgpError::PgpError(msg="api: bad session key padding")
+      @error.fail("api: bad session key padding")
     }
   }
   data[0:data.length() - n].to_owned()
@@ -125,7 +118,7 @@ fn pkcs5_unpad8(data : BytesView) -> Bytes raise {
 fn ecdh_native_point(pub_packet : @packet.PublicKeyPacket) -> Bytes raise {
   let point = pub_packet.params()[1]
   guard point.length() == 33 && point[0] == b'\x40' else {
-    raise @error.PgpError::PgpError(msg="api: bad Curve25519Legacy point")
+    @error.fail("api: bad Curve25519Legacy point")
   }
   point[1:point.length()].to_owned()
 }
@@ -168,7 +161,7 @@ fn ecdh_unwrap_session_key(
   let secret = ecdh_secret_parts(sk)
   let eph = pkesk.ecdh_ephemeral()
   guard eph.length() == 33 && eph[0] == b'\x40' else {
-    raise @error.PgpError::PgpError(msg="api: bad ECDH ephemeral point")
+    @error.fail("api: bad ECDH ephemeral point")
   }
   let shared = @pki.x25519_shared_secret(
     secret.scalar.exact_view(),
@@ -179,13 +172,13 @@ fn ecdh_unwrap_session_key(
     @cipher.aes_key_unwrap(kek.exact_view(), pkesk.encrypted().exact_view()).exact_view(),
   )
   guard m.length() >= 3 + 16 else {
-    raise @error.PgpError::PgpError(msg="api: session key payload too short")
+    @error.fail("api: session key payload too short")
   }
   let algo = m[0].to_int()
   let key = m[1:m.length() - 2].to_owned()
   let want = (m[m.length() - 2].to_int() << 8) | m[m.length() - 1].to_int()
   guard @packet.session_key_checksum(key.exact_view()) == want else {
-    raise @error.PgpError::PgpError(msg="api: session key checksum mismatch")
+    @error.fail("api: session key checksum mismatch")
   }
   (algo, key)
 }

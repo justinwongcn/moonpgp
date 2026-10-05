@@ -229,9 +229,7 @@ fn parse_subpackets(view : BytesView) -> Array[SigSubpacket] raise {
     }
     let body = r.read_bytes(len)
     guard body.length() >= 1 else {
-      raise @error.PgpError::PgpError(
-        msg="packet: zero-length signature subpacket",
-      )
+      @error.fail("packet: zero-length signature subpacket")
     }
     let t = body[0].to_int()
     out.push(SigSubpacket::{
@@ -270,9 +268,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 4 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unsupported signature version \{version}",
-    )
+    @error.fail("packet: unsupported signature version \{version}")
   }
   let sig_type = sig_type_of_number(r.read_u8())
   let pub_algo = pub_key_algo_of_number(r.read_u8())
@@ -365,32 +361,28 @@ pub fn SignaturePacket::creation_time(self : SignaturePacket) -> Int? {
 /// issuer-fingerprint subpacket's trailing key id.
 pub fn SignaturePacket::issuer_key_id(self : SignaturePacket) -> Bytes? {
   match find_subpacket(self.hashed_subpackets, SIGSUB_ISSUER_KEY_ID) {
-    Some(b) => Some(b)
+    Some(b) => return Some(b)
+    None => ()
+  }
+  match find_subpacket(self.unhashed_subpackets, SIGSUB_ISSUER_KEY_ID) {
+    Some(b) => return Some(b)
+    None => ()
+  }
+  let fp = match
+    find_subpacket(self.hashed_subpackets, SIGSUB_ISSUER_FINGERPRINT) {
+    Some(f) => f
     None =>
-      match find_subpacket(self.unhashed_subpackets, SIGSUB_ISSUER_KEY_ID) {
-        Some(b) => Some(b)
-        None => {
-          let fp = match
-            find_subpacket(self.hashed_subpackets, SIGSUB_ISSUER_FINGERPRINT) {
-            Some(f) => f
-            None =>
-              match
-                find_subpacket(
-                  self.unhashed_subpackets,
-                  SIGSUB_ISSUER_FINGERPRINT,
-                ) {
-                Some(f) => f
-                None => return None
-              }
-          }
-          // Body: version octet then fingerprint (20 octets for v4).
-          if fp.length() >= 9 {
-            Some(fp[fp.length() - 8:fp.length()].to_owned())
-          } else {
-            None
-          }
-        }
+      match
+        find_subpacket(self.unhashed_subpackets, SIGSUB_ISSUER_FINGERPRINT) {
+        Some(f) => f
+        None => return None
       }
+  }
+  // Body: version octet then fingerprint (20 octets for v4).
+  if fp.length() >= 9 {
+    Some(fp[fp.length() - 8:fp.length()].to_owned())
+  } else {
+    None
   }
 }
 
@@ -447,9 +439,7 @@ pub fn OnePassSigPacket::parse(body : BytesView) -> OnePassSigPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 3 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unsupported one-pass signature version \{version}",
-    )
+    @error.fail("packet: unsupported one-pass signature version \{version}")
   }
   let sig_type = sig_type_of_number(r.read_u8())
   let hash_algo = r.read_u8()

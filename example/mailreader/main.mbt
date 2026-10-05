@@ -141,7 +141,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
       ""
     } else {
       guard i + 1 < argv.length() else {
-        raise @error.PgpError::PgpError(msg="mailreader: \{flag} needs a value")
+        @error.fail("mailreader: \{flag} needs a value")
       }
       argv[i + 1]
     }
@@ -158,13 +158,13 @@ fn parse_args(argv : Array[String]) -> Config raise {
         let v = match @netmail.parse_int(val) {
           Some(v) => v
           None =>
-            raise @error.PgpError::PgpError(
-              msg="mailreader: --fetch expects a numeric UID, got '\{val}'",
+            @error.fail(
+              "mailreader: --fetch expects a numeric UID, got '\{val}'",
             )
         }
         guard v > 0 else {
-          raise @error.PgpError::PgpError(
-            msg="mailreader: --fetch expects a positive UID, got '\{val}'",
+          @error.fail(
+            "mailreader: --fetch expects a positive UID, got '\{val}'",
           )
         }
         cfg.fetch_uid = Some(v)
@@ -173,10 +173,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
       "--keys" => cfg.keys.push(val)
       "--certs" => cfg.certs.push(val)
       "--allow-insecure" => cfg.allow_insecure = true
-      _ =>
-        raise @error.PgpError::PgpError(
-          msg="mailreader: unknown flag '\{flag}'",
-        )
+      _ => @error.fail("mailreader: unknown flag '\{flag}'")
     }
     i = i + (if flag == "--allow-insecure" { 1 } else { 2 })
   }
@@ -187,11 +184,9 @@ fn parse_args(argv : Array[String]) -> Config raise {
 fn parse_port(s : String) -> Int raise {
   let v = match @netmail.parse_int(s) {
     Some(v) => v
-    None => raise @error.PgpError::PgpError(msg="mailreader: bad number '\{s}'")
+    None => @error.fail("mailreader: bad number '\{s}'")
   }
-  guard v > 0 && v <= 65535 else {
-    raise @error.PgpError::PgpError(msg="mailreader: bad port '\{s}'")
-  }
+  guard v > 0 && v <= 65535 else { @error.fail("mailreader: bad port '\{s}'") }
   v
 }
 
@@ -200,12 +195,10 @@ fn parse_port(s : String) -> Int raise {
 fn parse_count(s : String) -> Int raise {
   let v = match @netmail.parse_int(s) {
     Some(v) => v
-    None => raise @error.PgpError::PgpError(msg="mailreader: bad number '\{s}'")
+    None => @error.fail("mailreader: bad number '\{s}'")
   }
   guard v > 0 && v <= 1_000_000 else {
-    raise @error.PgpError::PgpError(
-      msg="mailreader: --last out of range (1..1000000)",
-    )
+    @error.fail("mailreader: --last out of range (1..1000000)")
   }
   v
 }
@@ -214,10 +207,7 @@ fn parse_count(s : String) -> Int raise {
 fn require_env(name : String) -> String raise {
   match @env.get_env_var(name) {
     Some(v) => v
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="mailreader: environment variable \{name} is not set",
-      )
+    None => @error.fail("mailreader: environment variable \{name} is not set")
   }
 }
 
@@ -337,9 +327,7 @@ fn fetch_and_decrypt(
   uid : Int,
 ) -> Unit raise {
   guard !cfg.keys.is_empty() else {
-    raise @error.PgpError::PgpError(
-      msg="mailreader: --fetch needs at least one --keys PATH",
-    )
+    @error.fail("mailreader: --fetch needs at least one --keys PATH")
   }
   let keys = load_private_keys(cfg.keys)
   let verifiers = load_verifiers(cfg.certs)
@@ -390,13 +378,11 @@ fn fetch_and_decrypt(
 fn run(cfg : Config) -> Unit raise {
   let user = match cfg.user {
     Some(u) => u
-    None =>
-      raise @error.PgpError::PgpError(msg="mailreader: --user is required")
+    None => @error.fail("mailreader: --user is required")
   }
   let pass_env = match cfg.pass_env {
     Some(name) => name
-    None =>
-      raise @error.PgpError::PgpError(msg="mailreader: --pass-env is required")
+    None => @error.fail("mailreader: --pass-env is required")
   }
   let password = require_env(pass_env)
   match cfg.fetch_uid {

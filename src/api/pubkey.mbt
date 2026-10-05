@@ -30,10 +30,7 @@ fn create_pkesk(
         ecdh_ephemeral: Bytes::new(0),
       }
     }
-    _ =>
-      raise @error.PgpError::PgpError(
-        msg="api: recipient key algorithm cannot encrypt",
-      )
+    _ => @error.fail("api: recipient key algorithm cannot encrypt")
   }
 }
 
@@ -51,8 +48,8 @@ fn unwrap_pkesk(
       (@primitives.Aes256.number(), key)
     }
     _ =>
-      raise @error.PgpError::PgpError(
-        msg="api: unsupported PKESK algorithm \{pkesk.pub_algo().number()}",
+      @error.fail(
+        "api: unsupported PKESK algorithm \{pkesk.pub_algo().number()}",
       )
   }
 }
@@ -67,16 +64,13 @@ pub fn encrypt_to_recipients(
   recipients : Array[PublicKey],
   file_name? : String,
 ) -> String raise {
-  guard !recipients.is_empty() else {
-    raise @error.PgpError::PgpError(msg="api: no recipients")
-  }
+  guard !recipients.is_empty() else { @error.fail("api: no recipients") }
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
   let w = @packet.Writer::new()
   for recipient in recipients {
     let enc_key = match recipient.encryption_key() {
       Some(k) => k
-      None =>
-        raise @error.PgpError::PgpError(msg="api: recipient key cannot encrypt")
+      None => @error.fail("api: recipient key cannot encrypt")
     }
     let pkesk = create_pkesk(
       enc_key,
@@ -147,10 +141,7 @@ pub fn decrypt_binary_with_private_key(
   }
   match session {
     Some((algo, sk)) => unwrap_seipd_with_session_key(packets, algo, sk)
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="api: message is not encrypted to this key",
-      )
+    None => @error.fail("api: message is not encrypted to this key")
   }
 }
 
@@ -162,27 +153,25 @@ fn rsa_unwrap_session_key(
   let rsa = rsa_secret_parts(sk)
   let k = rsa.public.octet_length()
   guard pkesk.encrypted().length() <= k else {
-    raise @error.PgpError::PgpError(msg="api: PKESK size mismatch")
+    @error.fail("api: PKESK size mismatch")
   }
   // The wire MPI may have lost a leading zero octet; os2ip restores the
   // integer value either way.
   let padded = @primitives.pad_left(pkesk.encrypted().exact_view(), k)
   let payload = rsa.pkcs1_v15_decrypt(padded.exact_view())
   guard payload.length() >= 3 + 16 else {
-    raise @error.PgpError::PgpError(msg="api: session key payload too short")
+    @error.fail("api: session key payload too short")
   }
   let algo = payload[0].to_int()
   guard @primitives.cipher_algo_of_number(algo) is Some(_) else {
-    raise @error.PgpError::PgpError(
-      msg="api: unexpected session key cipher \{algo}",
-    )
+    @error.fail("api: unexpected session key cipher \{algo}")
   }
   let key_len = payload.length() - 3
   let key = payload[1:1 + key_len]
   let want = (payload[payload.length() - 2].to_int() << 8) |
     payload[payload.length() - 1].to_int()
   guard @packet.session_key_checksum(key.exact_view()) == want else {
-    raise @error.PgpError::PgpError(msg="api: session key checksum mismatch")
+    @error.fail("api: session key checksum mismatch")
   }
   key.to_owned()
 }
@@ -197,23 +186,18 @@ fn unwrap_seipd_with_session_key(
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
       guard seipd.version == 1 else {
-        raise @error.PgpError::PgpError(
-          msg="api: unsupported SEIPD version \{seipd.version}",
-        )
+        @error.fail("api: unsupported SEIPD version \{seipd.version}")
       }
       let algo = match @primitives.cipher_algo_of_number(algo_id) {
         Some(a) => a
-        None =>
-          raise @error.PgpError::PgpError(
-            msg="api: unsupported session cipher \{algo_id}",
-          )
+        None => @error.fail("api: unsupported session cipher \{algo_id}")
       }
       let bc = @primitives.new_block_cipher(algo, session_key.exact_view())
       let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())
       return extract_literal(inner)
     }
   }
-  raise @error.PgpError::PgpError(msg="api: no encrypted data packet found")
+  @error.fail("api: no encrypted data packet found")
 }
 
 ///|

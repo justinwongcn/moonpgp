@@ -18,35 +18,27 @@ pub const SALT_SIZE : Int = 8
 /// Parse an S2K specifier from the front of `view`. Returns the specifier
 /// and the number of bytes consumed.
 pub fn parse(view : BytesView) -> (S2k, Int) raise {
-  guard view.length() >= 2 else {
-    raise @error.PgpError::PgpError(msg="s2k: truncated specifier")
-  }
+  guard view.length() >= 2 else { @error.fail("s2k: truncated specifier") }
   let usage = view[0].to_int()
   let hash_id = match @primitives.hash_id_of_number(view[1].to_int()) {
     Some(h) => h
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="s2k: unknown hash algorithm \{view[1].to_int()}",
-      )
+    None => @error.fail("s2k: unknown hash algorithm \{view[1].to_int()}")
   }
   match usage {
     0 => (Simple(hash_id), 2)
     1 => {
       guard view.length() >= 10 else {
-        raise @error.PgpError::PgpError(msg="s2k: truncated salted specifier")
+        @error.fail("s2k: truncated salted specifier")
       }
       (Salted(hash_id, view[2:10].to_owned()), 10)
     }
     3 => {
       guard view.length() >= 11 else {
-        raise @error.PgpError::PgpError(msg="s2k: truncated iterated specifier")
+        @error.fail("s2k: truncated iterated specifier")
       }
       (Iterated(hash_id, view[2:10].to_owned(), view[10].to_int()), 11)
     }
-    _ =>
-      raise @error.PgpError::PgpError(
-        msg="s2k: unsupported usage type \{usage}",
-      )
+    _ => @error.fail("s2k: unsupported usage type \{usage}")
   }
 }
 
@@ -57,7 +49,7 @@ pub fn S2k::encode(self : S2k) -> Bytes raise {
     Simple(hash_id) => Bytes::from_array([0, hash_id.number().to_byte()])
     Salted(hash_id, salt) => {
       guard salt.length() == SALT_SIZE else {
-        raise @error.PgpError::PgpError(msg="s2k: bad salt length")
+        @error.fail("s2k: bad salt length")
       }
       let out : Array[Byte] = [1, hash_id.number().to_byte()]
       for b in salt {
@@ -67,7 +59,7 @@ pub fn S2k::encode(self : S2k) -> Bytes raise {
     }
     Iterated(hash_id, salt, count_byte) => {
       guard salt.length() == SALT_SIZE else {
-        raise @error.PgpError::PgpError(msg="s2k: bad salt length")
+        @error.fail("s2k: bad salt length")
       }
       let out : Array[Byte] = [3, hash_id.number().to_byte()]
       for b in salt {
@@ -114,19 +106,17 @@ pub fn S2k::derive_key(
     Simple(_) => Bytes::new(0)
     Salted(_, salt) => {
       guard salt.length() == SALT_SIZE else {
-        raise @error.PgpError::PgpError(msg="s2k: bad salt length")
+        @error.fail("s2k: bad salt length")
       }
       @primitives.concat2(passphrase, salt)
     }
     Iterated(_, salt, count_byte) => {
       guard salt.length() == SALT_SIZE else {
-        raise @error.PgpError::PgpError(msg="s2k: bad salt length")
+        @error.fail("s2k: bad salt length")
       }
       let count = decode_count(count_byte)
+      // Salt length is guarded above, so combined is never empty here.
       let combined = salt.add(passphrase.to_owned())
-      if combined.length() == 0 {
-        raise @error.PgpError::PgpError(msg="s2k: empty iterated input")
-      }
       // Repeat salt||passphrase until `count` octets, then truncate.
       let data : Array[Byte] = Array(capacity=count)
       while data.length() < count {

@@ -198,7 +198,6 @@ pub fn Reader::position(Self) -> Int
 pub fn Reader::read_bytes(Self, Int) -> Bytes raise
 pub fn Reader::read_mpi(Self) -> Bytes raise
 pub fn Reader::read_rest(Self) -> Bytes raise
-pub fn Reader::read_scalar(Self, Int) -> Int raise
 pub fn Reader::read_u16(Self) -> Int raise
 pub fn Reader::read_u32(Self) -> Int raise
 pub fn Reader::read_u8(Self) -> Int raise

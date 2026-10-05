@@ -28,7 +28,7 @@ pub fn Reader::view(self : Reader) -> BytesView {
 ///|
 pub fn Reader::read_u8(self : Reader) -> Int raise {
   guard self.remaining() >= 1 else {
-    raise @error.PgpError::PgpError(msg="packet: unexpected end of data (u8)")
+    @error.fail("packet: unexpected end of data (u8)")
   }
   let b = self.buf[self.pos].to_int()
   self.pos = self.pos + 1
@@ -38,7 +38,7 @@ pub fn Reader::read_u8(self : Reader) -> Int raise {
 ///|
 pub fn Reader::read_u16(self : Reader) -> Int raise {
   guard self.remaining() >= 2 else {
-    raise @error.PgpError::PgpError(msg="packet: unexpected end of data (u16)")
+    @error.fail("packet: unexpected end of data (u16)")
   }
   let v = (self.buf[self.pos].to_int() << 8) | self.buf[self.pos + 1].to_int()
   self.pos = self.pos + 2
@@ -46,9 +46,14 @@ pub fn Reader::read_u16(self : Reader) -> Int raise {
 }
 
 ///|
+/// Read a big-endian u32 into a 32-bit Int (F09, documented convention):
+/// values ≥ 2³¹ arrive NEGATIVE. Length paths fail safe through the
+/// `n >= 0` checks in `read_bytes` (with a misleading "want -N" message);
+/// timestamp paths carry the correct two's-complement wire value, which
+/// `Writer::u32` reproduces byte-exactly on re-serialization.
 pub fn Reader::read_u32(self : Reader) -> Int raise {
   guard self.remaining() >= 4 else {
-    raise @error.PgpError::PgpError(msg="packet: unexpected end of data (u32)")
+    @error.fail("packet: unexpected end of data (u32)")
   }
   let v = (self.buf[self.pos].to_int() << 24) |
     (self.buf[self.pos + 1].to_int() << 16) |
@@ -61,9 +66,7 @@ pub fn Reader::read_u32(self : Reader) -> Int raise {
 ///|
 pub fn Reader::read_bytes(self : Reader, n : Int) -> Bytes raise {
   guard n >= 0 && self.remaining() >= n else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unexpected end of data (bytes, want \{n})",
-    )
+    @error.fail("packet: unexpected end of data (bytes, want \{n})")
   }
   let out = self.buf[self.pos:self.pos + n].to_owned()
   self.pos = self.pos + n
@@ -84,25 +87,16 @@ pub fn Reader::read_mpi(self : Reader) -> Bytes raise {
 }
 
 ///|
-/// Read a scalar octet count of `n` octets (RFC 9580 §3.1).
-pub fn Reader::read_scalar(self : Reader, n : Int) -> Int raise {
-  match n {
-    1 => self.read_u8()
-    2 => self.read_u16()
-    4 => self.read_u32()
-    _ => raise @error.PgpError::PgpError(msg="packet: bad scalar length \{n}")
-  }
-}
-
-///|
-/// Big-endian byte writer for packet serialization.
+/// Big-endian byte writer for packet serialization. The backing buffer is
+/// core's `Buffer` so `bytes()` can bulk-write views instead of pushing
+/// byte by byte (F12).
 pub struct Writer {
-  priv out : Array[Byte]
+  priv out : Buffer
 } derive(Debug)
 
 ///|
 pub fn Writer::new() -> Writer {
-  Writer::{ out: [], }
+  Writer::{ out: Buffer(size_hint=256), }
 }
 
 ///|
@@ -112,28 +106,26 @@ pub fn Writer::length(self : Writer) -> Int {
 
 ///|
 pub fn Writer::u8(self : Writer, v : Int) -> Unit {
-  self.out.push(v.to_byte())
+  self.out.write_byte(v.to_byte())
 }
 
 ///|
 pub fn Writer::u16(self : Writer, v : Int) -> Unit {
-  self.out.push((v >> 8).to_byte())
-  self.out.push(v.to_byte())
+  self.out.write_byte((v >> 8).to_byte())
+  self.out.write_byte(v.to_byte())
 }
 
 ///|
 pub fn Writer::u32(self : Writer, v : Int) -> Unit {
-  self.out.push((v >> 24).to_byte())
-  self.out.push((v >> 16).to_byte())
-  self.out.push((v >> 8).to_byte())
-  self.out.push(v.to_byte())
+  self.out.write_byte((v >> 24).to_byte())
+  self.out.write_byte((v >> 16).to_byte())
+  self.out.write_byte((v >> 8).to_byte())
+  self.out.write_byte(v.to_byte())
 }
 
 ///|
 pub fn Writer::bytes(self : Writer, data : BytesView) -> Unit {
-  for b in data {
-    self.out.push(b)
-  }
+  self.out.write_bytes(data)
 }
 
 ///|
@@ -163,7 +155,7 @@ pub fn Writer::mpi(self : Writer, data : BytesView) -> Unit {
 
 ///|
 pub fn Writer::to_bytes(self : Writer) -> Bytes {
-  Bytes::from_array(self.out)
+  self.out.to_bytes()
 }
 
 ///|

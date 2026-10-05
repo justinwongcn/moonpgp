@@ -39,14 +39,12 @@ fn dot_stuff(message : String) -> String {
 /// on every line (RFC 5321 §4.2). String supports direct `s[i]`
 /// indexing (returns the code unit as Int), so no helper is needed.
 fn reply_code(line : String) -> Int raise {
-  guard line.length() >= 3 else {
-    raise @error.PgpError::PgpError(msg="smtp: short reply '\{line}'")
-  }
+  guard line.length() >= 3 else { @error.fail("smtp: short reply '\{line}'") }
   let mut code = 0
   for k in 0..<3 {
     let v = line[k].to_int() - 48
     guard v >= 0 && v <= 9 else {
-      raise @error.PgpError::PgpError(msg="smtp: malformed reply '\{line}'")
+      @error.fail("smtp: malformed reply '\{line}'")
     }
     code = code * 10 + v
   }
@@ -64,9 +62,7 @@ fn read_reply(sock : &Socket) -> (Int, Array[String]) raise {
     line = sock.read_line()
     let cont = reply_code(line)
     guard cont == code else {
-      raise @error.PgpError::PgpError(
-        msg="smtp: inconsistent multi-line reply (\{code} vs \{cont})",
-      )
+      @error.fail("smtp: inconsistent multi-line reply (\{code} vs \{cont})")
     }
   }
   if line.length() >= 4 {
@@ -90,25 +86,19 @@ fn expect(
 ) -> (Int, Array[String]) raise {
   let (code, lines) = read_reply(sock)
   guard code == want else {
-    raise @error.PgpError::PgpError(
-      msg="smtp: \{what} failed with \{code}: \{lines[0]}",
-    )
+    @error.fail("smtp: \{what} failed with \{code}: \{lines[0]}")
   }
   (code, lines)
 }
 
 ///|
 /// AUTH PLAIN initial response: base64("\0user\0pass") (RFC 4954 §4).
+/// Credentials are UTF-8 per RFC 4616 (F20): Char::to_int() is a UTF-16
+/// code unit, so per-char to_byte would silently truncate non-ASCII
+/// passwords.
 fn plain_auth(user : String, pass : String) -> Bytes {
-  let raw : Array[Byte] = [b'\x00']
-  for c in user {
-    raw.push(c.to_int().to_byte())
-  }
-  raw.push(b'\x00')
-  for c in pass {
-    raw.push(c.to_int().to_byte())
-  }
-  Bytes::from_array(raw)
+  let nul = Bytes::from_array([b'\x00'])
+  nul.add(@utf8.encode(user)).add(nul).add(@utf8.encode(pass))
 }
 
 ///|
@@ -126,22 +116,17 @@ pub fn smtp_send(
   auth : (String, String)?,
 ) -> Unit raise {
   let (code, _) = read_reply(sock)
-  guard code == 220 else {
-    raise @error.PgpError::PgpError(msg="smtp: no greeting (\{code})")
-  }
+  guard code == 220 else { @error.fail("smtp: no greeting (\{code})") }
   smtp_command(sock, "EHLO \{ehlo_domain}")
   let (_, caps) = expect(sock, 250, "EHLO")
   match auth {
     Some((user, pass)) => {
-      let mut has_auth = false
-      for line in caps {
-        if line.length() >= 4 && line[0:4].to_lower() == "auth" {
-          has_auth = true
-        }
-      }
+      let has_auth = caps
+        .iter()
+        .any(line => line.length() >= 4 && line[0:4].to_lower() == "auth")
       guard has_auth else {
-        raise @error.PgpError::PgpError(
-          msg="smtp: credentials given but server does not advertise AUTH",
+        @error.fail(
+          "smtp: credentials given but server does not advertise AUTH",
         )
       }
       smtp_command(sock, "AUTH PLAIN \{@base64.encode(plain_auth(user, pass))}")
@@ -152,7 +137,7 @@ pub fn smtp_send(
   smtp_command(sock, "MAIL FROM:<\{from}>")
   ignore(expect(sock, 250, "MAIL FROM"))
   guard !recipients.is_empty() else {
-    raise @error.PgpError::PgpError(msg="smtp: no envelope recipients")
+    @error.fail("smtp: no envelope recipients")
   }
   for r in recipients {
     smtp_command(sock, "RCPT TO:<\{r}>")

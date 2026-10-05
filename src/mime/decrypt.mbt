@@ -139,9 +139,8 @@ fn decrypt_payload(
     None => ()
   }
   match last_error {
-    Some(e) =>
-      raise @error.PgpError::PgpError(msg="mime: decryption failed: \{e}")
-    None => raise @error.PgpError::PgpError(msg="mime: no decryption material")
+    Some(e) => @error.fail("mime: decryption failed: \{e}")
+    None => @error.fail("mime: no decryption material")
   }
 }
 

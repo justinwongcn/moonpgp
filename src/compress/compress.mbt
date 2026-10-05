@@ -40,7 +40,7 @@ pub fn zip_compress(data : BytesView) -> Bytes {
 /// incoming mail may arrive compressed with dynamic Huffman tables.
 pub fn zip_decompress(data : BytesView) -> Bytes raise {
   @flate.inflate_all(data.to_owned()) catch {
-    _ => raise @error.PgpError::PgpError(msg="compress: inflate failed")
+    _ => @error.fail("compress: inflate failed")
   }
 }
 
@@ -53,7 +53,7 @@ pub fn zlib_compress(data : BytesView) -> Bytes {
 ///|
 pub fn zlib_decompress(data : BytesView) -> Bytes raise {
   @zlib.zlib_decompress(data.to_owned()) catch {
-    _ => raise @error.PgpError::PgpError(msg="compress: zlib inflate failed")
+    _ => @error.fail("compress: zlib inflate failed")
   }
 }
 

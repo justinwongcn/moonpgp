@@ -80,8 +80,12 @@ fn read_logical_line(sock : &Socket) -> Array[Seg] raise {
     }
     segs.push(Seg::Txt(raw))
     return segs
+  } nobreak {
+    // Unreachable: every exit is a return/raise. The nobreak arm satisfies
+    // the typechecker, which does not treat `while true` as diverging
+    // (E4108, HANDOFF 2026-10-06).
+    abort("mailreader: unreachable")
   }
-  abort("mailreader: unreachable")
 }
 
 ///|
@@ -112,9 +116,7 @@ fn literal_marker_size(b : Bytes) -> Int raise {
   for i in start..<stop {
     let d = b[i].to_int() - 48
     if v > (max_literal - d) / 10 {
-      raise @error.PgpError::PgpError(
-        msg="mailreader: implausible literal size (overflow guard)",
-      )
+      @error.fail("mailreader: implausible literal size (overflow guard)")
     }
     v = v * 10 + d
   }
@@ -202,7 +204,7 @@ fn scan_quoted(text : Bytes, start : Int) -> (String, Int) raise {
     sb.write_char(byte_to_char(c))
     i = i + 1
   }
-  raise @error.PgpError::PgpError(msg="mailreader: unterminated quoted string")
+  @error.fail("mailreader: unterminated quoted string")
 }
 
 ///|
@@ -216,7 +218,7 @@ fn scan_parens(
   let mut b = bi
   while true {
     guard s < segs.length() else {
-      raise @error.PgpError::PgpError(msg="mailreader: unterminated list")
+      @error.fail("mailreader: unterminated list")
     }
     match segs[s] {
       Lit(data) => {
@@ -257,8 +259,12 @@ fn scan_parens(
         b = nb
       }
     }
+  } nobreak {
+    // Unreachable: every exit is a return/raise. The nobreak arm satisfies
+    // the typechecker, which does not treat `while true` as diverging
+    // (E4108, HANDOFF 2026-10-06).
+    abort("mailreader: unreachable")
   }
-  abort("mailreader: unreachable")
 }
 
 ///|
@@ -317,9 +323,7 @@ fn scan_atom(segs : Array[Seg], si : Int, bi : Int) -> (String, Int, Int) raise 
             }
           }
           guard closed else {
-            raise @error.PgpError::PgpError(
-              msg="mailreader: unterminated section atom",
-            )
+            @error.fail("mailreader: unterminated section atom")
           }
           continue
         }
@@ -327,8 +331,12 @@ fn scan_atom(segs : Array[Seg], si : Int, bi : Int) -> (String, Int, Int) raise 
         b = b + 1
       }
     }
+  } nobreak {
+    // Unreachable: every exit is a return/raise. The nobreak arm satisfies
+    // the typechecker, which does not treat `while true` as diverging
+    // (E4108, HANDOFF 2026-10-06).
+    abort("mailreader: unreachable")
   }
-  abort("mailreader: unreachable")
 }
 
 ///|
@@ -409,19 +417,15 @@ fn ImapClient::read_reply(self : ImapClient, tag : String) -> ImapReply raise {
       }
       Atom("+") =>
         // `+ ` demands a client literal; this subset never sends one
-        raise @error.PgpError::PgpError(
-          msg="mailreader: server demanded a client literal (not supported)",
+        @error.fail(
+          "mailreader: server demanded a client literal (not supported)",
         )
       Atom(t) => {
         guard t == tag else {
-          raise @error.PgpError::PgpError(
-            msg="mailreader: reply tag mismatch (\{t} vs \{tag})",
-          )
+          @error.fail("mailreader: reply tag mismatch (\{t} vs \{tag})")
         }
         guard nodes.length() >= 2 else {
-          raise @error.PgpError::PgpError(
-            msg="mailreader: malformed tagged reply",
-          )
+          @error.fail("mailreader: malformed tagged reply")
         }
         match nodes[1] {
           Atom(status) => {
@@ -431,19 +435,17 @@ fn ImapClient::read_reply(self : ImapClient, tag : String) -> ImapReply raise {
             }
             return ImapReply::{ untagged, status, text: text_parts.join(" "), }
           }
-          _ =>
-            raise @error.PgpError::PgpError(
-              msg="mailreader: malformed tagged reply",
-            )
+          _ => @error.fail("mailreader: malformed tagged reply")
         }
       }
-      _ =>
-        raise @error.PgpError::PgpError(
-          msg="mailreader: response line does not start with a tag",
-        )
+      _ => @error.fail("mailreader: response line does not start with a tag")
     }
+  } nobreak {
+    // Unreachable: every exit is a return/raise. The nobreak arm satisfies
+    // the typechecker, which does not treat `while true` as diverging
+    // (E4108, HANDOFF 2026-10-06).
+    abort("mailreader: unreachable")
   }
-  abort("mailreader: unreachable")
 }
 
 ///|
@@ -454,9 +456,7 @@ fn ImapClient::expect_ok(
 ) -> ImapReply raise {
   let reply = self.read_reply(tag)
   guard reply.status == "OK" else {
-    raise @error.PgpError::PgpError(
-      msg="mailreader: \{what} failed (\{reply.status}): \{reply.text}",
-    )
+    @error.fail("mailreader: \{what} failed (\{reply.status}): \{reply.text}")
   }
   reply
 }
@@ -469,7 +469,7 @@ pub fn ImapClient::read_greeting(self : ImapClient) -> Unit raise {
   while true {
     let nodes = parse_nodes(read_logical_line(self.sock))
     guard nodes.length() >= 2 else {
-      raise @error.PgpError::PgpError(msg="mailreader: malformed greeting")
+      @error.fail("mailreader: malformed greeting")
     }
     match (nodes[0], nodes[1]) {
       (Atom("*"), Atom(word)) => {
@@ -477,16 +477,18 @@ pub fn ImapClient::read_greeting(self : ImapClient) -> Unit raise {
           return
         }
         guard word == "CAPABILITY" || word == "ALERT" else {
-          raise @error.PgpError::PgpError(
-            msg="mailreader: unexpected greeting (* \{word})",
-          )
+          @error.fail("mailreader: unexpected greeting (* \{word})")
         }
         // pre-OK untagged lines (e.g. * CAPABILITY): keep consuming
       }
-      _ => raise @error.PgpError::PgpError(msg="mailreader: malformed greeting")
+      _ => @error.fail("mailreader: malformed greeting")
     }
+  } nobreak {
+    // Unreachable: every exit is a return/raise. The nobreak arm satisfies
+    // the typechecker, which does not treat `while true` as diverging
+    // (E4108, HANDOFF 2026-10-06).
+    abort("mailreader: unreachable")
   }
-  abort("mailreader: unreachable")
 }
 
 ///|
@@ -496,8 +498,8 @@ pub fn connect_imap(
   allow_insecure : Bool,
 ) -> ImapClient raise {
   if !is_local_host(host) && !allow_insecure {
-    raise @error.PgpError::PgpError(
-      msg="mailreader: refusing plaintext LOGIN to non-local host '\{host}' (no TLS; tunnel via stunnel to port 993, or pass --allow-insecure)",
+    @error.fail(
+      "mailreader: refusing plaintext LOGIN to non-local host '\{host}' (no TLS; tunnel via stunnel to port 993, or pass --allow-insecure)",
     )
   }
   let sock = connect_socket(host, port)
@@ -517,14 +519,12 @@ pub fn connect_imap(
 /// `{` so no argument can reshape the command (CTLs excluded too).
 fn validate_login_arg(value : String, what : String) -> Unit raise {
   guard value.length() > 0 else {
-    raise @error.PgpError::PgpError(msg="mailreader: empty LOGIN \{what}")
+    @error.fail("mailreader: empty LOGIN \{what}")
   }
   for c in value {
     let v = c.to_int()
     guard v >= 0x20 && v <= 0x7E && c != '"' && c != '\\' && c != '{' else {
-      raise @error.PgpError::PgpError(
-        msg="mailreader: LOGIN \{what} contains a forbidden character",
-      )
+      @error.fail("mailreader: LOGIN \{what} contains a forbidden character")
     }
   }
 }
@@ -684,8 +684,8 @@ pub fn ImapClient::imap_fetch_message(
           }
         }
         guard echoed_uid == uid else {
-          raise @error.PgpError::PgpError(
-            msg="mailreader: UID mismatch (requested \{uid}, server echoed \{echoed_uid}); the mailbox changed — re-list before fetching",
+          @error.fail(
+            "mailreader: UID mismatch (requested \{uid}, server echoed \{echoed_uid}); the mailbox changed — re-list before fetching",
           )
         }
         match body {
@@ -696,8 +696,8 @@ pub fn ImapClient::imap_fetch_message(
       None => ()
     }
   }
-  raise @error.PgpError::PgpError(
-    msg="mailreader: UID \{uid} fetch returned no body (or mail vanished)",
+  @error.fail(
+    "mailreader: UID \{uid} fetch returned no body (or mail vanished)",
   )
 }
 
@@ -793,14 +793,12 @@ fn summary_from_items(seq : Int, items : Array[Node]) -> MailSummary? {
 /// not mask the session's earlier outcome (Coremail caps concurrent
 /// sessions, so the polite path matters). Errors here still close.
 pub fn ImapClient::imap_logout(self : ImapClient) -> Unit {
-  let raised = try {
+  try {
     let tag = self.send_command("LOGOUT")
     ignore(self.expect_ok(tag, "LOGOUT"))
-    false
   } catch {
-    _ => true
+    _ => ()
   }
-  ignore(raised)
   self.sock.close()
 }
 

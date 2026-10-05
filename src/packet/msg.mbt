@@ -37,9 +37,7 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 3 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unsupported PKESK version \{version}",
-    )
+    @error.fail("packet: unsupported PKESK version \{version}")
   }
   let key_id = r.read_bytes(8)
   let algo = pub_key_algo_of_number(r.read_u8())
@@ -125,9 +123,7 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 4 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unsupported SKESK version \{version}",
-    )
+    @error.fail("packet: unsupported SKESK version \{version}")
   }
   let cipher_algo = r.read_u8()
   let (s2k, used) = @s2k.parse(r.view())
@@ -207,7 +203,7 @@ pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes raise {
   )
   let name = @primitives.utf8_bytes(self.file_name)
   guard name.length() <= 255 else {
-    raise @error.PgpError::PgpError(msg="packet: literal file name too long")
+    @error.fail("packet: literal file name too long")
   }
   w.u8(name.length())
   w.bytes(name.exact_view())

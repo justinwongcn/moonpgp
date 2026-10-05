@@ -3,27 +3,23 @@
 /// Supports S2K usage 254 (SHA-1 check) and 255 / legacy cipher-id (2-octet
 /// checksum) with AES ciphers. The result carries usage 0 plaintext
 /// material.
-pub fn unlock_secret_key(
+fn unlock_secret_key(
   key : @packet.SecretKeyPacket,
   passphrase : String,
 ) -> @packet.SecretKeyPacket raise {
   guard key.s2k_usage != 0 else { key }
   guard !key.dummy else {
-    raise @error.PgpError::PgpError(
-      msg="api: secret material is a GnuPG dummy (moved to a smartcard)",
-    )
+    @error.fail("api: secret material is a GnuPG dummy (moved to a smartcard)")
   }
   guard key.cipher_algo == 7 || key.cipher_algo == 8 || key.cipher_algo == 9 else {
-    raise @error.PgpError::PgpError(
-      msg="api: unsupported protection cipher \{key.cipher_algo}",
-    )
+    @error.fail("api: unsupported protection cipher \{key.cipher_algo}")
   }
   let algo = @error.require(
     @primitives.cipher_algo_of_number(key.cipher_algo),
     "api: unsupported protection cipher",
   )
   let s2k = (@s2k.parse(key.s2k_spec.exact_view()) catch {
-      _ => raise @error.PgpError::PgpError(msg="api: bad S2K in locked key")
+      _ => @error.fail("api: bad S2K in locked key")
     }).0
   let kek = s2k.derive_key(
     @primitives.utf8_bytes(passphrase).exact_view(),
@@ -35,32 +31,25 @@ pub fn unlock_secret_key(
     key.iv.exact_view(),
     key.secret_material.exact_view(),
   ) catch {
-    _ =>
-      raise @error.PgpError::PgpError(msg="api: secret key decryption failed")
+    _ => @error.fail("api: secret key decryption failed")
   }
   // Split off the trailing check: 20-byte SHA-1 (usage 254) or 2-byte sum.
   let check_len : Int = if key.s2k_usage == 254 { 20 } else { 2 }
   guard plain.length() > check_len else {
-    raise @error.PgpError::PgpError(
-      msg="api: decrypted secret material too short",
-    )
+    @error.fail("api: decrypted secret material too short")
   }
   let material = plain[0:plain.length() - check_len]
   let check = plain[plain.length() - check_len:plain.length()]
   if key.s2k_usage == 254 {
     let want = @primitives.Sha1.digest(material.exact_view())
     guard @primitives.ct_equal(want.exact_view(), check.exact_view()) else {
-      raise @error.PgpError::PgpError(
-        msg="api: wrong passphrase (SHA-1 check failed)",
-      )
+      @error.fail("api: wrong passphrase (SHA-1 check failed)")
     }
   } else {
     let want = @packet.session_key_checksum(material.exact_view())
     let got = (check[0].to_int() << 8) | check[1].to_int()
     guard want == got else {
-      raise @error.PgpError::PgpError(
-        msg="api: wrong passphrase (checksum failed)",
-      )
+      @error.fail("api: wrong passphrase (checksum failed)")
     }
   }
   @packet.SecretKeyPacket::{
@@ -77,13 +66,11 @@ pub fn unlock_secret_key(
 ///|
 /// Protect the secret material with a passphrase: AES-256 CFB with an
 /// iterated+salted S2K over SHA-256 and a SHA-1 check (usage 254).
-pub fn lock_secret_key(
+fn lock_secret_key(
   key : @packet.SecretKeyPacket,
   passphrase : String,
 ) -> @packet.SecretKeyPacket raise {
-  guard key.s2k_usage == 0 else {
-    raise @error.PgpError::PgpError(msg="api: key is already locked")
-  }
+  guard key.s2k_usage == 0 else { @error.fail("api: key is already locked") }
   let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
   let s2k : @s2k.S2k = @s2k.Iterated(
     @primitives.Sha256,

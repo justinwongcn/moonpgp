@@ -1,8 +1,10 @@
 ///|
 /// An OpenPGP transferable private key: v4 RSA primary key, one User ID
 /// with its self-certification, and an RSA encryption subkey with its
-/// binding signature.
-pub(all) struct PrivateKey {
+/// binding signature. Fields are read-only from outside the package —
+/// obtain keys through `generate_key` / `from_armored` / `from_bytes` and
+/// mutate them through `lock` / `unlock` so the cross-field invariants hold.
+pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
   user_id : String
   self_signature : @packet.SignaturePacket
@@ -11,8 +13,9 @@ pub(all) struct PrivateKey {
 } derive(Debug)
 
 ///|
-/// The public half of a transferable key.
-pub(all) struct PublicKey {
+/// The public half of a transferable key. Read-only like `PrivateKey`;
+/// obtain values via `to_public` / `from_armored` / `from_bytes`.
+pub struct PublicKey {
   primary : @packet.PublicKeyPacket
   user_id : String
   self_signature : @packet.SignaturePacket
@@ -21,31 +24,37 @@ pub(all) struct PublicKey {
 } derive(Debug)
 
 ///|
+/// 8-octet key id of the primary key (low 64 bits of the v4 fingerprint).
 pub fn PrivateKey::key_id(self : PrivateKey) -> Bytes raise {
   self.primary.public.key_id()
 }
 
 ///|
+/// 20-octet v4 fingerprint of the primary key.
 pub fn PrivateKey::fingerprint(self : PrivateKey) -> Bytes raise {
   self.primary.public.fingerprint()
 }
 
 ///|
+/// The certified User ID string.
 pub fn PrivateKey::user_id(self : PrivateKey) -> String {
   self.user_id
 }
 
 ///|
+/// 8-octet key id of the primary key.
 pub fn PublicKey::key_id(self : PublicKey) -> Bytes raise {
   self.primary.key_id()
 }
 
 ///|
+/// 20-octet v4 fingerprint of the primary key.
 pub fn PublicKey::fingerprint(self : PublicKey) -> Bytes raise {
   self.primary.fingerprint()
 }
 
 ///|
+/// The certified User ID string.
 pub fn PublicKey::user_id(self : PublicKey) -> String {
   self.user_id
 }
@@ -80,7 +89,7 @@ pub fn PrivateKey::to_public(self : PrivateKey) -> PublicKey {
 fn rsa_public_parts(p : @packet.PublicKeyPacket) -> (BigInt, BigInt) raise {
   let params = p.params()
   guard params.length() == 2 else {
-    raise @error.PgpError::PgpError(msg="api: bad RSA public parameters")
+    @error.fail("api: bad RSA public parameters")
   }
   (
     BigInt::from_octets(params[0].exact_view(), signum=1),
@@ -91,9 +100,7 @@ fn rsa_public_parts(p : @packet.PublicKeyPacket) -> (BigInt, BigInt) raise {
 ///|
 fn rsa_secret_parts(p : @packet.SecretKeyPacket) -> @pki.RsaPrivateKey raise {
   guard p.s2k_usage == 0 else {
-    raise @error.PgpError::PgpError(
-      msg="api: secret key material is locked; unlock it first",
-    )
+    @error.fail("api: secret key material is locked; unlock it first")
   }
   let (n, e) = rsa_public_parts(p.public)
   let r = @packet.Reader::new(p.secret_material.exact_view())
@@ -112,9 +119,7 @@ fn eddsa_secret_parts(
   p : @packet.SecretKeyPacket,
 ) -> @pki.Ed25519SecretKey raise {
   guard p.s2k_usage == 0 else {
-    raise @error.PgpError::PgpError(
-      msg="api: secret key material is locked; unlock it first",
-    )
+    @error.fail("api: secret key material is locked; unlock it first")
   }
   let r = @packet.Reader::new(p.secret_material.exact_view())
   // MPI strips leading zero octets; a seed whose first octet is 0x00
@@ -122,13 +127,11 @@ fn eddsa_secret_parts(
   // 32-octet scalar on read.
   let seed_mpi = r.read_mpi()
   guard seed_mpi.length() <= 32 else {
-    raise @error.PgpError::PgpError(msg="api: bad EdDSA seed length")
+    @error.fail("api: bad EdDSA seed length")
   }
   let seed = @primitives.pad_left(seed_mpi.exact_view(), 32)
   let point = p.public.params()[1]
-  guard point.length() == 33 else {
-    raise @error.PgpError::PgpError(msg="api: bad EdDSA point")
-  }
+  guard point.length() == 33 else { @error.fail("api: bad EdDSA point") }
   @pki.Ed25519SecretKey::{ seed, public: point[1:point.length()].to_owned(), }
 }
 
@@ -155,7 +158,7 @@ fn sign_digest_with_key(
 
 ///|
 /// Verify algorithm-specific signature material against a public key packet.
-pub fn verify_sig_material(
+fn verify_sig_material(
   pub_packet : @packet.PublicKeyPacket,
   hash : @primitives.HashId,
   digest : BytesView,
@@ -387,6 +390,11 @@ fn hash_certification(
   user_id : String,
 ) -> Bytes raise {
   let key_body = pub_packet.to_body()
+  // v4 hash framing encodes the packet length as u16 (F09): a larger key
+  // packet would silently truncate and produce an unverifiable signature.
+  guard key_body.length() <= 0xFFFF else {
+    @error.fail("api: key packet too large")
+  }
   let uid = @primitives.utf8_bytes(user_id)
   let w = @packet.Writer::new()
   w.u8(0x99)
@@ -409,8 +417,8 @@ fn signature_digest(
   match @primitives.hash_id_of_number(sig.hash_algo()) {
     Some(h) => h.digest(data)
     None =>
-      raise @error.PgpError::PgpError(
-        msg="api: unsupported signature hash algorithm \{sig.hash_algo()}",
+      @error.fail(
+        "api: unsupported signature hash algorithm \{sig.hash_algo()}",
       )
   }
 }
@@ -424,6 +432,10 @@ fn hash_binding(
 ) -> Bytes raise {
   let primary_body = primary_pub.to_body()
   let subkey_body = subkey_pub.to_body()
+  // Same u16 framing guard as hash_certification (F09).
+  guard primary_body.length() <= 0xFFFF && subkey_body.length() <= 0xFFFF else {
+    @error.fail("api: key packet too large")
+  }
   let w = @packet.Writer::new()
   w.u8(0x99)
   w.u16(primary_body.length())
@@ -438,6 +450,9 @@ fn hash_binding(
 
 ///|
 /// Verify a self-certification or binding signature over key material.
+/// Deliberately public (F14 review decision): it is the key-management
+/// entry point for validating third-party keys, exercised from outside
+/// the package by the gopenpgp self-certification cross-validation tests.
 pub fn verify_key_signature(
   sig : @packet.SignaturePacket,
   signer_pub : @packet.PublicKeyPacket,
@@ -466,6 +481,10 @@ pub fn verify_key_signature(
 /// Generate a fresh transferable key: RSA primary (certify+sign) with a
 /// User ID self-certification plus an RSA encryption subkey.
 pub fn generate_key(user_id : String, bits? : Int = 3072) -> PrivateKey raise {
+  // Int truncation of the Int64 wall clock is wire-safe (Writer::u32 emits
+  // the two's-complement low 32 bits, which is the correct u32 epoch past
+  // 2038) but stays negative in memory; only date FORMATTING from this
+  // value would be wrong (F09, documented limitation).
   let now = @primitives.unix_now().to_int()
   let sub_bits = if bits >= 4096 { 3072 } else { bits }
   let primary_rsa = @pki.generate_rsa_key(bits~)
@@ -610,7 +629,10 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
         primary = Some(sk.public)
       }
       @packet.UserId =>
-        user_id = @utf8.decode(p.body().exact_view()) catch { _ => "" }
+        // Lossy on purpose: a key with an undecodable User ID stays usable
+        // for its subkeys (gopenpgp keeps raw bytes; we keep a best-effort
+        // string instead of failing the whole key).
+        user_id = @utf8.decode_lossy(p.body().exact_view())
       @packet.Signature => {
         let s = @packet.SignaturePacket::parse(p.body().exact_view())
         match s.sig_type() {
@@ -636,15 +658,12 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
         user_id,
         self_signature: match self_sig {
           Some(s) => s
-          None =>
-            raise @error.PgpError::PgpError(
-              msg="api: key has no self-signature",
-            )
+          None => @error.fail("api: key has no self-signature")
         },
         encryption_subkey: subkey,
         subkey_binding: binding,
       }
-    None => raise @error.PgpError::PgpError(msg="api: no key packet found")
+    None => @error.fail("api: no key packet found")
   }
 }
 
@@ -688,8 +707,7 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
         encryption_subkey: subkey,
         subkey_binding: binding,
       }
-    None =>
-      raise @error.PgpError::PgpError(msg="api: no secret key packet found")
+    None => @error.fail("api: no secret key packet found")
   }
 }
 
@@ -700,25 +718,26 @@ pub fn PrivateKey::from_armored(text : String) -> PrivateKey raise {
   let block = @armor.decode(text)
   match block.armor_type() {
     @armor.PrivateKey => PrivateKey::from_bytes(block.data().exact_view())
-    _ =>
-      raise @error.PgpError::PgpError(msg="api: not a private key armor block")
+    _ => @error.fail("api: not a private key armor block")
   }
 }
 
 ///|
+/// Parse an armored key block into a public key; a private-key block is
+/// accepted and stripped to its public half.
 pub fn PublicKey::from_armored(text : String) -> PublicKey raise {
   let block = @armor.decode(text)
   match block.armor_type() {
     @armor.PublicKey => PublicKey::from_bytes(block.data().exact_view())
     @armor.PrivateKey =>
       PrivateKey::from_bytes(block.data().exact_view()).to_public()
-    _ => raise @error.PgpError::PgpError(msg="api: not a key armor block")
+    _ => @error.fail("api: not a key armor block")
   }
 }
 
 ///|
 /// RSA public key view of a public key packet.
-pub fn rsa_public_key(
+fn rsa_public_key(
   pub_packet : @packet.PublicKeyPacket,
 ) -> @pki.RsaPublicKey raise {
   let (n, e) = rsa_public_parts(pub_packet)

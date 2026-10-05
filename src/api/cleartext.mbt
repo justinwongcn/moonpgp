@@ -1,7 +1,7 @@
 ///|
 /// Armor-header text name of a hash algorithm (RFC 9580 §9.5 names as
 /// used by the `Hash:` armor header of cleartext messages).
-pub fn hash_name(id : @primitives.HashId) -> String {
+fn hash_name(id : @primitives.HashId) -> String {
   match id {
     @primitives.Md5 => "MD5"
     @primitives.Sha1 => "SHA1"
@@ -17,7 +17,7 @@ pub fn hash_name(id : @primitives.HashId) -> String {
 /// Canonical form used by cleartext signatures and text signatures:
 /// CRLF line endings with trailing spaces/tabs removed per line
 /// (RFC 9580 §7.1).
-pub fn canonicalize_cleartext(text : String) -> Bytes {
+fn canonicalize_cleartext(text : String) -> Bytes {
   let normalized = text.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = normalized.split("\n").collect()
   let out : Array[Byte] = []
@@ -123,9 +123,7 @@ pub fn verify_cleartext(
   while i < n && !lines[i].has_prefix("-----BEGIN PGP SIGNED MESSAGE-----") {
     i = i + 1
   }
-  guard i < n else {
-    raise @error.PgpError::PgpError(msg="api: no cleartext signed message")
-  }
+  guard i < n else { @error.fail("api: no cleartext signed message") }
   i = i + 1
   // Hash armor headers until the empty line; only Hash headers are legal.
   // The values themselves are informational; the signature packet carries
@@ -134,20 +132,14 @@ pub fn verify_cleartext(
     let line = lines[i]
     let is_hash = line.has_prefix("Hash:") || line.has_prefix("hash:")
     guard is_hash else {
-      raise @error.PgpError::PgpError(
-        msg="api: illegal armor header in cleartext message",
-      )
+      @error.fail("api: illegal armor header in cleartext message")
     }
-    let value = line[5:line.length()].to_owned()
-    for name in value.split(",").collect() {
-      // Unknown hash names are tolerated; unknown headers are not.
-      ignore(hash_id_by_name(name.trim().to_owned()))
-    }
+    // The Hash: header value is informational — the digest algorithms come
+    // from the signature packets themselves — so there is nothing to parse
+    // here (unknown names are tolerated, RFC 9580 §7.2).
     i = i + 1
   }
-  guard i < n else {
-    raise @error.PgpError::PgpError(msg="api: truncated cleartext message")
-  }
+  guard i < n else { @error.fail("api: truncated cleartext message") }
   i = i + 1
   // Dash-escaped cleartext until the signature armor begins. The line
   // ending before the armor is not part of the signed text.
@@ -157,19 +149,14 @@ pub fn verify_cleartext(
     if line.has_prefix("- ") {
       body.write_stringview(line[2:line.length()])
     } else {
-      if line.has_prefix("-") {
-        // Per RFC 9580 §7.2 this SHOULD produce a warning; treat as data.
-      }
+      // A bare "-" (not a dash-space escape) is treated as data; RFC 9580
+      // §7.2 says this SHOULD produce a warning.
       body.write_stringview(line)
     }
     body.write_char('\n')
     i = i + 1
   }
-  guard i < n else {
-    raise @error.PgpError::PgpError(
-      msg="api: no signature in cleartext message",
-    )
-  }
+  guard i < n else { @error.fail("api: no signature in cleartext message") }
   // Reassemble the canonical cleartext: the trailing "\n" written per
   // line is exactly the text's own line ending (the wire separator was
   // the armor begin line, excluded above).
@@ -184,9 +171,7 @@ pub fn verify_cleartext(
   }
   let sig_block = @armor.decode(rest.to_string())
   guard sig_block.armor_type() == @armor.Signature else {
-    raise @error.PgpError::PgpError(
-      msg="api: cleartext message has no signature armor",
-    )
+    @error.fail("api: cleartext message has no signature armor")
   }
   let packets = @packet.parse_packets(
     @armor.ArmorBlock::data(sig_block).exact_view(),
@@ -204,23 +189,6 @@ pub fn verify_cleartext(
       let text = @utf8.decode(canonical.exact_view()) catch { _ => "" }
       (text, status)
     }
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="api: no signature packet in cleartext message",
-      )
-  }
-}
-
-///|
-fn hash_id_by_name(name : String) -> @primitives.HashId? {
-  match name.to_lower() {
-    "md5" => Some(@primitives.Md5)
-    "sha1" => Some(@primitives.Sha1)
-    "ripemd160" => Some(@primitives.Ripemd160)
-    "sha224" => Some(@primitives.Sha224)
-    "sha256" => Some(@primitives.Sha256)
-    "sha384" => Some(@primitives.Sha384)
-    "sha512" => Some(@primitives.Sha512)
-    _ => None
+    None => @error.fail("api: no signature packet in cleartext message")
   }
 }

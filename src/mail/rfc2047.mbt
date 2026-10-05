@@ -11,9 +11,7 @@
 fn require_no_ctl(s : String, what : String) -> Unit raise {
   for c in s {
     guard c.to_int() >= 32 else {
-      raise @error.PgpError::PgpError(
-        msg="mail: control character in \{what} (header injection?)",
-      )
+      @error.fail("mail: control character in \{what} (header injection?)")
     }
   }
 }
@@ -233,7 +231,7 @@ pub fn decode_rfc2047(value : String) -> String {
       }
     }
   }
-  if pending.to_string() != "" {
+  if !pending.is_empty() {
     acc_append(acc, pending.to_string())
   }
   acc_flush(out, acc)

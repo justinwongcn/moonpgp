@@ -183,11 +183,9 @@ pub fn build_encrypted_mail(
   now_unix? : Int64,
   tz_offset_minutes? : Int,
 ) -> String raise {
-  guard !to.is_empty() else {
-    raise @error.PgpError::PgpError(msg="mail: no To addresses")
-  }
+  guard !to.is_empty() else { @error.fail("mail: no To addresses") }
   guard !recipients.is_empty() else {
-    raise @error.PgpError::PgpError(msg="mail: no encryption recipients")
+    @error.fail("mail: no encryption recipients")
   }
   let subject = encode_rfc2047(subject)
   let now = now_unix.unwrap_or(@primitives.unix_now())
@@ -195,12 +193,12 @@ pub fn build_encrypted_mail(
     Some(t) => t
     None => local_tz_offset_minutes(now)
   }
-  let mut to_line = ""
+  let to_line = StringBuilder()
   for i, a in to {
     if i > 0 {
-      to_line = to_line + ", "
+      to_line.write_string(", ")
     }
-    to_line = to_line + format_address(a)
+    to_line.write_string(format_address(a))
   }
   let mid = message_id(@primitives.random_bytes(16), domain)
   let sb = StringBuilder()

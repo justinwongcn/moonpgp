@@ -114,13 +114,11 @@ fn usage() -> Unit {
 ///|
 fn parse_address(s : String) -> @mail.MailAddress raise {
   let t = s.trim().to_owned()
-  guard t != "" else {
-    raise @error.PgpError::PgpError(msg="mailer: empty --from/--to value")
-  }
+  guard t != "" else { @error.fail("mailer: empty --from/--to value") }
   match t.split_once("<") {
     Some((name, rest)) => {
       guard rest.has_suffix(">") else {
-        raise @error.PgpError::PgpError(msg="mailer: bad address '\{s}'")
+        @error.fail("mailer: bad address '\{s}'")
       }
       let addr = rest[0:rest.length() - 1].trim().to_owned()
       @mail.MailAddress::{ display_name: name.trim().to_owned(), addr, }
@@ -139,7 +137,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
       ""
     } else {
       guard i + 1 < argv.length() else {
-        raise @error.PgpError::PgpError(msg="mailer: \{flag} needs a value")
+        @error.fail("mailer: \{flag} needs a value")
       }
       argv[i + 1]
     }
@@ -158,9 +156,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
           }
         }
         guard cut > 0 else {
-          raise @error.PgpError::PgpError(
-            msg="mailer: --attach expects NAME:PATH, got '\{spec}'",
-          )
+          @error.fail("mailer: --attach expects NAME:PATH, got '\{spec}'")
         }
         let name = spec[0:cut].to_owned()
         let path = spec[cut + 1:spec.length()].to_owned()
@@ -177,9 +173,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
       "--mode" => {
         let m = val
         guard m == "smtp" || m == "file" else {
-          raise @error.PgpError::PgpError(
-            msg="mailer: --mode must be smtp|file",
-          )
+          @error.fail("mailer: --mode must be smtp|file")
         }
         cfg.mode = m
       }
@@ -190,9 +184,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
         for c in p {
           let d = c.to_int() - 48
           guard d >= 0 && d <= 9 else {
-            raise @error.PgpError::PgpError(
-              msg="mailer: bad --smtp-port '\{p}'",
-            )
+            @error.fail("mailer: bad --smtp-port '\{p}'")
           }
           v = v * 10 + d
         }
@@ -202,7 +194,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
       "--smtp-pass-env" => cfg.smtp_pass_env = Some(val)
       "--out" => cfg.out = val
       "--roundtrip" => cfg.roundtrip = true
-      _ => raise @error.PgpError::PgpError(msg="mailer: unknown flag '\{flag}'")
+      _ => @error.fail("mailer: unknown flag '\{flag}'")
     }
     i = i + (if flag == "--roundtrip" { 1 } else { 2 })
   }
@@ -213,10 +205,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
 fn require_env(name : String) -> String raise {
   match @env.get_env_var(name) {
     Some(v) => v
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="mailer: environment variable \{name} is not set",
-      )
+    None => @error.fail("mailer: environment variable \{name} is not set")
   }
 }
 
@@ -232,34 +221,25 @@ fn load_recipient_public(path : String) -> @api.PublicKey raise {
 fn run(cfg : Config) -> Unit raise {
   let from = match cfg.from {
     Some(f) => f
-    None => raise @error.PgpError::PgpError(msg="mailer: --from is required")
+    None => @error.fail("mailer: --from is required")
   }
-  guard cfg.subject != "" else {
-    raise @error.PgpError::PgpError(msg="mailer: --subject is required")
-  }
-  guard !cfg.to.is_empty() else {
-    raise @error.PgpError::PgpError(msg="mailer: --to is required")
-  }
+  guard cfg.subject != "" else { @error.fail("mailer: --subject is required") }
+  guard !cfg.to.is_empty() else { @error.fail("mailer: --to is required") }
   let body_file = match cfg.body_file {
     Some(f) => f
-    None =>
-      raise @error.PgpError::PgpError(msg="mailer: --body-file is required")
+    None => @error.fail("mailer: --body-file is required")
   }
   let sender_key_path = match cfg.sender_key {
     Some(f) => f
-    None =>
-      raise @error.PgpError::PgpError(msg="mailer: --sender-key is required")
+    None => @error.fail("mailer: --sender-key is required")
   }
   let cert_path = match cfg.recipient_cert {
     Some(f) => f
-    None =>
-      raise @error.PgpError::PgpError(
-        msg="mailer: --recipient-cert is required",
-      )
+    None => @error.fail("mailer: --recipient-cert is required")
   }
   let domain = match cfg.domain {
     Some(d) => d
-    None => raise @error.PgpError::PgpError(msg="mailer: --domain is required")
+    None => @error.fail("mailer: --domain is required")
   }
   let body = @fs.read_file_to_string(body_file)
   let key = @api.PrivateKey::from_armored(

@@ -5,11 +5,14 @@ pub fn pgp() -> Pgp {
 }
 
 ///|
+/// Top-level facade for the builder API. Stateless — every operation is
+/// configured through one of the three builders below.
 pub struct Pgp {}
 
 ///|
-/// Builder for encryption.
-pub(all) struct EncryptionBuilder {
+/// Builder for encryption. Fields are private; instances are created via
+/// `Pgp::encryption` and evolve through the chain methods.
+pub struct EncryptionBuilder {
   priv passwords : Array[String]
   priv recipients : Array[PublicKey]
   priv signer : PrivateKey?
@@ -17,6 +20,7 @@ pub(all) struct EncryptionBuilder {
 }
 
 ///|
+/// Start building an encryption (password or public-key recipients).
 pub fn Pgp::encryption(_self : Pgp) -> EncryptionBuilder {
   EncryptionBuilder::{
     passwords: [],
@@ -84,21 +88,20 @@ pub fn EncryptionBuilder::finish(
     if !passwords.is_empty() {
       return encrypt_with_password(data, passwords[0], file_name~)
     }
-    raise @error.PgpError::PgpError(
-      msg="api: encryption requires a password or a recipient",
-    )
+    @error.fail("api: encryption requires a password or a recipient")
   }
 }
 
 ///|
 /// Builder for decryption.
-pub(all) struct DecryptionBuilder {
+pub struct DecryptionBuilder {
   priv passwords : Array[String]
   priv private_keys : Array[PrivateKey]
   priv verifiers : Array[PublicKey]
 }
 
 ///|
+/// Start building a decryption (private keys and optional verifiers).
 pub fn Pgp::decryption(_self : Pgp) -> DecryptionBuilder {
   DecryptionBuilder::{ passwords: [], private_keys: [], verifiers: [], }
 }
@@ -166,9 +169,7 @@ pub fn DecryptionBuilder::finish(
     if !passwords.is_empty() {
       return Data(decrypt_with_password(message, passwords[0]))
     }
-    raise @error.PgpError::PgpError(
-      msg="api: decryption requires a password or a private key",
-    )
+    @error.fail("api: decryption requires a password or a private key")
   }
 }
 
@@ -195,20 +196,22 @@ fn decrypt_and_verify_list(
       }
     }
     match last_error {
-      Some(msg) => raise @error.PgpError::PgpError(msg~)
-      None => raise @error.PgpError::PgpError(msg="api: decryption failed")
+      Some(msg) => @error.fail(msg)
+      None => @error.fail("api: decryption failed")
     }
   }
 }
 
 ///|
 /// Builder for key generation.
-pub(all) struct KeyGenBuilder {
+pub struct KeyGenBuilder {
   priv user_id : String
   priv bits : Int
 }
 
 ///|
+/// Start building a key generation (RSA by default; Ed25519 via
+/// `generate_ed25519_key`).
 pub fn Pgp::key_generation(_self : Pgp) -> KeyGenBuilder {
   KeyGenBuilder::{ user_id: "", bits: 3072, }
 }
@@ -232,7 +235,7 @@ pub fn KeyGenBuilder::rsa_bits(
 ///|
 pub fn KeyGenBuilder::generate(self : KeyGenBuilder) -> PrivateKey raise {
   guard self.user_id != "" else {
-    raise @error.PgpError::PgpError(msg="api: key generation needs a user id")
+    @error.fail("api: key generation needs a user id")
   }
   generate_key(self.user_id, bits=self.bits)
 }

@@ -22,9 +22,7 @@ fn fake_sock(script : Array[String]) -> FakeSock {
 ///|
 impl Socket for FakeSock with fn read_line(self) -> String raise {
   guard self.script_pos < self.script.length() else {
-    raise @error.PgpError::PgpError(
-      msg="fake: script exhausted (server closed)",
-    )
+    @error.fail("fake: script exhausted (server closed)")
   }
   let line = self.script[self.script_pos]
   self.script_pos = self.script_pos + 1
@@ -38,14 +36,12 @@ impl Socket for FakeSock with fn write_all(self, data : Bytes) -> Unit raise {
 
 ///|
 impl Socket for FakeSock with fn read_raw_line(_self) -> Bytes raise {
-  raise @error.PgpError::PgpError(
-    msg="fake: read_raw_line unused in SMTP tests",
-  )
+  @error.fail("fake: read_raw_line unused in SMTP tests")
 }
 
 ///|
 impl Socket for FakeSock with fn read_exact(_self, _n : Int) -> Bytes raise {
-  raise @error.PgpError::PgpError(msg="fake: read_exact unused in SMTP tests")
+  @error.fail("fake: read_exact unused in SMTP tests")
 }
 
 ///|

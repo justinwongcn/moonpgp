@@ -55,18 +55,14 @@ pub fn SmtpTransport::send(
   let auth : (String, String)? = match (self.user, self.password) {
     (Some(u), Some(p)) => Some((u, p))
     (Some(_), None) =>
-      raise @error.PgpError::PgpError(
-        msg="smtp: --smtp-user given but --smtp-pass-env not set",
-      )
+      @error.fail("smtp: --smtp-user given but --smtp-pass-env not set")
     (None, Some(_)) =>
-      raise @error.PgpError::PgpError(
-        msg="smtp: --smtp-pass-env given but --smtp-user not set",
-      )
+      @error.fail("smtp: --smtp-pass-env given but --smtp-user not set")
     (None, None) => None
   }
   if auth is Some(_) && !is_local_host(self.host) {
-    raise @error.PgpError::PgpError(
-      msg="smtp: refusing AUTH over plaintext to non-local host '\{self.host}' (no TLS; use --mode file + msmtp)",
+    @error.fail(
+      "smtp: refusing AUTH over plaintext to non-local host '\{self.host}' (no TLS; use --mode file + msmtp)",
     )
   }
   let sock = connect_socket(self.host, self.port)

@@ -53,9 +53,7 @@ pub fn decrypt_binary_with_password(
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
       guard seipd.version == 1 else {
-        raise @error.PgpError::PgpError(
-          msg="api: unsupported SEIPD version \{seipd.version}",
-        )
+        @error.fail("api: unsupported SEIPD version \{seipd.version}")
       }
       let bc = @primitives.new_block_cipher(
         @primitives.Aes256,
@@ -65,7 +63,7 @@ pub fn decrypt_binary_with_password(
       return extract_literal(inner)
     }
   }
-  raise @error.PgpError::PgpError(msg="api: no encrypted data packet found")
+  @error.fail("api: no encrypted data packet found")
 }
 
 ///|
@@ -129,8 +127,8 @@ fn unwrap_skesk(
       let algo = match @primitives.cipher_algo_of_number(skesk.cipher_algo()) {
         Some(a) => a
         None =>
-          raise @error.PgpError::PgpError(
-            msg="api: unsupported cipher algorithm \{skesk.cipher_algo()}",
+          @error.fail(
+            "api: unsupported cipher algorithm \{skesk.cipher_algo()}",
           )
       }
       let pass = @primitives.utf8_bytes(passphrase)
@@ -146,25 +144,20 @@ fn unwrap_skesk(
         Bytes::make(16, b'\x00').exact_view(),
         skesk.encrypted_session_key().exact_view(),
       )
-      guard wrapped.length() >= 1 else {
-        raise @error.PgpError::PgpError(msg="api: empty session key")
-      }
+      guard wrapped.length() >= 1 else { @error.fail("api: empty session key") }
       // The wrapped value carries the message cipher algorithm octet.
       let inner_algo = match
         @primitives.cipher_algo_of_number(wrapped[0].to_int()) {
         Some(a) => a
-        None =>
-          raise @error.PgpError::PgpError(
-            msg="api: unsupported inner cipher algorithm",
-          )
+        None => @error.fail("api: unsupported inner cipher algorithm")
       }
       guard wrapped.length() - 1 == inner_algo.key_size() else {
-        raise @error.PgpError::PgpError(msg="api: session key length mismatch")
+        @error.fail("api: session key length mismatch")
       }
       return wrapped[1:wrapped.length()].to_owned()
     }
   }
-  raise @error.PgpError::PgpError(msg="api: no SKESK packet found")
+  @error.fail("api: no SKESK packet found")
 }
 
 ///|
@@ -187,7 +180,7 @@ fn extract_literal(inner : BytesView) -> Bytes raise {
   for _ in 0..<3 {
     let ps = @packet.parse_packets(stream)
     if ps.is_empty() {
-      raise @error.PgpError::PgpError(msg="api: empty inner packet stream")
+      @error.fail("api: empty inner packet stream")
     }
     let tag = ps[0].tag()
     if tag == @packet.Literal {
@@ -205,27 +198,16 @@ fn extract_literal(inner : BytesView) -> Bytes raise {
         stream = w.to_bytes().exact_view()
         continue
       }
-      raise @error.PgpError::PgpError(
-        msg="api: one-pass signature with no data",
-      )
+      @error.fail("api: one-pass signature with no data")
     }
     if tag == @packet.Compressed {
       let comp = @packet.CompressedPacket::parse(ps[0].body().exact_view())
-      let decompressed : Bytes = match comp.algo {
-        0 => comp.data
-        1 => @compress.zip_decompress(comp.data.exact_view())
-        2 => @compress.zlib_decompress(comp.data.exact_view())
-        _ =>
-          raise @error.PgpError::PgpError(
-            msg="api: unsupported compression algorithm \{comp.algo}",
-          )
-      }
-      stream = decompressed.exact_view()
+      stream = decompress_payload(comp).exact_view()
       continue
     }
-    raise @error.PgpError::PgpError(
-      msg="api: expected literal or compressed packet, got tag \{tag.number()}",
+    @error.fail(
+      "api: expected literal or compressed packet, got tag \{tag.number()}",
     )
   }
-  raise @error.PgpError::PgpError(msg="api: literal data not found")
+  @error.fail("api: literal data not found")
 }

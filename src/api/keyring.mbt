@@ -7,26 +7,31 @@ pub struct KeyRing {
 } derive(Debug)
 
 ///|
+/// Create an empty key ring.
 pub fn KeyRing::new() -> KeyRing {
   KeyRing::{ public_keys: [], private_keys: [], }
 }
 
 ///|
+/// Add a public key (available to encryption/verification lookups).
 pub fn KeyRing::add_public(self : KeyRing, key : PublicKey) -> Unit {
   self.public_keys.push(key)
 }
 
 ///|
+/// Add a private key (available to decryption lookups).
 pub fn KeyRing::add_private(self : KeyRing, key : PrivateKey) -> Unit {
   self.private_keys.push(key)
 }
 
 ///|
+/// Number of public keys in the ring.
 pub fn KeyRing::public_count(self : KeyRing) -> Int {
   self.public_keys.length()
 }
 
 ///|
+/// Number of private keys in the ring.
 pub fn KeyRing::private_count(self : KeyRing) -> Int {
   self.private_keys.length()
 }
@@ -43,20 +48,18 @@ fn all_public_packets(key : PublicKey) -> Array[@packet.PublicKeyPacket] {
 }
 
 ///|
-/// Find an encryption-capable public key by 8-octet key id.
+/// Find an encryption-capable public key by 8-octet key id. Errors from
+/// key-id computation propagate (F15): the keys were parsed on the way in,
+/// so a failure here is an invariant violation, not a lookup miss.
 pub fn KeyRing::find_encryption_key(
   self : KeyRing,
   key_id : BytesView,
-) -> @packet.PublicKeyPacket? {
+) -> @packet.PublicKeyPacket? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {
-      try {
-        let id = p.key_id()
-        if id.equal(key_id.to_owned()) && p.algo().is_rsa() {
-          return Some(p)
-        }
-      } catch {
-        _ => ()
+      let id = p.key_id()
+      if id.equal(key_id.to_owned()) && p.algo().is_rsa() {
+        return Some(p)
       }
     }
   }
@@ -68,7 +71,7 @@ pub fn KeyRing::find_encryption_key(
 pub fn KeyRing::find_decryption_key(
   self : KeyRing,
   key_id : BytesView,
-) -> @packet.SecretKeyPacket? {
+) -> @packet.SecretKeyPacket? raise {
   for key in self.private_keys {
     let candidates = [key.primary]
     match key.encryption_subkey {
@@ -76,13 +79,9 @@ pub fn KeyRing::find_decryption_key(
       None => ()
     }
     for sk in candidates {
-      try {
-        let id = sk.public.key_id()
-        if id.equal(key_id.to_owned()) && !(sk.s2k_usage != 0) {
-          return Some(sk)
-        }
-      } catch {
-        _ => ()
+      let id = sk.public.key_id()
+      if id.equal(key_id.to_owned()) && sk.s2k_usage == 0 {
+        return Some(sk)
       }
     }
   }
@@ -95,16 +94,12 @@ pub fn KeyRing::find_decryption_key(
 pub fn KeyRing::find_verification_key(
   self : KeyRing,
   key_id : BytesView,
-) -> PublicKey? {
+) -> PublicKey? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {
-      try {
-        let id = p.key_id()
-        if id.equal(key_id.to_owned()) {
-          return Some(key)
-        }
-      } catch {
-        _ => ()
+      let id = p.key_id()
+      if id.equal(key_id.to_owned()) {
+        return Some(key)
       }
     }
   }

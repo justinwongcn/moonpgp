@@ -2,8 +2,7 @@
 /// Read a file from the project's testdata directory.
 fn read_testdata(name : String) -> String raise {
   @fs.read_file_to_string("testdata/\{name}") catch {
-    _ =>
-      raise @error.PgpError::PgpError(msg="interop: cannot read testdata file")
+    _ => @error.fail("interop: cannot read testdata file")
   }
 }
 

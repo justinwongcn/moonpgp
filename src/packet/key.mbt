@@ -86,13 +86,14 @@ pub fn PublicKeyPacket::params(self : PublicKeyPacket) -> Array[Bytes] {
 }
 
 ///|
-pub fn PublicKeyPacket::parse(body : BytesView) -> PublicKeyPacket raise {
-  let r = Reader::new(body)
+/// Parse the version/creation-time/algorithm/params fields at the front of
+/// a public key body (F13: the single source of the field walk, shared by
+/// `PublicKeyPacket::parse` and `public_part_length` so the two cannot
+/// drift apart when an algorithm is added or changed).
+fn read_public_fields(r : Reader) -> (Int, Int, PubKeyAlgo, Array[Bytes]) raise {
   let version = r.read_u8()
   guard version == 4 || version == 5 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unsupported public key version \{version}",
-    )
+    @error.fail("packet: unsupported public key version \{version}")
   }
   let creation_time = r.read_u32()
   let algo_num = r.read_u8()
@@ -123,11 +124,15 @@ pub fn PublicKeyPacket::parse(body : BytesView) -> PublicKeyPacket raise {
       let kdf = r.read_bytes(kdf_len)
       params.push(Bytes::from_array([kdf_len.to_byte()]).add(kdf))
     }
-    _ =>
-      raise @error.PgpError::PgpError(
-        msg="packet: unsupported public key algorithm \{algo_num}",
-      )
+    _ => @error.fail("packet: unsupported public key algorithm \{algo_num}")
   }
+  (version, creation_time, algo, params)
+}
+
+///|
+pub fn PublicKeyPacket::parse(body : BytesView) -> PublicKeyPacket raise {
+  let r = Reader::new(body)
+  let (version, creation_time, algo, params) = read_public_fields(r)
   PublicKeyPacket::{ version, creation_time, algo, params, }
 }
 
@@ -162,9 +167,7 @@ pub fn PublicKeyPacket::to_body(self : PublicKeyPacket) -> Bytes {
 /// Returns 20 octets for v4 keys.
 pub fn PublicKeyPacket::fingerprint(self : PublicKeyPacket) -> Bytes raise {
   guard self.version == 4 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: fingerprint only implemented for v4 keys",
-    )
+    @error.fail("packet: fingerprint only implemented for v4 keys")
   }
   let body = self.to_body()
   let w = Writer::new()
@@ -279,42 +282,10 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
 
 ///|
 /// The length of the public-key part at the front of a secret key body:
-/// parse the fields without raising on trailing data.
+/// walk it with the shared field reader (no trailing-data requirement).
 fn public_part_length(body : BytesView) -> Int raise {
   let r = Reader::new(body)
-  let version = r.read_u8()
-  guard version == 4 || version == 5 else {
-    raise @error.PgpError::PgpError(
-      msg="packet: unsupported public key version \{version}",
-    )
-  }
-  ignore(r.read_u32())
-  let algo_num = r.read_u8()
-  let algo = pub_key_algo_of_number(algo_num)
-  match algo {
-    RsaEncryptOrSign | RsaEncryptOnly | RsaSignOnly => {
-      let n = r.read_mpi()
-      ignore(n)
-      let e = r.read_mpi()
-      ignore(e)
-    }
-    EdDsaLegacy => {
-      let oid_len = r.read_u8()
-      ignore(r.read_bytes(oid_len))
-      ignore(r.read_mpi())
-    }
-    Ecdh => {
-      let oid_len = r.read_u8()
-      ignore(r.read_bytes(oid_len))
-      ignore(r.read_mpi())
-      let kdf_len = r.read_u8()
-      ignore(r.read_bytes(kdf_len))
-    }
-    _ =>
-      raise @error.PgpError::PgpError(
-        msg="packet: unsupported public key algorithm \{algo_num}",
-      )
-  }
+  let _fields = read_public_fields(r)
   r.position()
 }
 
@@ -327,10 +298,7 @@ fn cipher_block_size(algo : Int) -> Int raise {
     1 => 8
     2 | 3 | 4 => 8
     7 | 8 | 9 | 10 | 11 | 12 => 16
-    _ =>
-      raise @error.PgpError::PgpError(
-        msg="packet: unknown cipher algorithm \{algo}",
-      )
+    _ => @error.fail("packet: unknown cipher algorithm \{algo}")
   }
 }
 

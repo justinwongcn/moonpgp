@@ -8,9 +8,7 @@ pub fn cfb_encrypt(
   data : BytesView,
 ) -> Bytes raise {
   let bs = bc.block_size()
-  guard iv.length() == bs else {
-    raise @error.PgpError::PgpError(msg="cfb: bad IV length")
-  }
+  guard iv.length() == bs else { @error.fail("cfb: bad IV length") }
   let mut fr = iv.to_owned()
   let out = Buffer(size_hint=data.length())
   let mut off = 0
@@ -39,9 +37,7 @@ pub fn cfb_decrypt(
   data : BytesView,
 ) -> Bytes raise {
   let bs = bc.block_size()
-  guard iv.length() == bs else {
-    raise @error.PgpError::PgpError(msg="cfb: bad IV length")
-  }
+  guard iv.length() == bs else { @error.fail("cfb: bad IV length") }
   let mut fr = iv.to_owned()
   let out = Buffer(size_hint=data.length())
   let mut off = 0
@@ -81,9 +77,7 @@ pub fn openpgp_cfb_encrypt_resync(
   data : BytesView,
 ) -> Bytes raise {
   let bs = bc.block_size()
-  guard prefix.length() == bs + 2 else {
-    raise @error.PgpError::PgpError(msg="cfb: bad prefix length")
-  }
+  guard prefix.length() == bs + 2 else { @error.fail("cfb: bad prefix length") }
   let zeros = Bytes::make(bs, b'\x00')
   // First block: C0 = P0 XOR E(0).
   let ks0 = bc.encrypt_block(zeros.exact_view())
@@ -107,7 +101,7 @@ pub fn openpgp_cfb_decrypt_resync(
 ) -> Bytes raise {
   let bs = bc.block_size()
   guard ciphertext.length() >= bs + 2 else {
-    raise @error.PgpError::PgpError(msg="cfb: ciphertext too short")
+    @error.fail("cfb: ciphertext too short")
   }
   let zeros = Bytes::make(bs, b'\x00')
   let ks0 = bc.encrypt_block(zeros.exact_view())
@@ -123,9 +117,7 @@ pub fn openpgp_cfb_decrypt_resync(
   )
   let prefix = p0.add(checks)
   guard prefix[bs - 2] == prefix[bs] && prefix[bs - 1] == prefix[bs + 1] else {
-    raise @error.PgpError::PgpError(
-      msg="cipher: CFB quick check failed (wrong session key?)",
-    )
+    @error.fail("cipher: CFB quick check failed (wrong session key?)")
   }
   // Resynchronize: FR = C[2..bs+2].
   let fr = ciphertext.exact_view()[2:bs + 2]

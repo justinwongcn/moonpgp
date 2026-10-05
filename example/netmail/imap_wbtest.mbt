@@ -25,7 +25,7 @@ impl Socket for FakeImapSock with fn read_raw_line(self) -> Bytes raise {
   let mut pending_cr = false
   while true {
     guard self.chunk < self.script.length() else {
-      raise @error.PgpError::PgpError(msg="fake: script exhausted")
+      @error.fail("fake: script exhausted")
     }
     let cur = self.script[self.chunk]
     while self.off < cur.length() {
@@ -56,7 +56,7 @@ impl Socket for FakeImapSock with fn read_exact(self, n : Int) -> Bytes raise {
   let mut got = 0
   while got < n {
     guard self.chunk < self.script.length() else {
-      raise @error.PgpError::PgpError(msg="fake: script exhausted mid-literal")
+      @error.fail("fake: script exhausted mid-literal")
     }
     let cur = self.script[self.chunk]
     if self.off < cur.length() {

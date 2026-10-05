@@ -1,12 +1,16 @@
 ///|
-/// RSA public key: modulus and public exponent.
+/// RSA public key: modulus and public exponent. Value carrier,
+/// deliberately `pub(all)` (policy note, HANDOFF 2026-10-06): the api
+/// layer assembles these from parsed/generated wire material; the guarded,
+/// invariant-checked surface is `@api.PrivateKey`/`PublicKey`.
 pub(all) struct RsaPublicKey {
   n : BigInt
   e : BigInt
 } derive(Debug)
 
 ///|
-/// RSA private key with CRT parameters.
+/// RSA private key with CRT parameters. Value carrier, deliberately
+/// `pub(all)` (see RsaPublicKey).
 pub(all) struct RsaPrivateKey {
   public : RsaPublicKey
   d : BigInt
@@ -68,9 +72,7 @@ pub fn RsaPublicKey::pkcs1_v15_encrypt(
 ) -> Bytes raise {
   let k = self.octet_length()
   guard message.length() <= k - 11 else {
-    raise @error.PgpError::PgpError(
-      msg="rsa: message too long for \{k}-octet modulus",
-    )
+    @error.fail("rsa: message too long for \{k}-octet modulus")
   }
   let ps_len = k - 3 - message.length()
   let ps : Array[Byte] = []
@@ -99,11 +101,11 @@ pub fn RsaPrivateKey::pkcs1_v15_decrypt(
 ) -> Bytes raise {
   let k = self.public.octet_length()
   guard ciphertext.length() == k else {
-    raise @error.PgpError::PgpError(msg="rsa: ciphertext length mismatch")
+    @error.fail("rsa: ciphertext length mismatch")
   }
   let em = i2osp(self.raw_decrypt(os2ip(ciphertext)), k)
   guard em[0] == b'\x00' && em[1] == b'\x02' else {
-    raise @error.PgpError::PgpError(msg="rsa: bad decryption block type")
+    @error.fail("rsa: bad decryption block type")
   }
   // Find the 00 separator after at least 8 nonzero padding octets.
   let mut sep = -1
@@ -114,9 +116,7 @@ pub fn RsaPrivateKey::pkcs1_v15_decrypt(
     }
     guard em[i] != b'\x00' else { abort("unreachable") }
   }
-  guard sep >= 10 else {
-    raise @error.PgpError::PgpError(msg="rsa: malformed PKCS#1 padding")
-  }
+  guard sep >= 10 else { @error.fail("rsa: malformed PKCS#1 padding") }
   em[sep + 1:k].to_owned()
 }
 
@@ -129,15 +129,13 @@ pub fn RsaPrivateKey::pkcs1_v15_sign(
   digest : BytesView,
 ) -> Bytes raise {
   guard digest.length() == hash.digest_size() else {
-    raise @error.PgpError::PgpError(msg="rsa: digest size mismatch")
+    @error.fail("rsa: digest size mismatch")
   }
   let k = self.public.octet_length()
   let digest_info = @primitives.concat2(hash.der_prefix(), digest)
   // EM: 00 01 (FF+)*(>=8) 00 DigestInfo
   let pad_len = k - digest_info.length() - 3
-  guard pad_len >= 8 else {
-    raise @error.PgpError::PgpError(msg="rsa: RSA modulus too small")
-  }
+  guard pad_len >= 8 else { @error.fail("rsa: RSA modulus too small") }
   let w = @packet.Writer::new()
   w.u8(0)
   w.u8(1)
@@ -159,7 +157,7 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
   signature : BytesView,
 ) -> Bool raise {
   guard digest.length() == hash.digest_size() else {
-    raise @error.PgpError::PgpError(msg="rsa: digest size mismatch")
+    @error.fail("rsa: digest size mismatch")
   }
   let k = self.octet_length()
   // The wire MPI of a signature may have lost leading zero octets; the
@@ -188,13 +186,9 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
 /// candidate after trial division.
 pub fn generate_rsa_key(bits~ : Int) -> RsaPrivateKey raise {
   guard bits >= 1024 else {
-    raise @error.PgpError::PgpError(
-      msg="rsa: refusing to generate keys under 1024 bits",
-    )
+    @error.fail("rsa: refusing to generate keys under 1024 bits")
   }
-  guard bits % 2 == 0 else {
-    raise @error.PgpError::PgpError(msg="rsa: bit count must be even")
-  }
+  guard bits % 2 == 0 else { @error.fail("rsa: bit count must be even") }
   let e = BigInt::from_int(65537)
   // Resample BOTH primes each round: with a fixed p near the top of the
   // range, |p - q| >= min_diff would be nearly unreachable for q alone.
@@ -212,9 +206,7 @@ pub fn generate_rsa_key(bits~ : Int) -> RsaPrivateKey raise {
     p = random_prime(bits / 2, coprime=e, rounds=40)
     q = random_prime(bits / 2, coprime=e, rounds=40)
     guard_count = guard_count + 1
-    guard guard_count < 100 else {
-      raise @error.PgpError::PgpError(msg="rsa: prime generation stuck")
-    }
+    guard guard_count < 100 else { @error.fail("rsa: prime generation stuck") }
   }
   let n = p.mul(q)
   let one = BigInt::from_int(1)

@@ -36,6 +36,18 @@ priv struct EdPoint {
 }
 
 ///|
+/// Mutable byte array copy of a view (F18): Bytes is immutable, so the
+/// byte-level fixups below (masking, sign-bit edits) go through a scratch
+/// Array[Byte] built in one allocation.
+fn to_byte_array(view : BytesView) -> Array[Byte] {
+  let out : Array[Byte] = Array(capacity=view.length())
+  for b in view {
+    out.push(b)
+  }
+  out
+}
+
+///|
 fn c25519_p() -> BigInt {
   BigInt::from_int(1).shl(255).sub(BigInt::from_int(19))
 }
@@ -122,7 +134,9 @@ fn ed_double(p1 : EdPoint, ctx : Ed25519Ctx) -> EdPoint {
 fn ed_scalar_mult(k : BigInt, pt : EdPoint, ctx : Ed25519Ctx) -> EdPoint {
   let mut r = ed_identity()
   let two = BigInt::from_int(2)
-  for i = k.bit_length() - 1; i >= 0; i = i - 1 {
+  let bits = k.bit_length()
+  for t in 0..<bits {
+    let i = bits - 1 - t
     r = ed_double(r, ctx)
     if k.shr(i).mod(two).equal_int(1) {
       r = ed_add(r, pt, ctx)
@@ -168,15 +182,15 @@ fn ed_recover_x(
   let vx2 = fe_mul(v, fe_sq(x, p), p)
   if !vx2.equal(u) {
     guard vx2.equal(p.sub(u)) else {
-      raise @error.PgpError::PgpError(msg="pki: invalid Ed25519 point encoding")
+      @error.fail("pki: invalid Ed25519 point encoding")
     }
     x = fe_mul(x, sqrt_factor, p)
     guard fe_mul(v, fe_sq(x, p), p).equal(u) else {
-      raise @error.PgpError::PgpError(msg="pki: invalid Ed25519 point encoding")
+      @error.fail("pki: invalid Ed25519 point encoding")
     }
   }
   if x.equal_int(0) && sign == 1 {
-    raise @error.PgpError::PgpError(msg="pki: invalid Ed25519 point encoding")
+    @error.fail("pki: invalid Ed25519 point encoding")
   }
   // The sign bit is the parity of x: negate the recovered root whenever
   // its parity disagrees (RFC 8032 Appendix A recover_x). The raw square
@@ -193,10 +207,7 @@ fn ed_recover_x(
 fn ed_encode(pt : EdPoint, ctx : Ed25519Ctx) -> Bytes raise {
   let (x, y) = ed_affine(pt, ctx)
   let le = bigint_to_le_bytes(y, 32)
-  let out : Array[Byte] = []
-  for b in le {
-    out.push(b)
-  }
+  let out = to_byte_array(le)
   if x.mod(BigInt::from_int(2)).equal_int(1) {
     out[31] = (out[31].to_int() | 0x80).to_byte()
   }
@@ -208,18 +219,13 @@ fn ed_encode(pt : EdPoint, ctx : Ed25519Ctx) -> Bytes raise {
 /// on-curve checks). Raises on any malformed encoding.
 fn ed_decode(enc : BytesView, ctx : Ed25519Ctx) -> EdPoint raise {
   guard enc.length() == 32 else {
-    raise @error.PgpError::PgpError(msg="pki: Ed25519 point must be 32 octets")
+    @error.fail("pki: Ed25519 point must be 32 octets")
   }
   let sign = (enc[31].to_int() >> 7) & 1
-  let arr : Array[Byte] = []
-  for b in enc {
-    arr.push(b)
-  }
+  let arr = to_byte_array(enc)
   arr[31] = (arr[31].to_int() & 0x7f).to_byte()
   let y = le_bytes_to_bigint(Bytes::from_array(arr).exact_view())
-  guard y < ctx.p else {
-    raise @error.PgpError::PgpError(msg="pki: non-canonical Ed25519 point y")
-  }
+  guard y < ctx.p else { @error.fail("pki: non-canonical Ed25519 point y") }
   let x = ed_recover_x(y, sign, ctx.p, ctx.d, ctx.sqrt_factor, ctx.exp_p38)
   let x2 = fe_sq(x, ctx.p)
   let lhs = fe_sub(fe_sq(y, ctx.p), x2, ctx.p)
@@ -228,9 +234,7 @@ fn ed_decode(enc : BytesView, ctx : Ed25519Ctx) -> EdPoint raise {
     fe_mul(ctx.d, fe_mul(x2, fe_sq(y, ctx.p), ctx.p), ctx.p),
     ctx.p,
   )
-  guard lhs.equal(rhs) else {
-    raise @error.PgpError::PgpError(msg="pki: Ed25519 point not on curve")
-  }
+  guard lhs.equal(rhs) else { @error.fail("pki: Ed25519 point not on curve") }
   EdPoint::{ x, y, z: BigInt::from_int(1), t: fe_mul(x, y, ctx.p), }
 }
 
@@ -247,13 +251,10 @@ fn ed_decode_opt(enc : BytesView, ctx : Ed25519Ctx) -> EdPoint? {
 /// prefix h[32..64].
 fn ed_expand_seed(seed : BytesView) -> (BigInt, Bytes) raise {
   guard seed.length() == 32 else {
-    raise @error.PgpError::PgpError(msg="pki: Ed25519 seed must be 32 octets")
+    @error.fail("pki: Ed25519 seed must be 32 octets")
   }
   let h = @primitives.Sha512.digest(seed)
-  let arr : Array[Byte] = []
-  for i in 0..<32 {
-    arr.push(h[i])
-  }
+  let arr = to_byte_array(h[0:32])
   arr[0] = (arr[0].to_int() & 248).to_byte()
   arr[31] = ((arr[31].to_int() & 127) | 64).to_byte()
   let a = le_bytes_to_bigint(Bytes::from_array(arr).exact_view())
@@ -327,10 +328,7 @@ fn le_mask_bit255(le : BytesView) -> Bytes {
   guard le.length() == 32 else {
     abort("curve25519: le_mask_bit255 expects 32 octets")
   }
-  let arr : Array[Byte] = []
-  for b in le {
-    arr.push(b)
-  }
+  let arr = to_byte_array(le)
   arr[31] = (arr[31].to_int() & 0x7f).to_byte()
   Bytes::from_array(arr)
 }
@@ -338,7 +336,9 @@ fn le_mask_bit255(le : BytesView) -> Bytes {
 ///|
 fn le_bytes_to_bigint(le : BytesView) -> BigInt {
   let mut v = BigInt::from_int(0)
-  for i = le.length() - 1; i >= 0; i = i - 1 {
+  let n = le.length()
+  for k in 0..<n {
+    let i = n - 1 - k
     v = v.shl(8).lor(BigInt::from_int(le[i].to_int()))
   }
   v
@@ -351,7 +351,7 @@ fn le_bytes_to_bigint(le : BytesView) -> BigInt {
 /// point produces.
 fn mont_ladder(k_le : BytesView, u_le : BytesView, p : BigInt) -> BigInt raise {
   guard u_le.length() == 32 && k_le.length() == 32 else {
-    raise @error.PgpError::PgpError(msg="pki: X25519 input must be 32 octets")
+    @error.fail("pki: X25519 input must be 32 octets")
   }
   let x1 = le_bytes_to_bigint(le_mask_bit255(u_le).exact_view()).mod(p)
   let k = le_bytes_to_bigint(le_mask_bit255(k_le).exact_view())
@@ -362,7 +362,8 @@ fn mont_ladder(k_le : BytesView, u_le : BytesView, p : BigInt) -> BigInt raise {
   let mut x3 = x1
   let mut z3 = BigInt::from_int(1)
   let mut swap = false
-  for t = 254; t >= 0; t = t - 1 {
+  for step in 0..<=254 {
+    let t = 254 - step
     let kt = k.shr(t).mod(two).equal_int(1)
     if kt {
       swap = !swap
@@ -400,9 +401,7 @@ fn mont_ladder(k_le : BytesView, u_le : BytesView, p : BigInt) -> BigInt raise {
     z3 = tz
   }
   guard !z2.is_zero() else {
-    raise @error.PgpError::PgpError(
-      msg="pki: X25519 output is all-zero (low-order peer point)",
-    )
+    @error.fail("pki: X25519 output is all-zero (low-order peer point)")
   }
   fe_mul(x2, mod_inverse(z2, p), p)
 }

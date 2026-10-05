@@ -37,9 +37,7 @@ pub fn parse_mime_tree(data : Bytes) -> MimePart raise {
 
 ///|
 fn parse_part(data : BytesView, depth : Int) -> MimePart raise {
-  guard depth <= max_mime_depth else {
-    raise @error.PgpError::PgpError(msg="mime: nesting too deep")
-  }
+  guard depth <= max_mime_depth else { @error.fail("mime: nesting too deep") }
   let (header_end, body_start) = split_headers_body(data)
   let header_text = @utf8.decode_lossy(data[0:header_end])
   let headers = parse_header_block(header_text)
@@ -65,8 +63,7 @@ fn parse_part(data : BytesView, depth : Int) -> MimePart raise {
         for child in split_multipart_bytes(body_raw.exact_view(), boundary) {
           parts.push(parse_part(child, depth + 1))
         }
-      _ =>
-        raise @error.PgpError::PgpError(msg="mime: multipart without boundary")
+      _ => @error.fail("mime: multipart without boundary")
     }
   }
   MimePart::{
@@ -304,7 +301,7 @@ fn split_multipart_bytes(
     None => ()
   }
   guard parts.length() > 0 else {
-    raise @error.PgpError::PgpError(msg="mime: no multipart parts found")
+    @error.fail("mime: no multipart parts found")
   }
   parts
 }

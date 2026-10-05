@@ -1,11 +1,13 @@
 ///|
-/// Kinds of ASCII armor (RFC 9580 §6.2).
+/// Kinds of ASCII armor (RFC 9580 §6.2). Cleartext-signed messages are not
+/// armor blocks themselves (their enclosed signature is), so there is no
+/// CleartextMessage variant — decode never produces one and cleartext
+/// handling lives in `@api.cleartext`.
 pub(all) enum ArmorType {
   Message
   PublicKey
   PrivateKey
   Signature
-  CleartextMessage
 } derive(Eq, Debug)
 
 ///|
@@ -15,7 +17,6 @@ pub fn ArmorType::begin_marker(self : ArmorType) -> String {
     PublicKey => "-----BEGIN PGP PUBLIC KEY BLOCK-----"
     PrivateKey => "-----BEGIN PGP PRIVATE KEY BLOCK-----"
     Signature => "-----BEGIN PGP SIGNATURE-----"
-    CleartextMessage => "-----BEGIN PGP SIGNED MESSAGE-----"
   }
 }
 
@@ -26,9 +27,6 @@ pub fn ArmorType::end_marker(self : ArmorType) -> String {
     PublicKey => "-----END PGP PUBLIC KEY BLOCK-----"
     PrivateKey => "-----END PGP PRIVATE KEY BLOCK-----"
     Signature => "-----END PGP SIGNATURE-----"
-    // Cleartext messages only contain an armored signature; the enclosing
-    // text is not armored itself.
-    CleartextMessage => ""
   }
 }
 
@@ -99,7 +97,7 @@ pub fn ArmorType::encode(
         buf.write_string(": ")
         buf.write_string(pair.1)
         buf.write_char('\n')
-        if pair.0 == "Version" {
+        if pair.0.to_lower() == "version" {
           have_version = true
         }
       }
@@ -197,8 +195,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
               Some(c) => crc = Some(c)
               // A "=" line that does not parse as a CRC must not be dropped:
               // silently skipping it would bypass the integrity check.
-              None =>
-                raise @error.PgpError::PgpError(msg="armor: malformed CRC line")
+              None => @error.fail("armor: malformed CRC line")
             }
           } else {
             body.write_stringview(l)
@@ -206,17 +203,17 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
           i = i + 1
         }
         if !closed {
-          raise @error.PgpError::PgpError(
-            msg="armor: missing END marker after \{armor_type.begin_marker()}",
+          @error.fail(
+            "armor: missing END marker after \{armor_type.begin_marker()}",
           )
         }
         let data = @base64.decode(body.to_string(), ignore_whitespace=true) catch {
-          _ => raise @error.PgpError::PgpError(msg="armor: invalid base64 body")
+          _ => @error.fail("armor: invalid base64 body")
         }
         match crc {
           Some(expected) =>
             if expected != crc24(data.exact_view()) {
-              raise @error.PgpError::PgpError(msg="armor: CRC-24 mismatch")
+              @error.fail("armor: CRC-24 mismatch")
             }
           None => ()
         }
@@ -225,7 +222,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
     }
   }
   if blocks.is_empty() {
-    raise @error.PgpError::PgpError(msg="armor: no armor block found")
+    @error.fail("armor: no armor block found")
   }
   blocks
 }

@@ -12,10 +12,7 @@ fn block_cipher_for_key_size(key_len : Int) -> @primitives.CipherAlgo raise {
     16 => @primitives.Aes128
     24 => @primitives.Aes192
     32 => @primitives.Aes256
-    _ =>
-      raise @error.PgpError::PgpError(
-        msg="cipher: no AES variant for KEK size \{key_len}",
-      )
+    _ => @error.fail("cipher: no AES variant for KEK size \{key_len}")
   }
 }
 
@@ -24,8 +21,8 @@ fn block_cipher_for_key_size(key_len : Int) -> @primitives.CipherAlgo raise {
 /// returning (n+1) 8-octet blocks.
 pub fn aes_key_wrap(kek : BytesView, plaintext : BytesView) -> Bytes raise {
   guard plaintext.length() >= 16 && plaintext.length() % 8 == 0 else {
-    raise @error.PgpError::PgpError(
-      msg="cipher: key-wrap input must be a multiple of 8 octets (got \{plaintext.length()})",
+    @error.fail(
+      "cipher: key-wrap input must be a multiple of 8 octets (got \{plaintext.length()})",
     )
   }
   let bc = @primitives.new_block_cipher(
@@ -88,8 +85,8 @@ pub fn aes_key_wrap(kek : BytesView, plaintext : BytesView) -> Bytes raise {
 /// check value (the unwrapped A) does not match the default IV.
 pub fn aes_key_unwrap(kek : BytesView, ciphertext : BytesView) -> Bytes raise {
   guard ciphertext.length() >= 24 && ciphertext.length() % 8 == 0 else {
-    raise @error.PgpError::PgpError(
-      msg="cipher: key-unwrap input must be a multiple of 8 octets (got \{ciphertext.length()})",
+    @error.fail(
+      "cipher: key-unwrap input must be a multiple of 8 octets (got \{ciphertext.length()})",
     )
   }
   let bc = @primitives.new_block_cipher(
@@ -109,8 +106,10 @@ pub fn aes_key_unwrap(kek : BytesView, ciphertext : BytesView) -> Bytes raise {
     }
     r.push(blk)
   }
-  for j = 5; j >= 0; j = j - 1 {
-    for i = n; i >= 1; i = i - 1 {
+  for jstep in 0..<=5 {
+    let j = 5 - jstep
+    for istep in 1..<=n {
+      let i = n + 1 - istep
       let b : Array[Byte] = Array::make(16, b'\x00')
       // (A XOR t) | R[i] first, then decrypt; t = n*j + i. t always fits
       // well under 2^32, so only the low four octets can be nonzero;
@@ -137,9 +136,7 @@ pub fn aes_key_unwrap(kek : BytesView, ciphertext : BytesView) -> Bytes raise {
   }
   for i in 0..<8 {
     guard a[i] == kw_iv[i] else {
-      raise @error.PgpError::PgpError(
-        msg="cipher: key-unwrap integrity check failed",
-      )
+      @error.fail("cipher: key-unwrap integrity check failed")
     }
   }
   let out : Array[Byte] = []

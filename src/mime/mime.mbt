@@ -99,7 +99,7 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
     }
   }
   guard parts.length() > 0 else {
-    raise @error.PgpError::PgpError(msg="mime: no multipart parts found")
+    @error.fail("mime: no multipart parts found")
   }
   parts
 }
@@ -129,20 +129,18 @@ pub fn extract_pgp_encrypted(mime_text : String) -> String raise {
   let msg = parse_message(mime_text)
   let content_type = match msg.header("Content-Type") {
     Some(ct) => ct
-    None => raise @error.PgpError::PgpError(msg="mime: missing Content-Type")
+    None => @error.fail("mime: missing Content-Type")
   }
   guard content_type.to_lower().contains("multipart/encrypted") else {
-    raise @error.PgpError::PgpError(msg="mime: not multipart/encrypted")
+    @error.fail("mime: not multipart/encrypted")
   }
   let boundary = match content_type_boundary(content_type) {
     Some(b) => b
-    None => raise @error.PgpError::PgpError(msg="mime: missing boundary")
+    None => @error.fail("mime: missing boundary")
   }
   let parts = split_multipart(msg.body, boundary)
   guard parts.length() >= 2 else {
-    raise @error.PgpError::PgpError(
-      msg="mime: multipart/encrypted needs 2 parts",
-    )
+    @error.fail("mime: multipart/encrypted needs 2 parts")
   }
   let body = strip_leading_headers_keep_body(parts[1])
   if body.has_suffix("\n") {
@@ -167,23 +165,21 @@ pub fn extract_pgp_signed(mime_text : String) -> PgpMimeSigned raise {
   let msg = parse_message(mime_text)
   let content_type = match msg.header("Content-Type") {
     Some(ct) => ct
-    None => raise @error.PgpError::PgpError(msg="mime: missing Content-Type")
+    None => @error.fail("mime: missing Content-Type")
   }
   guard content_type.to_lower().contains("multipart/signed") else {
-    raise @error.PgpError::PgpError(msg="mime: not multipart/signed")
+    @error.fail("mime: not multipart/signed")
   }
   let boundary = match content_type_boundary(content_type) {
     Some(b) => b
-    None => raise @error.PgpError::PgpError(msg="mime: missing boundary")
+    None => @error.fail("mime: missing boundary")
   }
   let parts = split_multipart(msg.body, boundary)
   guard parts.length() >= 2 else {
-    raise @error.PgpError::PgpError(msg="mime: multipart/signed needs 2 parts")
+    @error.fail("mime: multipart/signed needs 2 parts")
   }
   // The signature part's body (after its blank line) is the armor.
-  let sig_part = parse_message(parts[1])
   let sig_armor = strip_leading_headers_keep_body(parts[1])
-  ignore(sig_part)
   // The signed content: the raw first part, re-encoded to CRLF exactly as
   // transmitted. Per the RFC 3156 convention the signed data ends with a
   // CRLF; the split dropped it as boundary-attached, so restore it.
@@ -303,7 +299,7 @@ pub fn verify_pgp_mime_signed(
     signed.signature_armor,
     verifier,
   )
-  let text = @utf8.decode(signed.signed_bytes.exact_view()) catch { _ => "" }
+  let text = @utf8.decode_lossy(signed.signed_bytes.exact_view())
   (text, status)
 }
 

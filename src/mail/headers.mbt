@@ -22,8 +22,8 @@ fn require_ascii(s : String, what : String) -> Unit raise {
     // control characters (incl. CR/LF) and non-ASCII all fail fast:
     // strict MTAs reject them and they weaken the injection story
     if v < 32 || v > 127 {
-      raise @error.PgpError::PgpError(
-        msg="mail: non-ASCII or control character in \{what} (RFC 2047 not supported)",
+      @error.fail(
+        "mail: non-ASCII or control character in \{what} (RFC 2047 not supported)",
       )
     }
   }
@@ -44,13 +44,11 @@ fn validate_addr_spec(addr : String) -> Unit raise {
       c == ';' ||
       c == '"' ||
       c == '\\' {
-      raise @error.PgpError::PgpError(
-        msg="mail: invalid character in address '\{addr}'",
-      )
+      @error.fail("mail: invalid character in address '\{addr}'")
     }
   }
   guard addr.contains("@") else {
-    raise @error.PgpError::PgpError(msg="mail: address without '@': '\{addr}'")
+    @error.fail("mail: address without '@': '\{addr}'")
   }
 }
 
@@ -91,9 +89,7 @@ pub fn format_address(a : MailAddress) -> String raise {
   // addr-spec is never RFC 2047 encoded (EAI/SMTPUTF8 out of scope).
   require_ascii(a.addr, "address")
   validate_addr_spec(a.addr)
-  guard a.addr != "" else {
-    raise @error.PgpError::PgpError(msg="mail: empty address")
-  }
+  guard a.addr != "" else { @error.fail("mail: empty address") }
   if a.display_name == "" {
     return a.addr
   }
@@ -183,9 +179,7 @@ extern "c" fn c_localtime_r(t : Bytes, buf : FixedArray[Byte]) -> Int = "localti
 pub fn local_tz_offset_minutes(now_unix : Int64) -> Int raise {
   let tm = FixedArray::make(64, b'\x00')
   let r = c_localtime_r(i64_le_bytes(now_unix), tm)
-  guard r != 0 else {
-    raise @error.PgpError::PgpError(msg="mail: localtime_r failed")
-  }
+  guard r != 0 else { @error.fail("mail: localtime_r failed") }
   let mut gm : Int64 = 0L
   for k in 0..<8 {
     gm = gm | (tm[40 + k].to_int().to_int64() << (8 * k))
@@ -231,9 +225,7 @@ pub fn rfc5322_date(now_unix : Int64, tz_offset_minutes : Int) -> String {
 /// non-empty dot-atom (alnum, dot, dash).
 pub fn message_id(random16 : Bytes, domain : String) -> String raise {
   require_ascii(domain, "domain")
-  guard domain != "" else {
-    raise @error.PgpError::PgpError(msg="mail: empty domain")
-  }
+  guard domain != "" else { @error.fail("mail: empty domain") }
   for c in domain {
     let v = c.to_int()
     let ok = (v >= 0x41 && v <= 0x5A) ||
@@ -241,9 +233,7 @@ pub fn message_id(random16 : Bytes, domain : String) -> String raise {
       (v >= 0x30 && v <= 0x39) ||
       c == '.' ||
       c == '-'
-    guard ok else {
-      raise @error.PgpError::PgpError(msg="mail: invalid domain '\{domain}'")
-    }
+    guard ok else { @error.fail("mail: invalid domain '\{domain}'") }
   }
   "<\{@primitives.to_hex(random16)}@\{domain}>"
 }

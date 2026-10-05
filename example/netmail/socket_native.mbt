@@ -67,14 +67,14 @@ fn parse_ipv4(host : String) -> (Byte, Byte, Byte, Byte) raise {
   let h = if host == "localhost" { "127.0.0.1" } else { host }
   let parts : Array[StringView] = h.split(".").collect()
   guard parts.length() == 4 else {
-    raise @error.PgpError::PgpError(
-      msg="mailnet: only dotted-quad IPv4 hosts are supported (no DNS); got '\{host}'",
+    @error.fail(
+      "mailnet: only dotted-quad IPv4 hosts are supported (no DNS); got '\{host}'",
     )
   }
   let out : Array[Byte] = []
   for p in parts {
     let v = parse_u8(p)
-    out.push(v.to_byte()) |> ignore
+    out.push(v.to_byte())
   }
   (out[0], out[1], out[2], out[3])
 }
@@ -83,21 +83,17 @@ fn parse_ipv4(host : String) -> (Byte, Byte, Byte, Byte) raise {
 #cfg(target="native")
 fn parse_u8(s : StringView) -> Int raise {
   guard s.length() >= 1 && s.length() <= 3 else {
-    raise @error.PgpError::PgpError(msg="mailnet: bad IPv4 octet '\{s}'")
+    @error.fail("mailnet: bad IPv4 octet '\{s}'")
   }
   let mut v = 0
   for c in s {
     let d = c.to_int() - 48
     guard d >= 0 && d <= 9 else {
-      raise @error.PgpError::PgpError(msg="mailnet: bad IPv4 octet '\{s}'")
+      @error.fail("mailnet: bad IPv4 octet '\{s}'")
     }
     v = v * 10 + d
   }
-  guard v <= 255 else {
-    raise @error.PgpError::PgpError(
-      msg="mailnet: IPv4 octet out of range '\{s}'",
-    )
-  }
+  guard v <= 255 else { @error.fail("mailnet: IPv4 octet out of range '\{s}'") }
   v
 }
 
@@ -137,14 +133,14 @@ priv struct NativeSock {
 #cfg(target="native")
 pub fn connect_socket(host : String, port : Int) -> &Socket raise {
   guard port > 0 && port <= 65535 else {
-    raise @error.PgpError::PgpError(msg="mailnet: port out of range \{port}")
+    @error.fail("mailnet: port out of range \{port}")
   }
   c_signal(13, 1L) |> ignore
   let (a0, a1, a2, a3) = parse_ipv4(host)
   let fd = c_socket(2, 1, 0)
   guard fd >= 0 else {
     c_perror(b"moonpgp-mailnet")
-    raise @error.PgpError::PgpError(msg="mailnet: socket() failed")
+    @error.fail("mailnet: socket() failed")
   }
   // SO_RCVTIMEO: macOS (level 0xffff, name 0x1006) vs Linux (level 1,
   // name 20); try both, ignore rejections — a missed timeout only
@@ -174,9 +170,7 @@ pub fn connect_socket(host : String, port : Int) -> &Socket raise {
   if cr < 0 {
     c_perror(b"moonpgp-mailnet")
     c_close(fd) |> ignore
-    raise @error.PgpError::PgpError(
-      msg="mailnet: connect to \{host}:\{port} failed (see stderr)",
-    )
+    @error.fail("mailnet: connect to \{host}:\{port} failed (see stderr)")
   }
   let fill = fn(buf : FixedArray[Byte]) -> Int {
     let n = c_recv(fd, buf, buf.length(), 0)
@@ -199,6 +193,9 @@ pub fn connect_socket(host : String, port : Int) -> &Socket raise {
 ///|
 #cfg(target="native")
 impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
+  // Partial-write retries copy the unsent tail (Bytes needs a contiguous
+  // pointer for the FFI call); blocking sockets rarely hit this path, so
+  // the copy is accepted rather than complicating the seam.
   let n = data.length()
   let mut off = 0
   while off < n {
@@ -209,7 +206,7 @@ impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
     }
     guard sent > 0 else {
       c_perror(b"moonpgp-mailnet")
-      raise @error.PgpError::PgpError(msg="mailnet: send failed mid-write")
+      @error.fail("mailnet: send failed mid-write")
     }
     off = off + sent
   }

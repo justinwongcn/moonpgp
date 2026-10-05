@@ -26,7 +26,7 @@ fn ext_gcd(a : BigInt, m : BigInt) -> (BigInt, BigInt) {
 pub fn mod_inverse(a : BigInt, m : BigInt) -> BigInt raise {
   let (g, x) = ext_gcd(a.mod(m), m)
   guard g.equal_int(1) else {
-    raise @error.PgpError::PgpError(msg="pki: modular inverse does not exist")
+    @error.fail("pki: modular inverse does not exist")
   }
   x
 }
@@ -54,8 +54,11 @@ fn random_range(low : BigInt, high : BigInt) -> BigInt raise {
     if v < span {
       return low.add(v)
     }
+  } nobreak {
+    // Unreachable: the only exit is the return above; the nobreak arm
+    // satisfies the typechecker (E4108 — `while true` is not diverging).
+    abort("unreachable")
   }
-  abort("unreachable")
 }
 
 ///|
@@ -152,15 +155,14 @@ pub fn random_prime(
   coprime~ : BigInt,
   rounds~ : Int,
 ) -> BigInt raise {
-  guard bits >= 2 else {
-    raise @error.PgpError::PgpError(msg="pki: prime bit size too small")
-  }
+  guard bits >= 2 else { @error.fail("pki: prime bit size too small") }
   let e = BigInt::from_int(0).lor(coprime)
+  // Loop-invariant thresholds for the "top two bits set" requirement.
+  let top = BigInt::from_int(1).shl(bits - 1)
+  let second = BigInt::from_int(1).shl(bits - 2)
   while true {
     // Top two bits set so n*p has full size; force odd.
     let mut candidate = random_bigint(bits)
-    let top = BigInt::from_int(1).shl(bits - 1)
-    let second = BigInt::from_int(1).shl(bits - 2)
     candidate = candidate.lor(top).lor(second)
     if candidate.mod(BigInt::from_int(2)).equal_int(0) {
       candidate = candidate.sub(BigInt::from_int(1))
@@ -177,6 +179,9 @@ pub fn random_prime(
     if g.equal_int(1) {
       return candidate
     }
+  } nobreak {
+    // Unreachable: the only exit is the return above; the nobreak arm
+    // satisfies the typechecker (E4108 — `while true` is not diverging).
+    abort("unreachable")
   }
-  abort("unreachable")
 }

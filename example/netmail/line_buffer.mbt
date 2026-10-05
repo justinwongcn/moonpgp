@@ -43,8 +43,11 @@ fn LineBuffer::read_line(self : LineBuffer) -> String raise {
       }
     }
     self.refill()
+  } nobreak {
+    // Unreachable: every exit is a return. The nobreak arm satisfies the
+    // typechecker, which does not treat `while true` as diverging (E4108).
+    abort("mailnet: unreachable")
   }
-  abort("mailnet: unreachable")
 }
 
 ///|
@@ -74,8 +77,11 @@ fn LineBuffer::read_raw_line(self : LineBuffer) -> Bytes raise {
       }
     }
     self.refill()
+  } nobreak {
+    // Unreachable: every exit is a return. The nobreak arm satisfies the
+    // typechecker, which does not treat `while true` as diverging (E4108).
+    abort("mailnet: unreachable")
   }
-  abort("mailnet: unreachable")
 }
 
 ///|
@@ -84,9 +90,7 @@ fn LineBuffer::read_raw_line(self : LineBuffer) -> Bytes raise {
 ///|
 #cfg(target="native")
 fn LineBuffer::read_exact(self : LineBuffer, n : Int) -> Bytes raise {
-  guard n >= 0 else {
-    raise @error.PgpError::PgpError(msg="mailnet: negative read_exact \{n}")
-  }
+  guard n >= 0 else { @error.fail("mailnet: negative read_exact \{n}") }
   let out : Array[Byte] = []
   let mut got = 0
   while got < n {
@@ -112,12 +116,10 @@ fn LineBuffer::refill(self : LineBuffer) -> Unit raise {
   self.rend = 0
   let n = (self.fill)(self.buf)
   if n < 0 {
-    raise @error.PgpError::PgpError(msg="mailnet: recv failed")
+    @error.fail("mailnet: recv failed")
   }
   guard n > 0 else {
-    raise @error.PgpError::PgpError(
-      msg="mailnet: connection closed by server mid-reply",
-    )
+    @error.fail("mailnet: connection closed by server mid-reply")
   }
   self.rend = n
 }

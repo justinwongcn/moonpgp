@@ -17,6 +17,10 @@ pub fn curve25519_oid() -> Bytes {
 }
 
 ///|
+/// Value carrier, deliberately `pub(all)`: the api layer assembles these
+/// from parsed/generated wire material and reads the fields directly.
+/// The guarded, invariant-checked surface is `@api.PrivateKey`/`PublicKey`;
+/// treat this struct as plain data (policy note, HANDOFF 2026-10-06).
 pub(all) struct X25519SecretKey {
   /// 32-octet little-endian scalar, already clamped.
   scalar : Bytes
@@ -27,12 +31,9 @@ pub(all) struct X25519SecretKey {
 ///|
 fn x25519_clamp(scalar : BytesView) -> Bytes raise {
   guard scalar.length() == 32 else {
-    raise @error.PgpError::PgpError(msg="pki: X25519 scalar must be 32 octets")
+    @error.fail("pki: X25519 scalar must be 32 octets")
   }
-  let out : Array[Byte] = []
-  for b in scalar {
-    out.push(b)
-  }
+  let out = to_byte_array(scalar)
   out[0] = (out[0].to_int() & 248).to_byte()
   out[31] = ((out[31].to_int() & 127) | 64).to_byte()
   Bytes::from_array(out)
@@ -70,14 +71,12 @@ pub fn x25519_secret_of_wire_mpi(
 ) -> X25519SecretKey raise {
   // Tolerate a stripped leading zero octet (MPI semantics).
   guard mpi_value.length() <= 32 else {
-    raise @error.PgpError::PgpError(
-      msg="pki: Curve25519Legacy secret MPI must be 32 octets",
-    )
+    @error.fail("pki: Curve25519Legacy secret MPI must be 32 octets")
   }
   let full = @primitives.pad_left(mpi_value, 32)
   let le : Array[Byte] = []
-  for i = 31; i >= 0; i = i - 1 {
-    le.push(full[i])
+  for i in 0..<32 {
+    le.push(full[31 - i])
   }
   x25519_public_of_scalar(Bytes::from_array(le).exact_view())
 }
@@ -87,8 +86,8 @@ pub fn x25519_secret_of_wire_mpi(
 /// (255-bit clamped scalar, RFC 9580 §5.5.5.6.1.1).
 pub fn X25519SecretKey::wire_mpi(self : X25519SecretKey) -> Bytes {
   let be : Array[Byte] = [b'\x00', b'\xFF']
-  for i = 31; i >= 0; i = i - 1 {
-    be.push(self.scalar[i])
+  for i in 0..<32 {
+    be.push(self.scalar[31 - i])
   }
   Bytes::from_array(be)
 }
@@ -101,9 +100,7 @@ pub fn x25519_shared_secret(
   peer_public : BytesView,
 ) -> Bytes raise {
   guard scalar.length() == 32 && peer_public.length() == 32 else {
-    raise @error.PgpError::PgpError(
-      msg="pki: X25519 inputs must be 32 octets each",
-    )
+    @error.fail("pki: X25519 inputs must be 32 octets each")
   }
   let clamped = x25519_clamp(scalar)
   let z = mont_ladder(clamped.exact_view(), peer_public, c25519_p())
@@ -120,7 +117,7 @@ pub fn ecdh_kdf_sha256(
   bits : Int,
 ) -> Bytes raise {
   guard bits % 8 == 0 && bits > 0 else {
-    raise @error.PgpError::PgpError(msg="pki: bad KDF output size \{bits}")
+    @error.fail("pki: bad KDF output size \{bits}")
   }
   let w : Array[Byte] = [b'\x00', b'\x00', b'\x00', b'\x01']
   for b in z {

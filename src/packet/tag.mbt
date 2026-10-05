@@ -151,12 +151,10 @@ fn write_old_length(w : Writer, length : Int) -> Unit {
 
 ///|
 fn read_one_packet(r : Reader) -> RawPacket raise {
-  guard r.remaining() >= 2 else {
-    raise @error.PgpError::PgpError(msg="packet: truncated header")
-  }
+  guard r.remaining() >= 2 else { @error.fail("packet: truncated header") }
   let first = r.read_u8()
   guard (first & 0x80) != 0 else {
-    raise @error.PgpError::PgpError(msg="packet: invalid header octet \{first}")
+    @error.fail("packet: invalid header octet \{first}")
   }
   let tag : PacketTag = if (first & 0x40) != 0 {
     // New format.

@@ -75,7 +75,7 @@ fn lock_secret_key(
   let s2k : @s2k.S2k = @s2k.Iterated(
     @primitives.Sha256,
     salt,
-    @s2k.encode_count(1024 * 1024),
+    @s2k.encode_count(S2K_COUNT_TARGET),
   )
   let kek = s2k.derive_key(@primitives.utf8_bytes(passphrase).exact_view(), 32)
   let bc = @primitives.new_block_cipher(@primitives.Aes256, kek.exact_view())
@@ -108,6 +108,7 @@ pub fn PrivateKey::unlock(
     primary: unlock_secret_key(self.primary, passphrase),
     user_id: self.user_id,
     self_signature: self.self_signature,
+    direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) => Some(unlock_secret_key(sk, passphrase))
       None => None
@@ -126,6 +127,7 @@ pub fn PrivateKey::lock(
     primary: lock_secret_key(self.primary, passphrase),
     user_id: self.user_id,
     self_signature: self.self_signature,
+    direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) => Some(lock_secret_key(sk, passphrase))
       None => None

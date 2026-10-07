@@ -6,7 +6,11 @@ pub fn encrypt_with_password(
   plaintext : BytesView,
   passphrase : String,
   file_name? : String,
+  aead? : Bool = false,
 ) -> String raise {
+  if aead {
+    return seal_aead_with_password(plaintext, passphrase, file_name?)
+  }
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
   let skesk = build_skesk(session_key.exact_view(), passphrase)
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
@@ -50,6 +54,41 @@ pub fn decrypt_binary_with_password(
   let packets = @packet.parse_packets(data)
   let session_key = unwrap_skesk(packets, passphrase)
   for p in packets {
+    if p.tag() == @packet.AeadEncData {
+      let aead = @packet.AeadPacket::parse(p.body().exact_view())
+      let algo = match @primitives.cipher_algo_of_number(aead.cipher_algo()) {
+        Some(a) => a
+        None =>
+          @error.fail(
+            "api: unsupported AEAD cipher algorithm \{aead.cipher_algo()}",
+          )
+      }
+      let mode = match @cipher.aead_mode_of_number(aead.aead_algo()) {
+        Some(m) => m
+        None => @error.fail("api: unknown AEAD algorithm \{aead.aead_algo()}")
+      }
+      guard session_key.length() == algo.key_size() else {
+        @error.fail("api: session key length does not match the AEAD cipher")
+      }
+      let bc = @primitives.new_block_cipher(algo, session_key.exact_view())
+      // Associated-data header: 0xD4 | version | cipher | aead | chunk octet.
+      let header5 = Bytes::from_array([
+        0xD4,
+        aead.version().to_byte(),
+        aead.cipher_algo().to_byte(),
+        aead.aead_algo().to_byte(),
+        aead.chunk_octet().to_byte(),
+      ])
+      let inner = @cipher.aead_open(
+        bc,
+        mode,
+        header5.exact_view(),
+        aead.iv().exact_view(),
+        aead.chunk_octet(),
+        aead.ciphertext().exact_view(),
+      )
+      return extract_literal(inner)
+    }
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
       guard seipd.version == 1 else {
@@ -68,6 +107,12 @@ pub fn decrypt_binary_with_password(
 
 ///|
 const SESSION_KEY_SIZE : Int = 32
+
+///|
+/// S2K hashed-material target for passphrase derivation: 56,623,104 octets
+/// (~54 MiB), gpg's default count (byte 251). The previous 1 MiB was
+/// ~50x lighter than gpg's own interactive cost.
+const S2K_COUNT_TARGET : Int = 56623104
 
 ///|
 fn write_packet_length(w : @packet.Writer, length : Int) -> Unit {
@@ -90,7 +135,7 @@ fn build_skesk(
 ) -> @packet.SkeskPacket raise {
   let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
   // ~1 MiB of hashed material: a defensible interactive cost.
-  let count_byte = @s2k.encode_count(1024 * 1024)
+  let count_byte = @s2k.encode_count(S2K_COUNT_TARGET)
   let s2k : @s2k.S2k = @s2k.Iterated(@primitives.Sha256, salt, count_byte)
   // The S2K key wraps [algo byte || session key] with CFB, zero IV.
   let wrapping_key = s2k.derive_key(
@@ -110,8 +155,11 @@ fn build_skesk(
     plain.exact_view(),
   )
   @packet.SkeskPacket::{
+    version: 4,
     cipher_algo: @primitives.Aes256.number(),
+    aead_algo: 0,
     s2k,
+    iv: Bytes::new(0),
     encrypted_session_key: esk,
   }
 }
@@ -132,6 +180,46 @@ fn unwrap_skesk(
           )
       }
       let pass = @primitives.utf8_bytes(passphrase)
+      if skesk.version() == 5 {
+        // v5: the S2K-derived key is the AEAD key directly (no HKDF — the
+        // HKDF step belongs to the v6 SKESK); AD = C3 05 cipher aead.
+        let kek = skesk.s2k().derive_key(pass.exact_view(), algo.key_size())
+        let mode = match @cipher.aead_mode_of_number(skesk.aead_algo()) {
+          Some(m) => m
+          None =>
+            @error.fail(
+              "api: unknown SKESK AEAD algorithm \{skesk.aead_algo()}",
+            )
+        }
+        let bc = @primitives.new_block_cipher(algo, kek.exact_view())
+        let ad = Bytes::from_array([
+          0xC3,
+          5,
+          skesk.cipher_algo().to_byte(),
+          skesk.aead_algo().to_byte(),
+        ])
+        let key = match mode {
+          @cipher.Ocb =>
+            @cipher.ocb_decrypt(
+              bc,
+              skesk.iv().exact_view(),
+              ad.exact_view(),
+              skesk.encrypted_session_key().exact_view(),
+            )
+          @cipher.Gcm =>
+            @cipher.gcm_decrypt(
+              bc,
+              skesk.iv().exact_view(),
+              ad.exact_view(),
+              skesk.encrypted_session_key().exact_view(),
+            )
+          @cipher.Eax => @error.fail("api: EAX is not implemented")
+        }
+        guard key.length() == algo.key_size() else {
+          @error.fail("api: AEAD-wrapped session key has the wrong length")
+        }
+        return key
+      }
       if skesk.encrypted_session_key().length() == 0 {
         return skesk.s2k().derive_key(pass.exact_view(), algo.key_size())
       }
@@ -167,6 +255,92 @@ fn seal_seipd(session_key : BytesView, inner : BytesView) -> Bytes raise {
     session_key.exact_view(),
   )
   @cipher.seipd_v1_encrypt(bc, inner)
+}
+
+///|
+/// AEAD message builder (the --force-aead shape GnuPG 2.4 consumes):
+/// a v5 SKESK holding the OCB-sealed session key, then a tag-20 AEAD
+/// packet over the literal data. AES-256 + OCB, chunk octet 14 (1 MiB).
+fn seal_aead_with_password(
+  plaintext : BytesView,
+  passphrase : String,
+  file_name? : String,
+) -> String raise {
+  let cipher_algo = @primitives.Aes256.number()
+  let aead_algo = @cipher.Ocb.number()
+  let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
+  let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
+  let count_byte = @s2k.encode_count(S2K_COUNT_TARGET)
+  let s2k : @s2k.S2k = @s2k.Iterated(@primitives.Sha256, salt, count_byte)
+  let pass = @primitives.utf8_bytes(passphrase)
+  let kek = s2k.derive_key(pass.exact_view(), SESSION_KEY_SIZE)
+  let kek_bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    kek.exact_view(),
+  )
+  let esk_ad = Bytes::from_array([
+    0xC3,
+    5,
+    cipher_algo.to_byte(),
+    aead_algo.to_byte(),
+  ])
+  let esk_iv = @primitives.random_bytes(15)
+  let esk = @cipher.ocb_encrypt(
+    kek_bc,
+    esk_iv.exact_view(),
+    esk_ad.exact_view(),
+    session_key.exact_view(),
+  )
+  let skesk : @packet.SkeskPacket = {
+    version: 5,
+    cipher_algo,
+    aead_algo,
+    s2k,
+    iv: esk_iv,
+    encrypted_session_key: esk,
+  }
+  let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
+  let literal_wire = @packet.serialize_packet(
+    @packet.Literal,
+    literal.to_body().exact_view(),
+  )
+  let data_bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    session_key.exact_view(),
+  )
+  let data_iv = @primitives.random_bytes(15)
+  let chunk_octet = 14
+  let header5 = Bytes::from_array([
+    0xD4,
+    1,
+    cipher_algo.to_byte(),
+    aead_algo.to_byte(),
+    chunk_octet.to_byte(),
+  ])
+  let body = @cipher.aead_seal(
+    data_bc,
+    @cipher.Ocb,
+    header5.exact_view(),
+    data_iv.exact_view(),
+    chunk_octet,
+    literal_wire.exact_view(),
+  )
+  let aead : @packet.AeadPacket = {
+    version: 1,
+    cipher_algo,
+    aead_algo,
+    chunk_octet,
+    iv: data_iv,
+    ciphertext: body,
+  }
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(@packet.AeadEncData, aead.to_body().exact_view()).exact_view(),
+  )
+  @armor.Message.encode(w.to_bytes().exact_view())
 }
 
 ///|

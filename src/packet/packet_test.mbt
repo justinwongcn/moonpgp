@@ -113,6 +113,7 @@ test "signature packet roundtrip (RSA-shaped)" {
     },
   ]
   let sig : @packet.SignaturePacket = {
+    version: 4,
     sig_type: @packet.CanonicalTextDocument,
     pub_algo: @packet.RsaEncryptOrSign,
     hash_algo: 8,
@@ -120,6 +121,7 @@ test "signature packet roundtrip (RSA-shaped)" {
     unhashed_subpackets: unhashed,
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0x1234,
+    salt: Bytes::new(0),
     sig_params: [@primitives.from_hex("deadbeefcafe")],
   }
   let body = sig.to_body()
@@ -150,6 +152,9 @@ test "pkesk and skesk roundtrip" {
   assert_eq(parsed.encrypted(), @primitives.from_hex("feedface01"))
 
   let skesk : @packet.SkeskPacket = {
+    version: 4,
+    aead_algo: 0,
+    iv: Bytes::new(0),
     cipher_algo: 9,
     s2k: @s2k.Salted(
       @primitives.Sha256,

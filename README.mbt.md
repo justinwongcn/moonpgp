@@ -106,9 +106,11 @@ fetched back over IMAP, decrypted and verified in one loop —
 
 They are functional (used for the real-internet round trip against a 163
 mailbox and a Proton peer) but carry deliberate limitations: native
-target only, no TLS (route through a local stunnel to the provider's
-SMTPS/IMAPS port, or hand .eml to msmtp), INBOX-only IMAP, plaintext to
-non-local hosts refused unless explicitly opted in. See Security notes.
+target only (TLS submission rides the POSIX socket with a blocking
+facade over `moonbitlang/async/tls`), implicit TLS (465) and STARTTLS
+(587) supported with system-root or pinned-certificate trust, INBOX-only
+IMAP, plaintext to non-local hosts refused unless explicitly opted in.
+See Security notes.
 
 ## Module layout (designed for replaceability)
 
@@ -155,16 +157,23 @@ MIT attribution).
 - GC languages cannot truly wipe private key memory; `Cipher::wipe`/key
   zeroing is best-effort.
 - Limited support for legacy v3 features on the decryption side; the
-  generation side only emits v4 packets (v6/AEAD-OCB/Argon2 are roadmap items).
+  generation side emits v4 packets by default. RFC 9580 v6 Ed25519
+  signing keys/signatures and the AEAD (OCB/GCM) message shapes are
+  implemented (v6: detached signatures only; AEAD: symkey/tag-20 for
+  GnuPG `--force-aead` interop — new keys still use SEIPD v1). Argon2
+  S2K remains a roadmap item.
 - Non-native backends (wasm/js) have no clock API yet; key creation timestamps
   are placeholders (see `primitives/clock.mbt`).
-- The demo transports (`example/netmail`) are **native-only and TLS-free**:
-  SMTP AUTH is refused to non-localhost hosts, and IMAP plaintext to
-  non-local hosts requires an explicit `allow_insecure` opt-in. Route
-  through a local TLS terminator (e.g. stunnel to the provider's
-  IMAPS/SMTPS port) or hand .eml to an MTA (msmtp). Plaintext exposure is
-  limited to credentials and metadata — message content stays end-to-end
-  encrypted.
+- The demo transports (`example/netmail`) are **native-only**. SMTP
+  submission is encrypted by default (implicit TLS on 465 / STARTTLS on
+  587, verified against the OS root store); `--smtp-trust pem:FILE`
+  pins the peer certificate (exact DER match), and `--smtp-trust none`
+  is opt-in only with a loud warning. AUTH PLAIN over plaintext is
+  still refused to non-localhost hosts, and IMAP plaintext to non-local
+  hosts requires an explicit `allow_insecure` opt-in. Plaintext-only
+  flows (no TLS terminator available) can hand .eml to an MTA (msmtp).
+  Plaintext exposure is limited to credentials and metadata — message
+  content stays end-to-end encrypted.
 
 ## Roadmap
 
@@ -175,13 +184,21 @@ MIT attribution).
 - Email pipeline (2026-10-02): gopenpgp v3 `mime/`-aligned decrypt_mime +
   MIME tree/collectors + Content-Type/CTE decoding, gpg cross-verified.
 - Mail sending (2026-10-02): `src/mail` composition + `example/mailer`
-  SMTP/file transports, gpg-verified end-to-end (TLS is out of scope by
-  design — real-internet sending hands off to msmtp).
-- Post-contest roadmap: AEAD-OCB/GCM generation (OCB self-written; GCM needs a
-  re-evaluated source), Argon2 S2K (mooncry has a ready implementation —
-  supply-chain review required before adopting), self-implemented DEFLATE
-  (replacing moonbit-community/flate, differential-testing plan), v6 format
-  (X25519 algorithm 25 / Ed25519 algorithm 27).
+  SMTP/file transports, gpg-verified end-to-end. TLS submission
+  (2026-10-06): implicit TLS/STARTTLS via `moonbitlang/async/tls`,
+  gpg-verified end-to-end against a local TLS sink
+  (`example/mailer/e2e_tls.sh`); msmtp is now the fallback, not a
+  requirement.
+- v6 + AEAD (2026-10-08): RFC 9580 v6 Ed25519 detached signatures and
+  v6 key packets/fingerprints (cross-checked against go-crypto v1.4.1 and
+  the mizchi `pgp` reference package), plus self-written OCB3 (RFC 7253)
+  and GCM with the 4880bis tag-20 chunk layer and v5 SKESK
+  (`encpass ... aead`), byte-level gpg `--force-aead` interop in both
+  directions (`scripts/interop_aead_gpg.sh`).
+- Post-contest roadmap: Argon2 S2K (BLAKE2b + Argon2id self-implementation
+  planned), SEIPD v2 and v6 message encryption (v6 subkeys, v6 one-pass
+  signatures), self-implemented DEFLATE (replacing
+  moonbit-community/flate, differential-testing plan).
 
 New capabilities (P1):
 

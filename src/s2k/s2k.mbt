@@ -108,7 +108,10 @@ pub fn S2k::derive_key(
       guard salt.length() == SALT_SIZE else {
         @error.fail("s2k: bad salt length")
       }
-      @primitives.concat2(passphrase, salt)
+      // RFC 9580 §3.7.1.2: the hash input is the salt FOLLOWED BY the
+      // passphrase (the old passphrase||salt order was a latent interop
+      // bug, caught in the 2026-10-08 P2 research review).
+      @primitives.concat2(salt, passphrase)
     }
     Iterated(_, salt, count_byte) => {
       guard salt.length() == SALT_SIZE else {

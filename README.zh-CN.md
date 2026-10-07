@@ -91,13 +91,13 @@ let decrypt = @api.pgp().decryption().password("pw").finish()
 POSIX socket SMTP 客户端、IMAP4rev1 子集客户端（`example/netmail`）与两个
 CLI 演示（`example/mailer`、`example/mailreader`）——是**演示与测试基建**,
 不作为发布 API：它们的存在是为了端到端验证库本身（一封签名+加密邮件经
-msmtp 提交、再经 IMAP 取回、解密验签,一条命令闭环——`example/mailer/e2e.sh`
-与 `example/mailreader/e2e.sh`）。
+SMTP 提交、再经 IMAP 取回、解密验签,一条命令闭环——`example/mailer/e2e.sh`、
+`example/mailer/e2e_tls.sh` 与 `example/mailreader/e2e.sh`）。
 
 它们是功能完整的（已对真实 163 邮箱与 Proton 对端完成过互联网往返）,但有
-意保持边界：仅 native 目标、不做 TLS（经本地 stunnel 到服务商 SMTPS/IMAPS
-端口,或 .eml 交给 msmtp）、IMAP 仅 INBOX、明文连非本地主机需显式 opt-in。
-见安全声明。
+意保持边界：仅 native 目标（TLS 提交基于 POSIX socket + `moonbitlang/async/tls`
+阻塞门面）,支持隐式 TLS(465)与 STARTTLS(587),信任策略为系统根证书或
+证书钉扎,IMAP 仅 INBOX,明文连非本地主机需显式 opt-in。见安全声明。
 
 ## 模块布局（可替换性设计）
 
@@ -134,19 +134,28 @@ core `@bigint` 自实现（`pki/curve25519.mbt`），公钥路径无第三方依
 - Ed25519/X25519 的 `@bigint` 域算术**非常数时间**（与 RSA 同类限制）；如需抗时序侧信道的
   高价值场景，请替换为常数时间实现（`pki/curve25519.mbt` 是隔离点）。
 - GC 语言无法真正清零私钥内存；`Cipher::wipe`/密钥清零是尽力而为。
-- 支持解密侧的 v3 遗留特性有限；生成端仅产出 v4 格式（v6/AEAD-OCB/Argon2 为 P2）。
+- 支持解密侧的 v3 遗留特性有限；生成端默认产出 v4 格式。RFC 9580 v6 Ed25519
+  签名密钥/签名与 AEAD（OCB/GCM）消息形态已实现（v6 仅分离签名；AEAD 为
+  对称密钥/tag-20 形态，用于 GnuPG `--force-aead` 互通——新键消息仍走 SEIPD v1）。
+  Argon2 S2K 仍在路线图上。
 - 非 native 后端（wasm/js）暂无时钟 API，密钥创建时间为占位值（见 `primitives/clock.mbt`）。
-- 演示传输（`example/netmail`）仅 native 目标且不做 TLS：SMTP AUTH 拒绝非 localhost,
-  IMAP 明文连非本地主机需显式 `allow_insecure`。经本地 TLS 终结（如 stunnel 到服务商
-  IMAPS/SMTPS 端口）或把 .eml 交给 MTA（msmtp）。明文暴露的只有凭据与元数据——
+- 演示传输（`example/netmail`）仅 native 目标。SMTP 提交默认加密（465 隐式 TLS /
+  587 STARTTLS,对系统根证书校验）;`--smtp-trust pem:FILE` 钉扎对端证书
+  （DER 精确比对）,`--smtp-trust none` 仅显式 opt-in 并打印显著警告。明文连接
+  拒绝非 localhost 的 AUTH,IMAP 明文连非本地主机需显式 `allow_insecure`。
+  无 TLS 可用时仍可把 .eml 交给 MTA（msmtp）。明文暴露的只有凭据与元数据——
   邮件内容保持端到端加密。
 
 ## P1/P2 路线
 
 - P1 全部完成：✅ cleartext 签名（与 gpg 互验）、✅ PGP/MIME（RFC 3156 构建/解析，与 gpg 互验）、✅ DEFLATE、✅ Ed25519（签名/验证/密钥生成，与 gpg 双向互验）、✅ ECDH Curve25519Legacy 加密端（X25519 + KDF + key wrap，与 gpg 双向互验）。
-- 赛后路线：AEAD-OCB/GCM 生成端（OCB 自写；GCM 需重新评估来源）、Argon2 S2K（mooncry 有现成实现，
-  引入前需做供应链评估）、DEFLATE 自实现（替换 moonbit-community/flate，differential test 方案）、
-  v6 格式（X25519 算法 25 / Ed25519 算法 27）。
+- v6 + AEAD（2026-10-08）：RFC 9580 v6 Ed25519 分离签名与 v6 密钥/指纹
+  （与 go-crypto v1.4.1 及 mizchi `pgp` 参考包双向对拍）；另自写 OCB3（RFC 7253）
+  与 GCM，落地 4880bis tag-20 分块层与 v5 SKESK（`encpass ... aead`），
+  与 gpg `--force-aead` 双向字节级互操作（`scripts/interop_aead_gpg.sh`）。
+- 赛后路线：Argon2 S2K（计划自实现 BLAKE2b + Argon2id）、SEIPD v2 与 v6 消息加密
+  （v6 子钥、v6 one-pass 签名）、DEFLATE 自实现（替换 moonbit-community/flate，
+  differential test 方案）。
 
 新增能力（P1）：
 

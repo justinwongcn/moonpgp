@@ -39,10 +39,20 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       @fs.write_string_to_file(rest[2], key.to_public().to_armored())
       println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")
     }
+    "v6keygen" => {
+      check_args(rest.length(), 3)
+      let key = @api.generate_ed25519_v6_key(rest[0])
+      @fs.write_string_to_file(rest[1], key.to_armored())
+      @fs.write_string_to_file(rest[2], key.to_public().to_armored())
+      println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")
+    }
     "encpass" => {
       check_args(rest.length(), 3)
       let data = @fs.read_file_to_bytes(rest[1])
-      let armored = @api.encrypt_with_password(data, rest[0])
+      // Optional trailing "aead" selects the v5 SKESK + tag-20 shape
+      // (GnuPG --force-aead interop) instead of v4 SKESK + SEIPD v1.
+      let aead = rest.length() >= 4 && rest[3] == "aead"
+      let armored = @api.encrypt_with_password(data, rest[0], aead~)
       @fs.write_string_to_file(rest[2], armored)
       println("wrote \{rest[2]}")
     }
@@ -136,7 +146,8 @@ fn usage() -> Unit {
     "usage:\n" +
     "  keygen \"Name <me@example.com>\" key.asc pub.asc [bits]\n" +
     "  edkeygen \"Name <me@example.com>\" key.asc pub.asc\n" +
-    "  encpass <passphrase> <in> <out>\n" +
+    "  v6keygen \"Name <me@example.com>\" key.asc pub.asc   (RFC 9580 v6 Ed25519)\n" +
+    "  encpass <passphrase> <in> <out> [aead]   (aead = tag-20/GnuPG shape)\n" +
     "  decpass <passphrase> <in> <out>\n" +
     "  encpub <public-key.asc> <in> <out>\n" +
     "  decpriv <secret-key.asc> [passphrase] <in> <out>\n" +

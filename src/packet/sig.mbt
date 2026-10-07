@@ -157,8 +157,12 @@ pub fn SigSubpacket::body(self : SigSubpacket) -> Bytes {
 }
 
 ///|
-/// A version 4 signature packet body (RFC 9580 §5.2.3).
+/// A version 4 or version 6 signature packet body (RFC 9580 §5.2.3).
+/// Version 6 differs in the subpacket-area length widths (4 octets), the
+/// trailing salt, the trailer's version octet, and raw (non-MPI) Ed25519
+/// signature material.
 pub(all) struct SignaturePacket {
+  version : Int
   sig_type : SigType
   pub_algo : PubKeyAlgo
   hash_algo : Int
@@ -170,9 +174,23 @@ pub(all) struct SignaturePacket {
   raw_hashed_area : Bytes
   /// First two octets of the digest (fast check).
   fast_hash : Int
-  /// Algorithm-specific signature material in wire order (RSA: one MPI).
+  /// v6 only: the 16/24/32-octet salt, hashed before the data and NOT
+  /// counted in the trailer length. Empty for v4.
+  salt : Bytes
+  /// Algorithm-specific signature material in wire order (RSA: one MPI;
+  /// EdDSA legacy: two MPIs; Ed25519 v6: one raw 64-octet blob).
   sig_params : Array[Bytes]
 } derive(Debug)
+
+///|
+pub fn SignaturePacket::version(self : SignaturePacket) -> Int {
+  self.version
+}
+
+///|
+pub fn SignaturePacket::salt(self : SignaturePacket) -> Bytes {
+  self.salt
+}
 
 ///|
 pub fn SignaturePacket::sig_type(self : SignaturePacket) -> SigType {
@@ -264,21 +282,50 @@ fn serialize_subpackets(subs : Array[SigSubpacket]) -> Bytes {
 }
 
 ///|
+/// RFC 9580 §9.5 Table 23: the v6 signature salt size for a hash
+/// algorithm. Only SHA-2/SHA-3 have v6 salt sizes (MD5/SHA-1/RIPEMD-160
+/// are "N/A").
+pub fn salt_size_of_hash(hash_id : Int) -> Int raise {
+  match hash_id {
+    8 | 11 | 12 => 16 // SHA-256, SHA-224, SHA3-256
+    9 => 24 // SHA-384
+    10 | 14 => 32 // SHA-512, SHA3-512
+    _ =>
+      @error.fail(
+        "packet: hash algorithm \{hash_id} has no v6 signature salt size",
+      )
+  }
+}
+
+///|
 pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
-  guard version == 4 else {
+  guard version == 4 || version == 6 else {
     @error.fail("packet: unsupported signature version \{version}")
   }
+  let v6 = version == 6
   let sig_type = sig_type_of_number(r.read_u8())
   let pub_algo = pub_key_algo_of_number(r.read_u8())
   let hash_algo = r.read_u8()
-  let hashed_len = r.read_u16()
+  let hashed_len : Int = if v6 { r.read_u32() } else { r.read_u16() }
   let raw_hashed = r.read_bytes(hashed_len)
   let hashed = parse_subpackets(raw_hashed.exact_view())
-  let unhashed_len = r.read_u16()
+  let unhashed_len : Int = if v6 { r.read_u32() } else { r.read_u16() }
   let unhashed = parse_subpackets(r.read_bytes(unhashed_len).exact_view())
   let fast = r.read_u16()
+  let salt : Bytes = if v6 {
+    let salt_len = r.read_u8()
+    let expected = salt_size_of_hash(hash_algo)
+    guard salt_len == expected else {
+      @error.fail(
+        "packet: v6 signature salt of \{salt_len} octets does not match the hash algorithm (expected \{expected})",
+      )
+    }
+    r.read_bytes(salt_len)
+  } else {
+    Bytes::new(0)
+  }
   let params : Array[Bytes] = []
   match pub_algo {
     RsaEncryptOrSign | RsaEncryptOnly | RsaSignOnly => params.push(r.read_mpi())
@@ -287,11 +334,15 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
       params.push(r.read_mpi())
       params.push(r.read_mpi())
     }
+    Ed25519 =>
+      // v6 Ed25519 carries 64 raw octets, not MPIs (§5.2.3.4).
+      params.push(r.read_rest())
     _ =>
       // Unknown material is carried raw so the packet still round-trips.
       params.push(r.read_rest())
   }
   SignaturePacket::{
+    version,
     sig_type,
     pub_algo,
     hash_algo,
@@ -299,6 +350,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
     unhashed_subpackets: unhashed,
     raw_hashed_area: raw_hashed,
     fast_hash: fast,
+    salt,
     sig_params: params,
   }
 }
@@ -306,7 +358,8 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
 ///|
 pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
   let w = Writer::new()
-  w.u8(4)
+  let v6 = self.version >= 6
+  w.u8(self.version)
   w.u8(self.sig_type.number())
   w.u8(self.pub_algo.number())
   w.u8(self.hash_algo)
@@ -314,14 +367,29 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
     b if b.length() > 0 => b
     _ => serialize_subpackets(self.hashed_subpackets)
   }
-  w.u16(hashed.length())
+  if v6 {
+    w.u32(hashed.length())
+  } else {
+    w.u16(hashed.length())
+  }
   w.bytes(hashed.exact_view())
   let unhashed = serialize_subpackets(self.unhashed_subpackets)
-  w.u16(unhashed.length())
+  if v6 {
+    w.u32(unhashed.length())
+  } else {
+    w.u16(unhashed.length())
+  }
   w.bytes(unhashed.exact_view())
   w.u16(self.fast_hash)
+  if v6 {
+    w.u8(self.salt.length())
+    w.bytes(self.salt.exact_view())
+  }
   for p in self.sig_params {
-    w.mpi(p.exact_view())
+    match self.pub_algo {
+      Ed25519 => w.bytes(p.exact_view())
+      _ => w.mpi(p.exact_view())
+    }
   }
   w.to_bytes()
 }
@@ -378,9 +446,15 @@ pub fn SignaturePacket::issuer_key_id(self : SignaturePacket) -> Bytes? {
         None => return None
       }
   }
-  // Body: version octet then fingerprint (20 octets for v4).
+  // Body: version octet then fingerprint (20 octets for v4, 32 for v6).
   if fp.length() >= 9 {
-    Some(fp[fp.length() - 8:fp.length()].to_owned())
+    let fp_version = fp[0].to_int()
+    if fp_version >= 5 {
+      // v6: the key id is the HIGH-order 64 bits of the fingerprint.
+      Some(fp[1:9].to_owned())
+    } else {
+      Some(fp[fp.length() - 8:fp.length()].to_owned())
+    }
   } else {
     None
   }
@@ -396,11 +470,13 @@ pub fn SignaturePacket::key_flags(self : SignaturePacket) -> Bytes? {
 }
 
 ///|
-/// The v4 hash prefix: version(4) | type | pubalgo | hashalgo |
-/// hashed_len(2) | hashed area (raw wire bytes when available).
+/// The hash prefix: version | type | pubalgo | hashalgo |
+/// hashed_len | hashed area (raw wire bytes when available). Version 6
+/// uses a 4-octet subpacket-area length (RFC 9580 §5.2.3).
 pub fn SignaturePacket::hash_prefix(self : SignaturePacket) -> Bytes {
   let w = Writer::new()
-  w.u8(4)
+  let v6 = self.version >= 6
+  w.u8(self.version)
   w.u8(self.sig_type.number())
   w.u8(self.pub_algo.number())
   w.u8(self.hash_algo)
@@ -408,17 +484,21 @@ pub fn SignaturePacket::hash_prefix(self : SignaturePacket) -> Bytes {
     b if b.length() > 0 => b
     _ => serialize_subpackets(self.hashed_subpackets)
   }
-  w.u16(hashed.length())
+  if v6 {
+    w.u32(hashed.length())
+  } else {
+    w.u16(hashed.length())
+  }
   w.bytes(hashed.exact_view())
   w.to_bytes()
 }
 
 ///|
-/// The v4 final trailer: 0x04 0xFF and the 4-octet length of everything
-/// hashed before it.
-pub fn signature_trailer(hashed_body_len : Int) -> Bytes {
+/// The final trailer: 0x04|0x06 0xFF and the 4-octet length of everything
+/// hashed before it (RFC 9580 §5.2.4).
+pub fn signature_trailer(version : Int, hashed_body_len : Int) -> Bytes {
   let w = Writer::new()
-  w.u8(4)
+  w.u8(version)
   w.u8(255)
   w.u32(hashed_body_len)
   w.to_bytes()

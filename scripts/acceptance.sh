@@ -13,6 +13,8 @@ moon test
 
 echo "== 3/3 interop + e2e =="
 bash scripts/interop_check.sh
+bash scripts/interop_aead_gpg.sh
 bash example/mailer/e2e.sh
+bash example/mailer/e2e_tls.sh
 
 echo "ACCEPTANCE PASS"

@@ -92,20 +92,40 @@ pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
 }
 
 ///|
-/// SKESK v4 packet body (RFC 9580 §5.3.1).
+/// SKESK packet body, versions 4 (RFC 9580 §5.3.1) and 5 (the 4880bis /
+/// crypto-refresh AEAD-wrapped session key GnuPG 2.4 emits under
+/// --force-aead). Version 5 adds the AEAD algorithm and an IV; its
+/// encrypted session key is sealed with the S2K-derived key directly
+/// (the HKDF step belongs to the v6 SKESK, not implemented).
 pub(all) struct SkeskPacket {
+  version : Int
   /// Symmetric algorithm used for the message; also the default derivation
   /// length selector for the S2K key.
   cipher_algo : Int
+  /// AEAD algorithm id for version 5 (0 for version 4).
+  aead_algo : Int
   s2k : @s2k.S2k
-  /// Encrypted session key (algo octet + key), present when the S2K key
-  /// only wraps the session key. Empty when the S2K derives it directly.
+  /// AEAD IV for version 5 (empty for version 4).
+  iv : Bytes
+  /// Encrypted session key (v4: algo octet + key, CFB-wrapped; v5: the
+  /// AEAD seal of the key alone), present when the S2K key only wraps the
+  /// session key. Empty when the S2K derives it directly.
   encrypted_session_key : Bytes
 } derive(Debug)
 
 ///|
+pub fn SkeskPacket::version(self : SkeskPacket) -> Int {
+  self.version
+}
+
+///|
 pub fn SkeskPacket::cipher_algo(self : SkeskPacket) -> Int {
   self.cipher_algo
+}
+
+///|
+pub fn SkeskPacket::aead_algo(self : SkeskPacket) -> Int {
+  self.aead_algo
 }
 
 ///|
@@ -114,31 +134,157 @@ pub fn SkeskPacket::s2k(self : SkeskPacket) -> @s2k.S2k {
 }
 
 ///|
+pub fn SkeskPacket::iv(self : SkeskPacket) -> Bytes {
+  self.iv
+}
+
+///|
 pub fn SkeskPacket::encrypted_session_key(self : SkeskPacket) -> Bytes {
   self.encrypted_session_key
+}
+
+///|
+/// IV length of an AEAD algorithm id (RFC 9580 §9.6): 1 EAX=16, 2 OCB=15,
+/// 3 GCM=12. Local table (mirroring @cipher.AeadMode::iv_length) keeps the
+/// packet layer free of a cipher-package dependency, like the cipher
+/// block-size table above.
+fn aead_iv_len(algo : Int) -> Int raise {
+  match algo {
+    1 => 16
+    2 => 15
+    3 => 12
+    _ => @error.fail("packet: unknown AEAD algorithm \{algo}")
+  }
 }
 
 ///|
 pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
-  guard version == 4 else {
+  guard version == 4 || version == 5 else {
     @error.fail("packet: unsupported SKESK version \{version}")
   }
   let cipher_algo = r.read_u8()
+  let aead_algo = if version == 5 { r.read_u8() } else { 0 }
   let (s2k, used) = @s2k.parse(r.view())
   ignore(r.read_bytes(used))
+  let iv = if version == 5 {
+    r.read_bytes(aead_iv_len(aead_algo))
+  } else {
+    Bytes::new(0)
+  }
   let esk = r.read_rest()
-  SkeskPacket::{ cipher_algo, s2k, encrypted_session_key: esk, }
+  SkeskPacket::{
+    version,
+    cipher_algo,
+    aead_algo,
+    s2k,
+    iv,
+    encrypted_session_key: esk,
+  }
 }
 
 ///|
 pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes raise {
   let w = Writer::new()
-  w.u8(4)
+  w.u8(self.version)
   w.u8(self.cipher_algo)
+  if self.version == 5 {
+    w.u8(self.aead_algo)
+  }
   w.bytes(self.s2k.encode().exact_view())
+  if self.version == 5 {
+    guard self.iv.length() == aead_iv_len(self.aead_algo) else {
+      @error.fail("packet: bad SKESK v5 IV length")
+    }
+    w.bytes(self.iv.exact_view())
+  }
   w.bytes(self.encrypted_session_key.exact_view())
+  w.to_bytes()
+}
+
+///|
+/// AEAD Encrypted Data Packet (tag 20) body, version 1
+/// (draft-ietf-openpgp-rfc4880bis §5.16) — the shape GnuPG 2.4 produces
+/// under --force-aead. RFC 9580 reserves tag 20 in favour of SEIPD v2;
+/// this packet exists here for GnuPG interop and legacy data.
+pub(all) struct AeadPacket {
+  version : Int
+  cipher_algo : Int
+  aead_algo : Int
+  chunk_octet : Int
+  iv : Bytes
+  /// Chunk ciphertexts+tags followed by the final tag.
+  ciphertext : Bytes
+} derive(Debug)
+
+///|
+pub fn AeadPacket::version(self : AeadPacket) -> Int {
+  self.version
+}
+
+///|
+pub fn AeadPacket::cipher_algo(self : AeadPacket) -> Int {
+  self.cipher_algo
+}
+
+///|
+pub fn AeadPacket::aead_algo(self : AeadPacket) -> Int {
+  self.aead_algo
+}
+
+///|
+pub fn AeadPacket::chunk_octet(self : AeadPacket) -> Int {
+  self.chunk_octet
+}
+
+///|
+pub fn AeadPacket::iv(self : AeadPacket) -> Bytes {
+  self.iv
+}
+
+///|
+pub fn AeadPacket::ciphertext(self : AeadPacket) -> Bytes {
+  self.ciphertext
+}
+
+///|
+pub fn AeadPacket::parse(body : BytesView) -> AeadPacket raise {
+  let r = Reader::new(body)
+  let version = r.read_u8()
+  guard version == 1 else {
+    @error.fail("packet: unsupported AEAD packet version \{version}")
+  }
+  let cipher_algo = r.read_u8()
+  let aead_algo = r.read_u8()
+  let chunk_octet = r.read_u8()
+  let iv = r.read_bytes(aead_iv_len(aead_algo))
+  let ct = r.read_rest()
+  AeadPacket::{
+    version,
+    cipher_algo,
+    aead_algo,
+    chunk_octet,
+    iv,
+    ciphertext: ct,
+  }
+}
+
+///|
+pub fn AeadPacket::to_body(self : AeadPacket) -> Bytes raise {
+  guard self.version == 1 else {
+    @error.fail("packet: unsupported AEAD packet version \{self.version}")
+  }
+  guard self.iv.length() == aead_iv_len(self.aead_algo) else {
+    @error.fail("packet: bad AEAD packet IV length")
+  }
+  let w = Writer::new()
+  w.u8(self.version)
+  w.u8(self.cipher_algo)
+  w.u8(self.aead_algo)
+  w.u8(self.chunk_octet)
+  w.bytes(self.iv.exact_view())
+  w.bytes(self.ciphertext.exact_view())
   w.to_bytes()
 }
 
@@ -286,6 +432,9 @@ pub fn session_key_checksum(key : BytesView) -> Int {
   }
   sum
 }
+
+///|
+pub extend AeadPacket with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 pub extend CompressedPacket with @moonbitlang/core/debug.Debug::{to_repr}

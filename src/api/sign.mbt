@@ -25,7 +25,8 @@ fn canonicalize_text(data : BytesView) -> Bytes {
 
 ///|
 /// Document bytes hashed for a signature over `data` with sig type 0x00
-/// (binary) or 0x01 (canonical text).
+/// (binary) or 0x01 (canonical text). Version 6 prepends the salt to the
+/// hash input (RFC 9580 §5.2.4) and uses a 4-octet trailer length.
 fn document_hash(
   sig : @packet.SignaturePacket,
   data : BytesView,
@@ -35,13 +36,45 @@ fn document_hash(
     @packet.CanonicalTextDocument => canonicalize_text(data)
     _ => data.to_owned()
   }
+  finish_signed_digest(sig, content.exact_view())
+}
+
+///|
+/// Hash input assembly shared by document and key signatures: the salt
+/// (v6 only, before everything else), the framed data, the hash prefix
+/// and the version-appropriate trailer.
+fn finish_signed_digest(
+  sig : @packet.SignaturePacket,
+  data : BytesView,
+) -> Bytes raise {
   let w = @packet.Writer::new()
-  w.bytes(content.exact_view())
+  w.bytes(sig.salt().exact_view())
+  w.bytes(data)
   w.bytes(sig.hash_prefix().exact_view())
-  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).exact_view())
+  w.bytes(
+    @packet.signature_trailer(sig.version(), sig.hash_prefix().length()).exact_view(),
+  )
   match @primitives.hash_id_of_number(sig.hash_algo()) {
     Some(h) => h.digest(w.to_bytes().exact_view())
     None => @error.fail("api: unknown hash algorithm")
+  }
+}
+
+///|
+/// Issuer Fingerprint subpacket body: version octet || fingerprint
+/// (RFC 9580 §5.2.3.33). This is how v6 signatures identify their key —
+/// the Issuer Key ID subpacket MUST NOT be used for keys newer than v4.
+fn issuer_fingerprint_subpacket(
+  pub_packet : @packet.PublicKeyPacket,
+) -> @packet.SigSubpacket raise {
+  let fp = pub_packet.fingerprint()
+  let w = @packet.Writer::new()
+  w.u8(pub_packet.version())
+  w.bytes(fp.exact_view())
+  {
+    critical: false,
+    sub_type: @packet.SIGSUB_ISSUER_FINGERPRINT,
+    body: w.to_bytes(),
   }
 }
 
@@ -73,27 +106,48 @@ fn make_document_signature_with(
   hash : @primitives.HashId,
 ) -> @packet.SignaturePacket raise {
   let now = @primitives.unix_now().to_int()
+  let v6 = key.primary.public.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
     key_flags_subpacket(0x02),
   ]
-  let issuer : Array[@packet.SigSubpacket] = [
-    {
-      critical: false,
-      sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
-      // No catch: a key whose id cannot be computed must fail the signing
-      // loudly, not emit a signature with an empty issuer (F15).
-      body: key.primary.public.key_id(),
-    },
-  ]
+  if v6 {
+    hashed.push(issuer_fingerprint_subpacket(key.primary.public))
+  }
+  let unhashed : Array[@packet.SigSubpacket] = if v6 {
+    // §5.2.3.12: no Issuer Key ID subpacket on v6 signatures; the
+    // fingerprint subpacket above carries the issuer.
+    []
+  } else {
+    [
+      {
+        critical: false,
+        sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
+        // No catch: a key whose id cannot be computed must fail the signing
+        // loudly, not emit a signature with an empty issuer (F15).
+        body: key.primary.public.key_id(),
+      },
+    ]
+  }
+  let salt : Bytes = if v6 {
+    @primitives.random_bytes(@packet.salt_size_of_hash(hash.number()))
+  } else {
+    Bytes::new(0)
+  }
   let sig : @packet.SignaturePacket = {
+    version: if v6 {
+      6
+    } else {
+      4
+    },
     sig_type,
     pub_algo: key.primary.public.algo(),
     hash_algo: hash.number(),
     hashed_subpackets: hashed,
-    unhashed_subpackets: issuer,
+    unhashed_subpackets: unhashed,
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0,
+    salt,
     sig_params: [],
   }
   let digest = document_hash(sig, data, sig_type)
@@ -263,6 +317,14 @@ fn verify_signature_packet(
     None => NoVerifier
     Some(signer_pk) => {
       let digest = document_hash(sig, data, sig.sig_type())
+      // RFC 9580 §5.2.4: a v6 verifier MUST reject the signature when the
+      // left 16 bits of the digest do not match the stored hash tag.
+      if sig.version() >= 6 {
+        let tag = (digest[0].to_int() << 8) | digest[1].to_int()
+        if tag != sig.fast_hash() {
+          return Failed
+        }
+      }
       let hash_id = match @primitives.hash_id_of_number(sig.hash_algo()) {
         Some(h) => h
         None => return Failed
@@ -292,6 +354,11 @@ pub fn sign_inline(
   key : PrivateKey,
   text_mode? : Bool,
 ) -> String raise {
+  guard key.primary.public.version() < 6 else {
+    @error.fail(
+      "api: v6 keys need a v6 One-Pass Signature packet, not implemented yet; use detached signing",
+    )
+  }
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(key, data, sig_type)
   let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
@@ -336,6 +403,11 @@ pub fn sign_and_encrypt(
   recipients : Array[PublicKey],
   text_mode? : Bool,
 ) -> String raise {
+  guard signer.primary.public.version() < 6 else {
+    @error.fail(
+      "api: v6 keys need a v6 One-Pass Signature packet, not implemented yet; use detached signing",
+    )
+  }
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(signer, data, sig_type)
   let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")

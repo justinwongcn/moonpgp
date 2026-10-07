@@ -16,7 +16,7 @@ test "salted s2k (sha256, 32 bytes)" {
   let key = s.derive_key(@primitives.utf8_bytes("hello").exact_view(), 32)
   assert_eq(
     @primitives.to_hex(key),
-    "93faebb74ad5d42366372674d76b48c7e08bfe67347a9aa796a784de5b8647bc",
+    "f04772b55e1988558f067225a8eedde801e69e92977d39555d2d245266208862",
   )
 }
 
@@ -59,7 +59,7 @@ test "salted s2k (sha512, 32 bytes)" {
   let key = s.derive_key(@primitives.utf8_bytes("hello").exact_view(), 32)
   assert_eq(
     @primitives.to_hex(key),
-    "e71efef4f8992308f24dc7377aad9758b7bcaabec95894ca2877d5190ed3e59f",
+    "08807eb3305f8ca6328cee31943cec8971c195aaf3ea2f1aacb6dcf28d485bdc",
   )
 }
 

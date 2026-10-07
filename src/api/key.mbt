@@ -8,6 +8,9 @@ pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
   user_id : String
   self_signature : @packet.SignaturePacket
+  /// v6 keys: the Direct Key signature (type 0x1F) over the primary key,
+  /// required by RFC 9580 §5.2.3.10 before a v6 key may be used.
+  direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.SecretKeyPacket?
   subkey_binding : @packet.SignaturePacket?
 } derive(Debug)
@@ -19,6 +22,7 @@ pub struct PublicKey {
   primary : @packet.PublicKeyPacket
   user_id : String
   self_signature : @packet.SignaturePacket
+  direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.PublicKeyPacket?
   subkey_binding : @packet.SignaturePacket?
 } derive(Debug)
@@ -76,12 +80,21 @@ pub fn PrivateKey::to_public(self : PrivateKey) -> PublicKey {
     primary: self.primary.public,
     user_id: self.user_id,
     self_signature: self.self_signature,
+    direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) => Some(sk.public)
       None => None
     },
     subkey_binding: self.subkey_binding,
   }
+}
+
+///|
+/// The Direct Key signature (type 0x1F) of a v6 key, when present.
+pub fn PublicKey::direct_signature(
+  self : PublicKey,
+) -> @packet.SignaturePacket? {
+  self.direct_signature
 }
 
 ///|
@@ -136,8 +149,29 @@ fn eddsa_secret_parts(
 }
 
 ///|
+/// v6 Ed25519 secret parts: the secret material is 32 raw octets (no
+/// MPI, no checksum — RFC 9580 §5.5.5.9) and the public point is the
+/// single 32-octet native parameter.
+fn ed25519_v6_secret_parts(
+  p : @packet.SecretKeyPacket,
+) -> @pki.Ed25519SecretKey raise {
+  guard p.s2k_usage == 0 else {
+    @error.fail("api: secret key material is locked; unlock it first")
+  }
+  guard p.secret_material.length() == 32 else {
+    @error.fail("api: bad v6 Ed25519 secret key length")
+  }
+  let params = p.public.params()
+  guard params.length() == 1 && params[0].length() == 32 else {
+    @error.fail("api: bad v6 Ed25519 public key")
+  }
+  @pki.Ed25519SecretKey::{ seed: p.secret_material, public: params[0], }
+}
+
+///|
 /// Sign `digest` with the key's algorithm; returns the algorithm-specific
-/// signature MPI bodies (RSA: DigestInfo-encoded EM; EdDSA: r and s).
+/// signature material in wire order (RSA: DigestInfo-encoded EM; EdDSA
+/// legacy: r and s MPIs; Ed25519 v6: one raw 64-octet blob).
 fn sign_digest_with_key(
   secret_packet : @packet.SecretKeyPacket,
   hash : @primitives.HashId,
@@ -148,6 +182,10 @@ fn sign_digest_with_key(
       let ed = eddsa_secret_parts(secret_packet)
       let sig64 = ed.sign(digest)
       [sig64[0:32].to_owned(), sig64[32:64].to_owned()]
+    }
+    @packet.Ed25519 => {
+      let ed = ed25519_v6_secret_parts(secret_packet)
+      [ed.sign(digest)]
     }
     _ => {
       let rsa = rsa_secret_parts(secret_packet)
@@ -175,6 +213,18 @@ fn verify_sig_material(
       let pk = @pki.ed25519_public_key(pub_bytes.exact_view())
       let sig64 = r.add(sv)
       pk.verify(digest, sig64.exact_view())
+    }
+    @packet.Ed25519 => {
+      // v6: one raw 64-octet signature over a 32-octet native point.
+      guard sig_params.length() == 1 && sig_params[0].length() == 64 else {
+        return false
+      }
+      let params = pub_packet.params()
+      guard params.length() == 1 && params[0].length() == 32 else {
+        return false
+      }
+      let pk = @pki.ed25519_public_key(params[0].exact_view())
+      pk.verify(digest, sig_params[0].exact_view())
     }
     _ => {
       guard sig_params.length() == 1 else { return false }
@@ -213,6 +263,36 @@ fn build_eddsa_secret_key_packet(
     s2k_spec: Bytes::new(0),
     iv: Bytes::new(0),
     secret_material: w2.to_bytes(),
+    dummy: false,
+  }
+}
+
+///|
+/// Build a v6 Ed25519 secret key packet (RFC 9580 §5.5.2.3/§5.5.5.9):
+/// native 32-octet public point, 32 raw octets of secret seed and no
+/// trailing checksum.
+fn build_ed25519_v6_secret_key_packet(
+  seed : Bytes,
+  creation : Int,
+) -> @packet.SecretKeyPacket raise {
+  guard seed.length() == 32 else {
+    @error.fail("api: Ed25519 seed must be 32 octets")
+  }
+  let ed = @pki.ed25519_public_of_seed(seed.exact_view())
+  let params : Array[Bytes] = [ed.public]
+  let pub_packet : @packet.PublicKeyPacket = {
+    version: 6,
+    creation_time: creation,
+    algo: @packet.Ed25519,
+    params,
+  }
+  @packet.SecretKeyPacket::{
+    public: pub_packet,
+    s2k_usage: 0,
+    cipher_algo: 0,
+    s2k_spec: Bytes::new(0),
+    iv: Bytes::new(0),
+    secret_material: seed,
     dummy: false,
   }
 }
@@ -327,21 +407,43 @@ fn make_self_signature(
     key_flags_subpacket(0x03),
     ..preferred_subpackets(),
   ]
-  let issuer : Array[@packet.SigSubpacket] = [
-    {
-      critical: false,
-      sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
-      body: pub_packet.key_id(),
-    },
-  ]
+  let v6 = pub_packet.version() >= 6
+  if v6 {
+    // §5.2.3.12/33: v6 keys identify the issuer by fingerprint.
+    hashed.push(issuer_fingerprint_subpacket(pub_packet))
+  }
+  let unhashed : Array[@packet.SigSubpacket] = if v6 {
+    []
+  } else {
+    [
+      {
+        critical: false,
+        sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
+        body: pub_packet.key_id(),
+      },
+    ]
+  }
+  let salt : Bytes = if v6 {
+    @primitives.random_bytes(
+      @packet.salt_size_of_hash(@primitives.Sha256.number()),
+    )
+  } else {
+    Bytes::new(0)
+  }
   let sig : @packet.SignaturePacket = {
+    version: if v6 {
+      6
+    } else {
+      4
+    },
     sig_type: @packet.PositiveCertification,
     pub_algo: secret_packet.public.algo(),
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
-    unhashed_subpackets: issuer,
+    unhashed_subpackets: unhashed,
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0,
+    salt,
     sig_params: [],
   }
   let digest = hash_certification(sig, pub_packet, user_id)
@@ -349,13 +451,52 @@ fn make_self_signature(
 }
 
 ///|
-/// Create a subkey binding signature (0x18).
+/// Create the Direct Key signature (type 0x1F) over the primary key that
+/// RFC 9580 §5.2.3.10 requires before a v6 key may be used.
+fn make_direct_key_signature(
+  secret_packet : @packet.SecretKeyPacket,
+  pub_packet : @packet.PublicKeyPacket,
+  now : Int,
+) -> @packet.SignaturePacket raise {
+  guard pub_packet.version() >= 6 else {
+    @error.fail("api: direct key signatures are a v6 construct")
+  }
+  let hashed : Array[@packet.SigSubpacket] = [
+    { ..creation_subpacket(now), critical: true, },
+    key_flags_subpacket(0x03),
+    ..preferred_subpackets(),
+    issuer_fingerprint_subpacket(pub_packet),
+  ]
+  let sig : @packet.SignaturePacket = {
+    version: 6,
+    sig_type: @packet.DirectSignature,
+    pub_algo: secret_packet.public.algo(),
+    hash_algo: @primitives.Sha256.number(),
+    hashed_subpackets: hashed,
+    unhashed_subpackets: [],
+    raw_hashed_area: Bytes::new(0),
+    fast_hash: 0,
+    salt: @primitives.random_bytes(
+      @packet.salt_size_of_hash(@primitives.Sha256.number()),
+    ),
+    sig_params: [],
+  }
+  let digest = hash_direct_key(sig, pub_packet)
+  finish_signature(sig, secret_packet, @primitives.Sha256, digest.exact_view())
+}
+
+///|
+/// Create a subkey binding signature (0x18). v4 only: our v6 keys carry
+/// no subkeys yet (v6 subkeys need v6 X25519 material and SEIPD v2).
 fn make_binding_signature(
   secret_packet : @packet.SecretKeyPacket,
   primary_pub : @packet.PublicKeyPacket,
   subkey_pub : @packet.PublicKeyPacket,
   now : Int,
 ) -> @packet.SignaturePacket raise {
+  guard primary_pub.version() < 6 && subkey_pub.version() < 6 else {
+    @error.fail("api: v6 subkeys are not supported yet")
+  }
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
     key_flags_subpacket(0x0C),
@@ -369,6 +510,8 @@ fn make_binding_signature(
     },
   ]
   let sig : @packet.SignaturePacket = {
+    version: 4,
+    salt: Bytes::new(0),
     sig_type: @packet.SubkeyBinding,
     pub_algo: secret_packet.public.algo(),
     hash_algo: @primitives.Sha256.number(),
@@ -383,44 +526,54 @@ fn make_binding_signature(
 }
 
 ///|
+/// Frame a key packet for certification hashing: v4 uses 0x99 + u16
+/// length, v6 uses 0x9B + u32 length (RFC 9580 §5.2.4).
+fn write_key_framing(
+  w : @packet.Writer,
+  pub_packet : @packet.PublicKeyPacket,
+) -> Unit raise {
+  let body = pub_packet.to_body()
+  if pub_packet.version() >= 6 {
+    w.u8(0x9B)
+    w.u32(body.length())
+    w.bytes(body.exact_view())
+  } else {
+    // v4 hash framing encodes the packet length as u16 (F09): a larger key
+    // packet would silently truncate and produce an unverifiable signature.
+    guard body.length() <= 0xFFFF else {
+      @error.fail("api: key packet too large")
+    }
+    w.u8(0x99)
+    w.u16(body.length())
+    w.bytes(body.exact_view())
+  }
+}
+
+///|
 /// Hash data for a User ID certification.
 fn hash_certification(
   sig : @packet.SignaturePacket,
   pub_packet : @packet.PublicKeyPacket,
   user_id : String,
 ) -> Bytes raise {
-  let key_body = pub_packet.to_body()
-  // v4 hash framing encodes the packet length as u16 (F09): a larger key
-  // packet would silently truncate and produce an unverifiable signature.
-  guard key_body.length() <= 0xFFFF else {
-    @error.fail("api: key packet too large")
-  }
   let uid = @primitives.utf8_bytes(user_id)
   let w = @packet.Writer::new()
-  w.u8(0x99)
-  w.u16(key_body.length())
-  w.bytes(key_body.exact_view())
+  write_key_framing(w, pub_packet)
   w.u8(0xB4)
   w.u32(uid.length())
   w.bytes(uid.exact_view())
-  w.bytes(sig.hash_prefix().exact_view())
-  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).exact_view())
-  signature_digest(sig, w.to_bytes().exact_view())
+  finish_signed_digest(sig, w.to_bytes().exact_view())
 }
 
 ///|
-/// Digest `data` under the signature packet's hash algorithm.
-fn signature_digest(
+/// Hash data for a Direct Key signature: the framed key packet alone.
+fn hash_direct_key(
   sig : @packet.SignaturePacket,
-  data : BytesView,
+  pub_packet : @packet.PublicKeyPacket,
 ) -> Bytes raise {
-  match @primitives.hash_id_of_number(sig.hash_algo()) {
-    Some(h) => h.digest(data)
-    None =>
-      @error.fail(
-        "api: unsupported signature hash algorithm \{sig.hash_algo()}",
-      )
-  }
+  let w = @packet.Writer::new()
+  write_key_framing(w, pub_packet)
+  finish_signed_digest(sig, w.to_bytes().exact_view())
 }
 
 ///|
@@ -430,22 +583,10 @@ fn hash_binding(
   primary_pub : @packet.PublicKeyPacket,
   subkey_pub : @packet.PublicKeyPacket,
 ) -> Bytes raise {
-  let primary_body = primary_pub.to_body()
-  let subkey_body = subkey_pub.to_body()
-  // Same u16 framing guard as hash_certification (F09).
-  guard primary_body.length() <= 0xFFFF && subkey_body.length() <= 0xFFFF else {
-    @error.fail("api: key packet too large")
-  }
   let w = @packet.Writer::new()
-  w.u8(0x99)
-  w.u16(primary_body.length())
-  w.bytes(primary_body.exact_view())
-  w.u8(0x99)
-  w.u16(subkey_body.length())
-  w.bytes(subkey_body.exact_view())
-  w.bytes(sig.hash_prefix().exact_view())
-  w.bytes(@packet.signature_trailer(sig.hash_prefix().length()).exact_view())
-  signature_digest(sig, w.to_bytes().exact_view())
+  write_key_framing(w, primary_pub)
+  write_key_framing(w, subkey_pub)
+  finish_signed_digest(sig, w.to_bytes().exact_view())
 }
 
 ///|
@@ -458,10 +599,15 @@ pub fn verify_key_signature(
   signer_pub : @packet.PublicKeyPacket,
   certified_pub : @packet.PublicKeyPacket,
   user_id? : String,
+  direct? : Bool = false,
 ) -> Bool raise {
-  let digest : Bytes = match user_id {
-    Some(uid) => hash_certification(sig, certified_pub, uid)
-    None => hash_binding(sig, signer_pub, certified_pub)
+  let digest : Bytes = if direct {
+    hash_direct_key(sig, certified_pub)
+  } else {
+    match user_id {
+      Some(uid) => hash_certification(sig, certified_pub, uid)
+      None => hash_binding(sig, signer_pub, certified_pub)
+    }
   }
   let hash_id = match @primitives.hash_id_of_number(sig.hash_algo()) {
     Some(h) => h
@@ -502,14 +648,16 @@ pub fn generate_key(user_id : String, bits? : Int = 3072) -> PrivateKey raise {
     primary,
     user_id,
     self_signature: self_sig,
+    direct_signature: None,
     encryption_subkey: Some(subkey),
     subkey_binding: Some(binding),
   }
 }
 
 ///|
-/// Serialize to binary packets: SecretKey || UserID || cert || [
-/// SecretSubkey || binding ].
+/// Serialize to binary packets: SecretKey || [DirectKeySig] ||
+/// [UserID || cert] || [SecretSubkey || binding ]. A v6 key without a
+/// User ID writes only the Direct Key signature.
 pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
   let w = @packet.Writer::new()
   w.bytes(
@@ -518,16 +666,25 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
       self.primary.to_body().exact_view(),
     ).exact_view(),
   )
-  let uid = @primitives.utf8_bytes(self.user_id)
-  w.bytes(
-    @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
-  )
-  w.bytes(
-    @packet.serialize_packet(
-      @packet.Signature,
-      self.self_signature.to_body().exact_view(),
-    ).exact_view(),
-  )
+  match self.direct_signature {
+    Some(b) =>
+      w.bytes(
+        @packet.serialize_packet(@packet.Signature, b.to_body().exact_view()).exact_view(),
+      )
+    None => ()
+  }
+  if self.user_id != "" {
+    let uid = @primitives.utf8_bytes(self.user_id)
+    w.bytes(
+      @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
+    )
+    w.bytes(
+      @packet.serialize_packet(
+        @packet.Signature,
+        self.self_signature.to_body().exact_view(),
+      ).exact_view(),
+    )
+  }
   match self.encryption_subkey {
     Some(subkey) => {
       w.bytes(
@@ -568,16 +725,25 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
       self.primary.to_body().exact_view(),
     ).exact_view(),
   )
-  let uid = @primitives.utf8_bytes(self.user_id)
-  w.bytes(
-    @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
-  )
-  w.bytes(
-    @packet.serialize_packet(
-      @packet.Signature,
-      self.self_signature.to_body().exact_view(),
-    ).exact_view(),
-  )
+  match self.direct_signature {
+    Some(b) =>
+      w.bytes(
+        @packet.serialize_packet(@packet.Signature, b.to_body().exact_view()).exact_view(),
+      )
+    None => ()
+  }
+  if self.user_id != "" {
+    let uid = @primitives.utf8_bytes(self.user_id)
+    w.bytes(
+      @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
+    )
+    w.bytes(
+      @packet.serialize_packet(
+        @packet.Signature,
+        self.self_signature.to_body().exact_view(),
+      ).exact_view(),
+    )
+  }
   match self.encryption_subkey {
     Some(subkey) => {
       w.bytes(
@@ -618,6 +784,7 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
   let mut primary : @packet.PublicKeyPacket? = None
   let mut user_id = ""
   let mut self_sig : @packet.SignaturePacket? = None
+  let mut direct : @packet.SignaturePacket? = None
   let mut subkey : @packet.PublicKeyPacket? = None
   let mut binding : @packet.SignaturePacket? = None
   for p in packets {
@@ -638,6 +805,7 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
         match s.sig_type() {
           @packet.PositiveCertification | @packet.GenericCertification =>
             self_sig = Some(s)
+          @packet.DirectSignature => direct = Some(s)
           @packet.SubkeyBinding => binding = Some(s)
           _ => ()
         }
@@ -652,17 +820,30 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
     }
   }
   match primary {
-    Some(p) =>
+    Some(p) => {
+      // RFC 9580 §5.2.3.10: a v6 key must carry a valid Direct Key
+      // signature before it may be used. A v6 key without a User ID uses
+      // that signature as its key-level self-signature.
+      if p.version() >= 6 && direct is None {
+        @error.fail("api: v6 key has no direct-key signature")
+      }
+      let self_signature = match self_sig {
+        Some(s) => s
+        None =>
+          match direct {
+            Some(d) => d
+            None => @error.fail("api: key has no self-signature")
+          }
+      }
       PublicKey::{
         primary: p,
         user_id,
-        self_signature: match self_sig {
-          Some(s) => s
-          None => @error.fail("api: key has no self-signature")
-        },
+        self_signature,
+        direct_signature: direct,
         encryption_subkey: subkey,
         subkey_binding: binding,
       }
+    }
     None => @error.fail("api: no key packet found")
   }
 }
@@ -704,6 +885,7 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
         primary: p,
         user_id: pub_half.user_id,
         self_signature: pub_half.self_signature,
+        direct_signature: pub_half.direct_signature,
         encryption_subkey: subkey,
         subkey_binding: binding,
       }
@@ -765,8 +947,30 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
     primary,
     user_id,
     self_signature: self_sig,
+    direct_signature: None,
     encryption_subkey: Some(subkey),
     subkey_binding: Some(binding),
+  }
+}
+
+///|
+/// Generate a v6 Ed25519 signing key (RFC 9580): a v6 primary key with a
+/// User ID self-certification and the Direct Key signature the RFC
+/// requires before a v6 key may be used. No encryption subkey is created
+/// (v6 message encryption needs SEIPD v2, not implemented yet).
+pub fn generate_ed25519_v6_key(user_id : String) -> PrivateKey raise {
+  let now = @primitives.unix_now().to_int()
+  let seed = @primitives.random_bytes(32)
+  let primary = build_ed25519_v6_secret_key_packet(seed, now)
+  let self_sig = make_self_signature(primary, primary.public, user_id, now)
+  let direct = make_direct_key_signature(primary, primary.public, now)
+  PrivateKey::{
+    primary,
+    user_id,
+    self_signature: self_sig,
+    direct_signature: Some(direct),
+    encryption_subkey: None,
+    subkey_binding: None,
   }
 }
 

@@ -52,7 +52,7 @@ fn reply_code(line : String) -> Int raise {
 }
 
 ///|
-fn read_reply(sock : &Socket) -> (Int, Array[String]) raise {
+async fn read_reply(sock : &Sock) -> (Int, Array[String]) {
   let first = sock.read_line()
   let code = reply_code(first)
   let lines : Array[String] = []
@@ -74,16 +74,16 @@ fn read_reply(sock : &Socket) -> (Int, Array[String]) raise {
 }
 
 ///|
-fn smtp_command(sock : &Socket, line : String) -> Unit raise {
+async fn smtp_command(sock : &Sock, line : String) -> Unit {
   sock.write_all(@utf8.encode(line + "\r\n"))
 }
 
 ///|
-fn expect(
-  sock : &Socket,
+async fn expect(
+  sock : &Sock,
   want : Int,
   what : String,
-) -> (Int, Array[String]) raise {
+) -> (Int, Array[String]) {
   let (code, lines) = read_reply(sock)
   guard code == want else {
     @error.fail("smtp: \{what} failed with \{code}: \{lines[0]}")
@@ -102,21 +102,44 @@ fn plain_auth(user : String, pass : String) -> Bytes {
 }
 
 ///|
-/// Run one full submission: greeting → EHLO → [AUTH PLAIN] →
-/// MAIL FROM → RCPT TO×N → DATA (dot-stuffed) → "." → QUIT. `from` and
+/// Greeting only: consume the 220 banner (RFC 5321 §3.1).
+async fn smtp_greeting(sock : &Sock) -> Unit {
+  let (code, _) = read_reply(sock)
+  guard code == 220 else { @error.fail("smtp: no greeting (\{code})") }
+}
+
+///|
+/// STARTTLS negotiation over a plaintext connection (RFC 3207 §4):
+/// EHLO, require the STARTTLS capability, send STARTTLS, consume the
+/// 220 "ready to handshake" reply. The caller performs the TLS
+/// handshake on the same connection; the session continues with the
+/// second EHLO inside smtp_session (the plaintext EHLO's capabilities
+/// are void after the upgrade).
+async fn smtp_starttls_ehlo(sock : &Sock, ehlo_domain : String) -> Unit {
+  smtp_command(sock, "EHLO \{ehlo_domain}")
+  let (_, caps) = expect(sock, 250, "EHLO")
+  let has_starttls = caps.iter().any(line => line.has_prefix("STARTTLS"))
+  guard has_starttls else {
+    @error.fail("smtp: server does not advertise STARTTLS")
+  }
+  smtp_command(sock, "STARTTLS")
+  ignore(expect(sock, 220, "STARTTLS"))
+}
+
+///|
+/// Post-negotiation session: EHLO → [AUTH PLAIN] → MAIL FROM →
+/// RCPT TO×N → DATA (dot-stuffed) → "." → QUIT. `from` and
 /// `recipients` are envelope addr-specs (no display names). The QUIT
 /// reply is not checked: a connection already torn down must not fail
 /// an otherwise delivered message.
-pub fn smtp_send(
-  sock : &Socket,
+async fn smtp_session(
+  sock : &Sock,
   message : String,
   from : String,
   recipients : Array[String],
   ehlo_domain : String,
   auth : (String, String)?,
-) -> Unit raise {
-  let (code, _) = read_reply(sock)
-  guard code == 220 else { @error.fail("smtp: no greeting (\{code})") }
+) -> Unit {
   smtp_command(sock, "EHLO \{ehlo_domain}")
   let (_, caps) = expect(sock, 250, "EHLO")
   match auth {
@@ -150,4 +173,20 @@ pub fn smtp_send(
   ignore(expect(sock, 250, "end of DATA"))
   smtp_command(sock, "QUIT")
   let (_, _) = read_reply(sock)
+}
+
+///|
+/// Run one full plaintext submission: greeting → session. Same wire
+/// behavior as the pre-TLS single function; the TLS transports call
+/// the pieces directly (plan tls-transport §3.3).
+pub async fn smtp_send(
+  sock : &Sock,
+  message : String,
+  from : String,
+  recipients : Array[String],
+  ehlo_domain : String,
+  auth : (String, String)?,
+) -> Unit {
+  smtp_greeting(sock)
+  smtp_session(sock, message, from, recipients, ehlo_domain, auth)
 }

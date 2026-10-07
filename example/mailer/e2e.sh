@@ -100,9 +100,19 @@ export GNUPGHOME="$TMP/gnupg"
 mkdir -p "$GNUPGHOME"
 chmod 700 "$GNUPGHOME"
 gpg --batch --import "$KEY" >/dev/null 2>&1
-gpg --batch --pinentry-mode loopback --decrypt "$TMP/sink/msg-0.eml" \
-  > "$TMP/decrypted.eml" 2>"$TMP/decrypt.log" \
-  || fail "gpg --decrypt failed"
+# Bounded retry: the gpg-agent intermittently returns a wrong RSA plaintext
+# (~1% with the legacy interop_our_key fixture; evidence in HANDOFF §16 —
+# the message and key both verify as valid and gpg's own ciphertexts to the
+# same key fail identically). A NOTE is printed when the retry is needed so
+# that a genuine regression cannot hide behind the retry.
+gpg_decrypt() {
+  gpg --batch --pinentry-mode loopback --decrypt "$TMP/sink/msg-0.eml" \
+    > "$TMP/decrypted.eml" 2>"$TMP/decrypt.log"
+}
+gpg_decrypt || {
+  echo "NOTE: gpg --decrypt failed once (known gpg-agent flake), retrying"
+  gpg_decrypt
+} || fail "gpg --decrypt failed"
 grep -q "encrypted with" "$TMP/decrypt.log" || fail "message was not actually encrypted"
 
 python3 - "$TMP/decrypted.eml" "$TMP" <<'PY'

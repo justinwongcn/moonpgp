@@ -1,5 +1,8 @@
 ///|
-/// POSIX socket backend for the Socket seam (native target only).
+/// POSIX socket backend (native target only). One fd, two seams: the
+/// sync `Socket` trait (IMAP's read disciplines) and the async `Sock`
+/// trait (SMTP state machine) — the async methods run the same sync
+/// bodies in-line, so both transports share zero-duplicated wire code.
 /// Lessons from the review probes are baked in: per-OS sockaddr_in
 /// layouts, manual big-endian port (no htons double-swap),
 /// signal(SIGPIPE, SIG_IGN), SO_RCVTIMEO via dual setsockopt attempts
@@ -61,7 +64,8 @@ extern "c" fn c_uname(buf : FixedArray[Byte]) -> Int = "uname"
 
 ///|
 /// DNS is out of scope: dotted-quad IPv4 only (localhost maps to
-/// 127.0.0.1). Everything else raises with guidance.
+/// 127.0.0.1). Everything else raises with guidance. Hostname delivery
+/// goes through the async backend's DNS (AsyncSock over @socket.Tcp).
 #cfg(target="native")
 fn parse_ipv4(host : String) -> (Byte, Byte, Byte, Byte) raise {
   let h = if host == "localhost" { "127.0.0.1" } else { host }
@@ -131,7 +135,7 @@ priv struct NativeSock {
 /// attempted (dual setsockopt — macOS and Linux disagree on the level
 /// and option name; failures are ignored as best-effort).
 #cfg(target="native")
-pub fn connect_socket(host : String, port : Int) -> &Socket raise {
+fn open_native_sock(host : String, port : Int) -> NativeSock raise {
   guard port > 0 && port <= 65535 else {
     @error.fail("mailnet: port out of range \{port}")
   }
@@ -192,10 +196,25 @@ pub fn connect_socket(host : String, port : Int) -> &Socket raise {
 
 ///|
 #cfg(target="native")
-impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
-  // Partial-write retries copy the unsent tail (Bytes needs a contiguous
-  // pointer for the FFI call); blocking sockets rarely hit this path, so
-  // the copy is accepted rather than complicating the seam.
+pub fn connect_socket(host : String, port : Int) -> &Socket raise {
+  open_native_sock(host, port)
+}
+
+///|
+/// SMTP's plaintext backend: the same POSIX socket behind the async
+/// Sock seam (plan tls-transport §3.2 PosixSock).
+#cfg(target="native")
+pub fn connect_sock(host : String, port : Int) -> &Sock raise {
+  open_native_sock(host, port)
+}
+
+///|
+/// Shared sync body behind both Socket::write_all and Sock::write_all.
+/// Partial-write retries copy the unsent tail (Bytes needs a contiguous
+/// pointer for the FFI call); blocking sockets rarely hit this path, so
+/// the copy is accepted rather than complicating the seam.
+#cfg(target="native")
+fn NativeSock::sync_write_all(self : NativeSock, data : Bytes) -> Unit raise {
   let n = data.length()
   let mut off = 0
   while off < n {
@@ -214,7 +233,25 @@ impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
 
 ///|
 #cfg(target="native")
+impl Socket for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
+  self.sync_write_all(data)
+}
+
+///|
+#cfg(target="native")
+impl Sock for NativeSock with fn write_all(self, data : Bytes) -> Unit raise {
+  self.sync_write_all(data)
+}
+
+///|
+#cfg(target="native")
 impl Socket for NativeSock with fn read_line(self) -> String raise {
+  self.lb.read_line()
+}
+
+///|
+#cfg(target="native")
+impl Sock for NativeSock with fn read_line(self) -> String raise {
   self.lb.read_line()
 }
 
@@ -232,6 +269,28 @@ impl Socket for NativeSock with fn read_exact(self, n : Int) -> Bytes raise {
 
 ///|
 #cfg(target="native")
-impl Socket for NativeSock with fn close(self) -> Unit {
+fn NativeSock::sync_close(self : NativeSock) -> Unit {
   c_close(self.fd) |> ignore
+}
+
+///|
+#cfg(target="native")
+impl Socket for NativeSock with fn close(self) -> Unit {
+  self.sync_close()
+}
+
+///|
+#cfg(target="native")
+impl Sock for NativeSock with fn close(self) -> Unit {
+  self.sync_close()
+}
+
+///|
+/// Raw fd close for the TLS transport's teardown (the async coroutine
+/// bug forbids holding the Tcp object across await points, so the fd
+/// is captured as an Int and closed through the POSIX FFI once the
+/// TLS layer is closed). Native only.
+#cfg(target="native")
+pub fn close_fd_raw(fd : Int) -> Unit {
+  c_close(fd) |> ignore
 }

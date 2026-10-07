@@ -1,4 +1,5 @@
 import {
+  "moonbitlang/async",
   "justinwongcn/openpgp/example/netmail",
   "justinwongcn/openpgp/src/error",
   "justinwongcn/openpgp/src/api",

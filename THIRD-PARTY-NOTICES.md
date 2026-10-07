@@ -56,6 +56,17 @@ IN THE SOFTWARE.
 
 Repository: https://github.com/ProtonMail/gopenpgp
 
+## OpenSSL / LibreSSL（经 moonbitlang/async/tls 动态加载，未随包分发）
+
+`example/netmail` 的 TLS 提交（2026-10-06）通过官方包 `moonbitlang/async/tls`
+（Apache-2.0）的 native stub 工作。该 stub 运行期 `dlopen` 系统已安装的
+SSL 库（macOS 为 `/usr/lib/libssl.*.dylib` 即 LibreSSL；Linux 为
+`libssl.so.3`/`libssl.so.1.1` 即 OpenSSL），本项目不重新分发任何 SSL
+库的二进制或源码。OpenSSL 本身以 Apache-2.0 许可发布（OpenSSL 3.x）；
+LibreSSL 以其自有许可发布，权利归属 OpenSSL Software Services /
+LibreSSL 上游作者。使用本库的 TLS 提交功能即默认依赖目标机器的系统
+SSL 库，其许可条款随之适用。
+
 ## Standards documents（标准文档来源，公有规范，无 license 义务，仅记出处）
 
 测试向量还引用了以下标准中的官方向量：RFC 9580 / RFC 4880（OpenPGP）、

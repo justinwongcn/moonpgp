@@ -1,7 +1,16 @@
 import {
   "justinwongcn/openpgp/src/api",
   "justinwongcn/openpgp/src/error",
+  "moonbitlang/async/io",
+  "moonbitlang/async/socket",
+  "moonbitlang/async/tls",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/x/fs",
 }
+
+// `async test` requires the async runtime package; only the white-box
+// SMTP tests reference it (main imports stay lean for wasm).
+import {
+  "moonbitlang/async",
+} for "wbtest"

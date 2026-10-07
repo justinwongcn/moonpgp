@@ -1,10 +1,10 @@
 ///|
-/// Offline SMTP state-machine tests: a scripted fake Socket drives
+/// Offline SMTP state-machine tests: a scripted fake Sock drives
 /// read_reply/smtp_send and records every client write, so the full
 /// wire conversation is asserted without any network. White-box file:
-/// the state machine's helpers are package-private. The Socket trait
-/// now lives in example/mailnet; read_raw_line/read_exact are IMAP
-/// disciplines and never fire in SMTP flows, hence the raise stubs.
+/// the state machine's helpers are package-private. Async migration
+/// (plan tls-transport M1): same scripts, same assertions — only the
+/// seam changed from sync Socket to async Sock.
 
 ///|
 priv struct FakeSock {
@@ -20,7 +20,7 @@ fn fake_sock(script : Array[String]) -> FakeSock {
 }
 
 ///|
-impl Socket for FakeSock with fn read_line(self) -> String raise {
+impl Sock for FakeSock with fn read_line(self) -> String raise {
   guard self.script_pos < self.script.length() else {
     @error.fail("fake: script exhausted (server closed)")
   }
@@ -30,22 +30,12 @@ impl Socket for FakeSock with fn read_line(self) -> String raise {
 }
 
 ///|
-impl Socket for FakeSock with fn write_all(self, data : Bytes) -> Unit raise {
+impl Sock for FakeSock with fn write_all(self, data : Bytes) -> Unit raise {
   self.sent_raw.push(data)
 }
 
 ///|
-impl Socket for FakeSock with fn read_raw_line(_self) -> Bytes raise {
-  @error.fail("fake: read_raw_line unused in SMTP tests")
-}
-
-///|
-impl Socket for FakeSock with fn read_exact(_self, _n : Int) -> Bytes raise {
-  @error.fail("fake: read_exact unused in SMTP tests")
-}
-
-///|
-impl Socket for FakeSock with fn close(self) -> Unit {
+impl Sock for FakeSock with fn close(self) -> Unit {
   self.closes = self.closes + 1
 }
 
@@ -80,7 +70,7 @@ fn new_fake() -> FakeSock {
 }
 
 ///|
-test "smtp: full successful conversation" {
+async test "smtp: full successful conversation" {
   let f = new_fake()
   smtp_send(
     f,
@@ -105,7 +95,7 @@ test "smtp: full successful conversation" {
 }
 
 ///|
-test "smtp: no-auth conversation skips AUTH" {
+async test "smtp: no-auth conversation skips AUTH" {
   let f = fake_sock([
     "220 ready", "250 ok", "250 ok", "250 ok", "354 go", "250 stored", "221 bye",
   ])
@@ -116,7 +106,7 @@ test "smtp: no-auth conversation skips AUTH" {
 }
 
 ///|
-test "smtp: multiple envelope recipients in order" {
+async test "smtp: multiple envelope recipients in order" {
   let f = fake_sock([
     "220 ready", "250 ok", "250 ok", "250 ok", "250 ok", "354 go", "250 stored",
     "221 bye",
@@ -135,7 +125,7 @@ test "smtp: multiple envelope recipients in order" {
 }
 
 ///|
-test "smtp: dot-stuffing table (RFC 5321 §4.5.2)" {
+async test "smtp: dot-stuffing table (RFC 5321 §4.5.2)" {
   // first character of the message included; lone dot doubles
   let f = fake_sock([
     "220 ready", "250 ok", "250 ok", "250 ok", "354 go", "250 stored", "221 bye",
@@ -146,7 +136,7 @@ test "smtp: dot-stuffing table (RFC 5321 §4.5.2)" {
 }
 
 ///|
-test "smtp: message without trailing CRLF gets one before the dot" {
+async test "smtp: message without trailing CRLF gets one before the dot" {
   let f = fake_sock([
     "220 ready", "250 ok", "250 ok", "250 ok", "354 go", "250 stored", "221 bye",
   ])
@@ -156,7 +146,7 @@ test "smtp: message without trailing CRLF gets one before the dot" {
 }
 
 ///|
-test "smtp: bare LF in the message is normalized to CRLF" {
+async test "smtp: bare LF in the message is normalized to CRLF" {
   let f = fake_sock([
     "220 ready", "250 ok", "250 ok", "250 ok", "354 go", "250 stored", "221 bye",
   ])
@@ -166,7 +156,7 @@ test "smtp: bare LF in the message is normalized to CRLF" {
 }
 
 ///|
-test "smtp: 5xx at MAIL FROM raises with the server text" {
+async test "smtp: 5xx at MAIL FROM raises with the server text" {
   let f = fake_sock(["220 ready", "250 ok", "550 relay denied"])
   let raised = try {
     smtp_send(f, "x\r\n", "a@b.example", ["c@d.example"], "x", None)
@@ -181,7 +171,7 @@ test "smtp: 5xx at MAIL FROM raises with the server text" {
 }
 
 ///|
-test "smtp: server close mid-conversation raises" {
+async test "smtp: server close mid-conversation raises" {
   let f = fake_sock(["220 ready"])
   let raised = try {
     smtp_send(f, "x\r\n", "a@b.example", ["c@d.example"], "x", None)
@@ -193,7 +183,7 @@ test "smtp: server close mid-conversation raises" {
 }
 
 ///|
-test "smtp: credentials without server AUTH capability raise" {
+async test "smtp: credentials without server AUTH capability raise" {
   let f = fake_sock(["220 ready", "250-no auth here", "250 done"])
   let raised = try {
     smtp_send(f, "x\r\n", "a@b.example", ["c@d.example"], "x", Some(("u", "p")))
@@ -205,7 +195,7 @@ test "smtp: credentials without server AUTH capability raise" {
 }
 
 ///|
-test "transport: AUTH refused on non-local plaintext host" {
+async test "transport: AUTH refused on non-local plaintext host" {
   let t = SmtpTransport::{
     host: "mail.example.com",
     port: 587,
@@ -239,7 +229,7 @@ test "transport: AUTH refused on non-local plaintext host" {
 }
 
 ///|
-test "send_over: socket closed exactly once even on protocol error" {
+async test "send_over: socket closed exactly once even on protocol error" {
   let f = fake_sock(["220 ready", "250 ok", "550 relay denied"])
   let raised = try {
     send_over(f, "x\r\n", "a@b.example", ["c@d.example"], "x", None)
@@ -252,7 +242,7 @@ test "send_over: socket closed exactly once even on protocol error" {
 }
 
 ///|
-test "send_over: socket closed exactly once on success" {
+async test "send_over: socket closed exactly once on success" {
   let f = fake_sock([
     "220 ready", "250 ok", "250 ok", "250 ok", "354 go", "250 stored", "221 bye",
   ])
@@ -261,7 +251,7 @@ test "send_over: socket closed exactly once on success" {
 }
 
 ///|
-test "smtp: multi-line reply with inconsistent codes raises" {
+async test "smtp: multi-line reply with inconsistent codes raises" {
   let f = fake_sock(["220 ready", "250-go", "550 rogue", "250 done"])
   let raised = try {
     smtp_send(f, "x\r\n", "a@b.example", ["c@d.example"], "x", None)
@@ -273,4 +263,47 @@ test "smtp: multi-line reply with inconsistent codes raises" {
     }
   }
   assert_true(raised)
+}
+
+///|
+/// STARTTLS sequencing tests (plan tls-transport M2): the upgrade
+/// itself is a FakeSock identity swap — real TLS is proven against the
+/// local sink in e2e, not here.
+
+///|
+async test "smtp: STARTTLS negotiation sends EHLO then STARTTLS" {
+  let f = fake_sock(["220 ready", "250-STARTTLS", "250 done", "220 go ahead"])
+  smtp_greeting(f)
+  smtp_starttls_ehlo(f, "x.example")
+  let cmds = sent_lines(f)
+  assert_eq(cmds[0], "EHLO x.example\r\n")
+  assert_eq(cmds[1], "STARTTLS\r\n")
+}
+
+///|
+async test "smtp: STARTTLS refused when capability missing" {
+  let f = fake_sock(["220 ready", "250-no tls here", "250 done"])
+  let raised = try {
+    smtp_greeting(f)
+    smtp_starttls_ehlo(f, "x.example")
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}
+
+///|
+async test "smtp: session after upgrade re-runs EHLO first" {
+  let f = fake_sock(["220 ready", "250-STARTTLS", "250 done", "220 go ahead"])
+  smtp_greeting(f)
+  smtp_starttls_ehlo(f, "x.example")
+  let g = fake_sock([
+    "250 ok", "250 ok", "250 ok", "354 go", "250 stored", "221 bye",
+  ])
+  smtp_session(g, "hi\r\n", "a@b.example", ["c@d.example"], "x.example", None)
+  let cmds = sent_lines(g)
+  assert_eq(cmds[0], "EHLO x.example\r\n")
+  assert_eq(cmds[1], "MAIL FROM:<a@b.example>\r\n")
+  assert_eq(cmds[5], ".\r\n")
 }

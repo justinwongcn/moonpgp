@@ -68,6 +68,8 @@ struct Config {
   mut smtp_port : Int
   mut smtp_user : String?
   mut smtp_pass_env : String?
+  mut smtp_tls : String
+  mut smtp_trust : String
   mut out : String
   mut roundtrip : Bool
 }
@@ -89,6 +91,8 @@ fn new_config() -> Config {
     smtp_port: 2525,
     smtp_user: None,
     smtp_pass_env: None,
+    smtp_tls: "auto",
+    smtp_trust: "system",
     out: "mail.eml",
     roundtrip: false,
   }
@@ -103,8 +107,10 @@ fn usage() -> Unit {
     "  --sender-key PATH                armored private key (required)", "  --sender-key-pass-env NAME       env var holding the key passphrase",
     "  --recipient-cert PATH            armored public key (required)", "  --domain DOM                     Message-ID / EHLO domain (required)",
     "  --mode smtp|file                 transport (default: file)", "  --smtp-host H --smtp-port N      default 127.0.0.1:2525",
-    "  --smtp-user U --smtp-pass-env N  AUTH PLAIN creds (env var name)", "  --out PATH                       file-mode output (default mail.eml)",
-    "  --roundtrip                      compose then self-decrypt (offline check)",
+    "  --smtp-user U --smtp-pass-env N  AUTH PLAIN creds (env var name)", "  --smtp-tls auto|implicit|starttls|none",
+    "                                 TLS mode (default auto: 465 -> implicit,",
+    "  587 -> starttls, otherwise none)", "  --smtp-trust system|pem:FILE|none  peer cert verification (default system)",
+    "  --out PATH                       file-mode output (default mail.eml)", "  --roundtrip                      compose then self-decrypt (offline check)",
   ]
   for l in lines {
     println(l)
@@ -192,6 +198,8 @@ fn parse_args(argv : Array[String]) -> Config raise {
       }
       "--smtp-user" => cfg.smtp_user = Some(val)
       "--smtp-pass-env" => cfg.smtp_pass_env = Some(val)
+      "--smtp-tls" => cfg.smtp_tls = val
+      "--smtp-trust" => cfg.smtp_trust = val
       "--out" => cfg.out = val
       "--roundtrip" => cfg.roundtrip = true
       _ => @error.fail("mailer: unknown flag '\{flag}'")
@@ -218,7 +226,46 @@ fn load_recipient_public(path : String) -> @api.PublicKey raise {
 }
 
 ///|
-fn run(cfg : Config) -> Unit raise {
+/// Resolve --smtp-tls: explicit mode, or infer from the port (465 ->
+/// implicit, 587 -> starttls, otherwise plaintext) per plan
+/// tls-transport §3.5.
+fn resolve_tls_mode(flag : String, port : Int) -> @netmail.SmtpTlsMode? raise {
+  match flag {
+    "implicit" => Some(@netmail.Implicit)
+    "starttls" => Some(@netmail.Starttls)
+    "none" => None
+    "auto" =>
+      match port {
+        465 => Some(@netmail.Implicit)
+        587 => Some(@netmail.Starttls)
+        _ => None
+      }
+    other =>
+      @error.fail(
+        "mailer: --smtp-tls must be auto|implicit|starttls|none, got '\{other}'",
+      )
+  }
+}
+
+///|
+/// Resolve --smtp-trust: system roots (default), a private PEM anchor
+/// (e2e: self-signed sink), or explicit no verification.
+fn parse_trust(flag : String) -> @netmail.SmtpTrust raise {
+  if flag == "system" {
+    @netmail.System
+  } else if flag == "none" {
+    @netmail.Insecure
+  } else if flag.has_prefix("pem:") {
+    @netmail.PemFile(flag[4:].to_owned())
+  } else {
+    @error.fail(
+      "mailer: --smtp-trust must be system|pem:FILE|none, got '\{flag}'",
+    )
+  }
+}
+
+///|
+async fn run(cfg : Config) -> Unit {
   let from = match cfg.from {
     Some(f) => f
     None => @error.fail("mailer: --from is required")
@@ -298,31 +345,65 @@ fn run(cfg : Config) -> Unit raise {
   for a in cfg.to {
     envelope_rcpts.push(a.addr)
   }
-  match cfg.mode {
+  let status : String = match cfg.mode {
     "file" => {
+      guard cfg.smtp_tls == "auto" && cfg.smtp_trust == "system" else {
+        @error.fail(
+          "mailer: --smtp-tls/--smtp-trust apply only to --mode smtp (silently ignored before; review 2026-10-06 P3)",
+        )
+      }
       let t = @netmail.FileTransport::{ out_path: cfg.out, }
       t.send(message, envelope_from, envelope_rcpts)
+      "delivered via file transport (\{cfg.out})"
     }
     "smtp" => {
-      let t = @netmail.SmtpTransport::{
-        host: cfg.smtp_host,
-        port: cfg.smtp_port,
-        ehlo_domain: domain,
-        user: cfg.smtp_user,
-        password: match cfg.smtp_pass_env {
-          Some(name) => Some(require_env(name))
-          None => None
-        },
+      let user = cfg.smtp_user
+      let password = match cfg.smtp_pass_env {
+        Some(name) => Some(require_env(name))
+        None => None
       }
-      t.send(message, envelope_from, envelope_rcpts)
+      match resolve_tls_mode(cfg.smtp_tls, cfg.smtp_port) {
+        Some(mode) => {
+          let t = @netmail.TlsTransport::{
+            host: cfg.smtp_host,
+            port: cfg.smtp_port,
+            mode,
+            trust: parse_trust(cfg.smtp_trust),
+            ehlo_domain: domain,
+            user,
+            password,
+          }
+          t.send(message, envelope_from, envelope_rcpts)
+          let mode_name = if mode is @netmail.Implicit {
+            "implicit"
+          } else {
+            "starttls"
+          }
+          "delivered via smtp+tls transport (tls=\{mode_name}, trust=\{cfg.smtp_trust})"
+        }
+        None => {
+          guard cfg.smtp_trust == "system" else {
+            @error.fail("mailer: --smtp-trust applies only to TLS submission")
+          }
+          let t = @netmail.SmtpTransport::{
+            host: cfg.smtp_host,
+            port: cfg.smtp_port,
+            ehlo_domain: domain,
+            user,
+            password,
+          }
+          t.send(message, envelope_from, envelope_rcpts)
+          "delivered via smtp transport (no TLS)"
+        }
+      }
     }
     other => abort("mailer: unknown mode '\{other}'")
   }
-  println("delivered via \{cfg.mode} transport")
+  println(status)
 }
 
 ///|
-fn main {
+async fn main {
   let args = @env.args()
   // Locate the first flag: moon run prefixes argv with its own tokens.
   let mut start = args.length()
@@ -337,6 +418,11 @@ fn main {
     usage()
     abort("mailer: no arguments")
   }
+  // Argument parsing is synchronous (no suspension), so a catch here
+  // is safe. The transport call is NOT wrapped: the async coroutine
+  // lowering mishandles resumption when a catch handler frame is live
+  // across a suspension (toolchain bug, see HANDOFF tls entry), so
+  // transport errors propagate out of `async fn main raise` instead.
   let cfg = parse_args(rest) catch {
     e => {
       eprintln("\{e}")
@@ -344,10 +430,5 @@ fn main {
       abort("mailer: bad arguments")
     }
   }
-  run(cfg) catch {
-    e => {
-      eprintln("\{e}")
-      abort("mailer: failed")
-    }
-  }
+  run(cfg)
 }

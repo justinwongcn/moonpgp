@@ -1,6 +1,6 @@
 import {
-  "justinwongcn/openpgp/src/api",
-  "justinwongcn/openpgp/src/error",
+  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp/error",
   "moonbitlang/async/io",
   "moonbitlang/async/socket",
   "moonbitlang/async/tls",

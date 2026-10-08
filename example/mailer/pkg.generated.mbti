@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "justinwongcn/openpgp/example/mailer"
+package "justinwongcn/moonpgp/example/mailer"
 
 // Values
 

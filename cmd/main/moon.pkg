@@ -1,5 +1,5 @@
 import {
-  "justinwongcn/openpgp/src/api",
+  "justinwongcn/moonpgp/api",
   "moonbitlang/x/fs",
   "moonbitlang/core/string",
   "moonbitlang/core/env",

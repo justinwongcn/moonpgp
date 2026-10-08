@@ -1,0 +1,10 @@
+import {
+  "justinwongcn/moonpgp/error",
+  "moonbit-community/flate",
+  "moonbit-community/flate/zlib",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "justinwongcn/moonpgp/primitives",
+} for "test"

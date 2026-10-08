@@ -1,0 +1,99 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/moonpgp/mime"
+
+import {
+  "justinwongcn/moonpgp/api",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn build_pgp_mime_encrypted(String) -> String raise
+
+pub fn build_pgp_mime_signed(String, @api.PrivateKey) -> String raise
+
+pub fn collect_body_and_attachments(MimePart) -> (MimeBody?, Array[MimeAttachment])
+
+pub fn content_type_boundary(String) -> String?
+
+pub fn decode_quoted_printable(BytesView) -> Bytes
+
+pub fn decode_transfer_encoding(BytesView, String?) -> Bytes raise
+
+pub fn decrypt_mime(String, Array[@api.PrivateKey], verifiers~ : Array[@api.PublicKey], callbacks~ : &MimeCallbacks, password? : String) -> Unit
+
+pub fn extract_pgp_encrypted(String) -> String raise
+
+pub fn extract_pgp_signed(String) -> PgpMimeSigned raise
+
+pub fn parse_content_type(String) -> MediaType raise
+
+pub fn parse_header_params(String) -> (String, Array[(String, String)]) raise
+
+pub fn parse_message(String) -> MimeMessage
+
+pub fn parse_mime_tree(Bytes) -> MimePart raise
+
+pub fn split_multipart(String, String) -> Array[String] raise
+
+pub fn verify_pgp_mime_signed(String, @api.PublicKey) -> (String, @api.VerifyStatus) raise
+
+// Errors
+
+// Types and methods
+pub struct MediaType {
+  main_type : String
+  sub_type : String
+  params : Array[(String, String)]
+} derive(@debug.Debug)
+pub fn MediaType::mimetype(Self) -> String
+pub fn MediaType::param(Self, String) -> String?
+pub fn MediaType::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MimeAttachment {
+  headers : Array[(String, String)]
+  data : Bytes
+  filename : String?
+  mimetype : String
+} derive(@debug.Debug)
+pub fn MimeAttachment::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MimeBody {
+  content : Bytes
+  mimetype : String
+} derive(@debug.Debug)
+pub fn MimeBody::to_repr(Self) -> @debug.Repr
+
+pub struct MimeMessage {
+  headers : Array[(String, String)]
+  body : String
+} derive(@debug.Debug)
+pub fn MimeMessage::header(Self, String) -> String?
+pub fn MimeMessage::to_repr(Self) -> @debug.Repr
+
+pub struct MimePart {
+  headers : Array[(String, String)]
+  content_type : MediaType
+  raw : Bytes
+  body_raw : Bytes
+  body : Bytes
+  parts : Array[MimePart]
+} derive(@debug.Debug)
+pub fn MimePart::header(Self, String) -> String?
+pub fn MimePart::is_multipart(Self) -> Bool
+pub fn MimePart::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PgpMimeSigned {
+  signed_bytes : Bytes
+  signature_armor : String
+} derive(@debug.Debug)
+pub fn PgpMimeSigned::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
+pub(open) trait MimeCallbacks {
+  fn on_body(Self, String, String) -> Unit
+  fn on_attachment(Self, Array[(String, String)], Bytes) -> Unit
+  fn on_verified(Self, @api.VerifyStatus) -> Unit
+  fn on_error(Self, String) -> Unit
+}

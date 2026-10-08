@@ -1,6 +1,6 @@
 # Third-Party Notices / 第三方组件与来源声明
 
-This file records every third-party project that `justinwongcn/openpgp` (moonpgp)
+This file records every third-party project that `justinwongcn/moonpgp` (moonpgp)
 builds on — runtime dependencies and sources of test material — together with its
 license, so the attributions can be carried into any redistribution (mooncakes
 publish, GitHub release) or upstream contribution.
@@ -88,7 +88,7 @@ RFC 4493（CMAC-AES，§2.4 全部向量）、RFC 7253（OCB）、RFC 3156（PGP
 RFC 3394（AES Key Wrap，附录 B）、RFC 7748（X25519）、RFC 8032（Ed25519）、
 FIPS 197 与 NIST SP 800-38A（AES/CFB）、NIST SP 800-38D（GCM）。RFC 文本本身
 为 IETF 公有规范。
-`src/primitives/argon2_test.mbt` 中的 x/crypto 向量表取自
+`primitives/argon2_test.mbt` 中的 x/crypto 向量表取自
 `golang.org/x/crypto/argon2`（BSD-3-Clause，Copyright (c) 2017 The Go Authors），
 仅作数值引用，未复制其代码。
 
@@ -97,7 +97,7 @@ FIPS 197 与 NIST SP 800-38A（AES/CFB）、NIST SP 800-38D（GCM）。RFC 文�
 `testdata/` 其余文件（`interop_*.asc` 等）为本地用 GnuPG 2.4.5 生成的无口令测试
 密钥与消息，以及 openssl 对拍产物，权利归属本项目；六个
 `interop_gocrypto_*` 夹具来源见上文 go-crypto 段落。
-`src/primitives/blake2b.mbt`、`argon2.mbt`、`hkdf.mbt` 均为本项目从 RFC 文本
+`primitives/blake2b.mbt`、`argon2.mbt`、`hkdf.mbt` 均为本项目从 RFC 文本
 自实现，未引入新的运行时依赖。
 
 ## 本项目许可

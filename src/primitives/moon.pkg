@@ -1,8 +1,0 @@
-import {
-  "justinwongcn/openpgp/src/error",
-  "moonbitlang/x/crypto" @xcrypto,
-  "moonbitlang/core/env",
-  "moonbitlang/core/encoding/hex",
-  "moonbitlang/core/encoding/utf8",
-  "moonbitlang/core/debug",
-}

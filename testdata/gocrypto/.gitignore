@@ -1,0 +1,8 @@
+# Binaries produced by `go build ./...` in this module.
+/gocrypto
+/verify/verify
+*.test
+
+# Python bytecode cache from inspect_fixtures.py.
+__pycache__/
+*.pyc

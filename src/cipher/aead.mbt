@@ -93,10 +93,7 @@ fn aead_seal_chunk(
   match mode {
     Ocb => ocb_encrypt(bc, nonce.exact_view(), ad, plain)
     Gcm => gcm_encrypt(bc, nonce.exact_view(), ad, plain)
-    Eax =>
-      @error.fail(
-        "aead: EAX is not implemented (gpg accepts but never emits it)",
-      )
+    Eax => eax_encrypt(bc, nonce.exact_view(), ad, plain)
   }
 }
 
@@ -114,7 +111,7 @@ fn aead_open_chunk(
   match mode {
     Ocb => ocb_decrypt(bc, nonce.exact_view(), ad, cipher)
     Gcm => gcm_decrypt(bc, nonce.exact_view(), ad, cipher)
-    Eax => @error.fail("aead: EAX is not implemented")
+    Eax => eax_decrypt(bc, nonce.exact_view(), ad, cipher)
   }
 }
 

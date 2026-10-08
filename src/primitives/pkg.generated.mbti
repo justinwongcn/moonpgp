@@ -6,7 +6,17 @@ import {
 }
 
 // Values
+pub const ARGON2_MAX_MEMORY_KIB : Int = 2097152
+
 pub const BLOCK_SIZE : Int = 16
+
+pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int = 262144
+
+pub fn argon2id(BytesView, BytesView, Int, Int, Int, Int, max_memory_kib? : Int) -> Bytes raise
+
+pub fn argon2id_with_secret_ad(BytesView, BytesView, BytesView, BytesView, Int, Int, Int, Int, max_memory_kib? : Int) -> Bytes raise
+
+pub fn blake2b(BytesView, Int) -> Bytes raise
 
 pub fn cipher_algo_of_number(Int) -> CipherAlgo?
 
@@ -21,6 +31,8 @@ pub fn ct_equal(BytesView, BytesView) -> Bool
 pub fn from_hex(String) -> Bytes raise
 
 pub fn hash_id_of_number(Int) -> HashId?
+
+pub fn hkdf_sha256(BytesView, BytesView, BytesView, Int) -> Bytes raise
 
 pub fn new_aes(BytesView) -> &BlockCipher raise
 

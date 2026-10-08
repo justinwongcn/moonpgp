@@ -90,14 +90,6 @@ pub fn PrivateKey::to_public(self : PrivateKey) -> PublicKey {
 }
 
 ///|
-/// The Direct Key signature (type 0x1F) of a v6 key, when present.
-pub fn PublicKey::direct_signature(
-  self : PublicKey,
-) -> @packet.SignaturePacket? {
-  self.direct_signature
-}
-
-///|
 /// RSA MPI helpers: extract n/e/d/p/q/u as BigInts.
 fn rsa_public_parts(p : @packet.PublicKeyPacket) -> (BigInt, BigInt) raise {
   let params = p.params()
@@ -260,6 +252,7 @@ fn build_eddsa_secret_key_packet(
     public: pub_packet,
     s2k_usage: 0,
     cipher_algo: 0,
+    aead_algo: 0,
     s2k_spec: Bytes::new(0),
     iv: Bytes::new(0),
     secret_material: w2.to_bytes(),
@@ -290,6 +283,7 @@ fn build_ed25519_v6_secret_key_packet(
     public: pub_packet,
     s2k_usage: 0,
     cipher_algo: 0,
+    aead_algo: 0,
     s2k_spec: Bytes::new(0),
     iv: Bytes::new(0),
     secret_material: seed,
@@ -327,6 +321,7 @@ fn build_rsa_secret_key_packet(
     public: pub_packet,
     s2k_usage: 0,
     cipher_algo: 0,
+    aead_algo: 0,
     s2k_spec: Bytes::new(0),
     iv: Bytes::new(0),
     secret_material: w2.to_bytes(),
@@ -336,8 +331,8 @@ fn build_rsa_secret_key_packet(
 
 ///|
 /// Preferred algorithm subpackets used in our self-signatures.
-fn preferred_subpackets() -> Array[@packet.SigSubpacket] {
-  [
+fn preferred_subpackets(v6 : Bool) -> Array[@packet.SigSubpacket] {
+  let out : Array[@packet.SigSubpacket] = [
     {
       critical: false,
       sub_type: @packet.SIGSUB_PREFERRED_SYM_ALGOS,
@@ -356,9 +351,27 @@ fn preferred_subpackets() -> Array[@packet.SigSubpacket] {
     {
       critical: false,
       sub_type: @packet.SIGSUB_FEATURES,
-      body: Bytes::from_array([1]),
+      // §5.2.3.32: v1 SEIPD is always supported; v6 keys additionally
+      // advertise v2 SEIPD so peers know they may send the AEAD shape.
+      body: Bytes::from_array([
+        (if v6 {
+          @packet.FEATURE_SEIPD_V1 | @packet.FEATURE_SEIPD_V2
+        } else {
+          @packet.FEATURE_SEIPD_V1
+        }).to_byte(),
+      ]),
     },
   ]
+  if v6 {
+    // §5.2.3.15: AES-256/OCB, AES-256/GCM, AES-128/OCB (the mandatory
+    // AES-128/OCB pair is implicit and need not be listed).
+    out.push({
+      critical: false,
+      sub_type: @packet.SIGSUB_PREFERRED_AEAD,
+      body: Bytes::from_array([9, 2, 9, 3, 7, 2]),
+    })
+  }
+  out
 }
 
 ///|
@@ -402,12 +415,12 @@ fn make_self_signature(
   user_id : String,
   now : Int,
 ) -> @packet.SignaturePacket raise {
+  let v6 = pub_packet.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
     key_flags_subpacket(0x03),
-    ..preferred_subpackets(),
+    ..preferred_subpackets(v6),
   ]
-  let v6 = pub_packet.version() >= 6
   if v6 {
     // §5.2.3.12/33: v6 keys identify the issuer by fingerprint.
     hashed.push(issuer_fingerprint_subpacket(pub_packet))
@@ -464,7 +477,7 @@ fn make_direct_key_signature(
   let hashed : Array[@packet.SigSubpacket] = [
     { ..creation_subpacket(now), critical: true, },
     key_flags_subpacket(0x03),
-    ..preferred_subpackets(),
+    ..preferred_subpackets(true),
     issuer_fingerprint_subpacket(pub_packet),
   ]
   let sig : @packet.SignaturePacket = {
@@ -486,37 +499,56 @@ fn make_direct_key_signature(
 }
 
 ///|
-/// Create a subkey binding signature (0x18). v4 only: our v6 keys carry
-/// no subkeys yet (v6 subkeys need v6 X25519 material and SEIPD v2).
+/// Create a subkey binding signature (0x18): version 4 for a v4 primary
+/// key, version 6 (with a hash salt and the fingerprint issuer subpacket)
+/// for a v6 one. A v6 primary key may only certify v6 subkeys.
 fn make_binding_signature(
   secret_packet : @packet.SecretKeyPacket,
   primary_pub : @packet.PublicKeyPacket,
   subkey_pub : @packet.PublicKeyPacket,
   now : Int,
 ) -> @packet.SignaturePacket raise {
-  guard primary_pub.version() < 6 && subkey_pub.version() < 6 else {
-    @error.fail("api: v6 subkeys are not supported yet")
+  let v6 = primary_pub.version() >= 6
+  guard !v6 || subkey_pub.version() >= 6 else {
+    @error.fail("api: a v6 primary key must certify v6 subkeys")
   }
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
     key_flags_subpacket(0x0C),
-    ..preferred_subpackets(),
+    ..preferred_subpackets(v6),
   ]
-  let issuer : Array[@packet.SigSubpacket] = [
-    {
-      critical: false,
-      sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
-      body: primary_pub.key_id(),
-    },
-  ]
+  if v6 {
+    hashed.push(issuer_fingerprint_subpacket(primary_pub))
+  }
+  let unhashed : Array[@packet.SigSubpacket] = if v6 {
+    []
+  } else {
+    [
+      {
+        critical: false,
+        sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
+        body: primary_pub.key_id(),
+      },
+    ]
+  }
   let sig : @packet.SignaturePacket = {
-    version: 4,
-    salt: Bytes::new(0),
+    version: if v6 {
+      6
+    } else {
+      4
+    },
+    salt: if v6 {
+      @primitives.random_bytes(
+        @packet.salt_size_of_hash(@primitives.Sha256.number()),
+      )
+    } else {
+      Bytes::new(0)
+    },
     sig_type: @packet.SubkeyBinding,
     pub_algo: secret_packet.public.algo(),
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
-    unhashed_subpackets: issuer,
+    unhashed_subpackets: unhashed,
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0,
     sig_params: [],
@@ -713,6 +745,40 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
 /// Export as ASCII-armored private key block.
 pub fn PrivateKey::to_armored(self : PrivateKey) -> String {
   @armor.PrivateKey.encode(self.to_bytes().exact_view())
+}
+
+///|
+/// The Preferred AEAD Ciphersuites advertised by a key as (cipher, AEAD)
+/// id pairs, most preferred first (RFC 9580 §5.2.3.15). Reads the
+/// self-signature first, then the Direct Key signature of a v6 key, and
+/// returns an empty list when the key advertises none.
+pub fn PublicKey::preferred_aead(self : PublicKey) -> Array[(Int, Int)] {
+  match self.self_signature.preferred_aead() {
+    Some(list) => if !list.is_empty() { return list }
+    None => ()
+  }
+  match self.direct_signature {
+    Some(sig) =>
+      match sig.preferred_aead() {
+        Some(list) => return list
+        None => ()
+      }
+    None => ()
+  }
+  []
+}
+
+///|
+/// True when the key advertises v2 SEIPD support in its Features
+/// subpacket (RFC 9580 §5.2.3.32).
+pub fn PublicKey::supports_seipd_v2(self : PublicKey) -> Bool {
+  if self.self_signature.supports_seipd_v2() {
+    return true
+  }
+  match self.direct_signature {
+    Some(sig) => sig.supports_seipd_v2()
+    None => false
+  }
 }
 
 ///|
@@ -954,23 +1020,58 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
 }
 
 ///|
-/// Generate a v6 Ed25519 signing key (RFC 9580): a v6 primary key with a
-/// User ID self-certification and the Direct Key signature the RFC
-/// requires before a v6 key may be used. No encryption subkey is created
-/// (v6 message encryption needs SEIPD v2, not implemented yet).
+/// Build a v6 X25519 encryption secret subkey packet (RFC 9580 §5.5.5.7):
+/// the public parameter is the 32-octet native public key and the secret
+/// material the 32-octet native secret key, both raw (v6 native
+/// algorithms carry no MPI prefix and no checksum).
+fn build_v6_x25519_secret_key_packet(
+  creation : Int,
+) -> @packet.SecretKeyPacket raise {
+  let x = @pki.x25519_generate()
+  let pub_packet : @packet.PublicKeyPacket = {
+    version: 6,
+    creation_time: creation,
+    algo: @packet.X25519,
+    params: [x.public],
+  }
+  @packet.SecretKeyPacket::{
+    public: pub_packet,
+    s2k_usage: 0,
+    cipher_algo: 0,
+    aead_algo: 0,
+    s2k_spec: Bytes::new(0),
+    iv: Bytes::new(0),
+    secret_material: x.scalar,
+    dummy: false,
+  }
+}
+
+///|
+/// Generate a v6 Ed25519 signing key with an X25519 encryption subkey
+/// (RFC 9580 §5.5.5.7/§5.5.5.9) — the shape of the Appendix A.3/A.4
+/// sample certificate: a v6 primary key with a User ID self-certification,
+/// the Direct Key signature the RFC requires before a v6 key may be used,
+/// and a v6 X25519 subkey with a v6 binding signature.
 pub fn generate_ed25519_v6_key(user_id : String) -> PrivateKey raise {
   let now = @primitives.unix_now().to_int()
   let seed = @primitives.random_bytes(32)
   let primary = build_ed25519_v6_secret_key_packet(seed, now)
   let self_sig = make_self_signature(primary, primary.public, user_id, now)
   let direct = make_direct_key_signature(primary, primary.public, now)
+  let subkey = build_v6_x25519_secret_key_packet(now)
+  let binding = make_binding_signature(
+    primary,
+    primary.public,
+    subkey.public,
+    now,
+  )
   PrivateKey::{
     primary,
     user_id,
     self_signature: self_sig,
     direct_signature: Some(direct),
-    encryption_subkey: None,
-    subkey_binding: None,
+    encryption_subkey: Some(subkey),
+    subkey_binding: Some(binding),
   }
 }
 

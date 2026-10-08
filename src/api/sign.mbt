@@ -347,6 +347,45 @@ fn verify_signature_packet(
 }
 
 ///|
+/// The One-Pass Signature packet matching `sig`: version 3 for a v4 key
+/// and version 6 for a v6 key. RFC 9580 §5.4 requires a v6 OPS to carry
+/// the same hash salt as its Signature packet and the 32-octet signing
+/// key fingerprint (in place of the v3 8-octet key id).
+fn one_pass_sig_for(
+  key : PrivateKey,
+  sig : @packet.SignaturePacket,
+  hash : @primitives.HashId,
+) -> @packet.OnePassSigPacket raise {
+  let v6 = key.primary.public.version() >= 6
+  {
+    version: if v6 {
+      6
+    } else {
+      3
+    },
+    sig_type: sig.sig_type(),
+    hash_algo: hash.number(),
+    pub_algo: key.primary.public.algo(),
+    key_id: if v6 {
+      Bytes::new(0)
+    } else {
+      key.primary.public.key_id()
+    },
+    salt: if v6 {
+      sig.salt()
+    } else {
+      Bytes::new(0)
+    },
+    fingerprint: if v6 {
+      key.primary.public.fingerprint()
+    } else {
+      Bytes::new(0)
+    },
+    nested: false,
+  }
+}
+
+///|
 /// Create an inline-signed, armored message: One-Pass-Signature ||
 /// Literal || Signature.
 pub fn sign_inline(
@@ -354,21 +393,10 @@ pub fn sign_inline(
   key : PrivateKey,
   text_mode? : Bool,
 ) -> String raise {
-  guard key.primary.public.version() < 6 else {
-    @error.fail(
-      "api: v6 keys need a v6 One-Pass Signature packet, not implemented yet; use detached signing",
-    )
-  }
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(key, data, sig_type)
   let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
-  let ops : @packet.OnePassSigPacket = {
-    sig_type,
-    hash_algo: @primitives.Sha256.number(),
-    pub_algo: key.primary.public.algo(),
-    key_id: key.primary.public.key_id(),
-    nested: false,
-  }
+  let ops = one_pass_sig_for(key, sig, @primitives.Sha256)
   let w = @packet.Writer::new()
   w.bytes(
     @packet.serialize_packet(@packet.OnePassSig, ops.to_body().exact_view()).exact_view(),
@@ -403,21 +431,10 @@ pub fn sign_and_encrypt(
   recipients : Array[PublicKey],
   text_mode? : Bool,
 ) -> String raise {
-  guard signer.primary.public.version() < 6 else {
-    @error.fail(
-      "api: v6 keys need a v6 One-Pass Signature packet, not implemented yet; use detached signing",
-    )
-  }
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(signer, data, sig_type)
   let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
-  let ops : @packet.OnePassSigPacket = {
-    sig_type,
-    hash_algo: @primitives.Sha256.number(),
-    pub_algo: signer.primary.public.algo(),
-    key_id: signer.primary.public.key_id(),
-    nested: false,
-  }
+  let ops = one_pass_sig_for(signer, sig, @primitives.Sha256)
   let inner = @packet.Writer::new()
   inner.bytes(
     @packet.serialize_packet(@packet.OnePassSig, ops.to_body().exact_view()).exact_view(),
@@ -428,43 +445,7 @@ pub fn sign_and_encrypt(
   inner.bytes(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
-  encrypt_stream_to_recipients(inner.to_bytes().exact_view(), recipients)
-}
-
-///|
-/// Encrypt a pre-serialized inner packet stream to recipients.
-fn encrypt_stream_to_recipients(
-  inner : BytesView,
-  recipients : Array[PublicKey],
-) -> String raise {
-  guard !recipients.is_empty() else { @error.fail("api: no recipients") }
-  let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let w = @packet.Writer::new()
-  for recipient in recipients {
-    let enc_key = match recipient.encryption_key() {
-      Some(k) => k
-      None => @error.fail("api: recipient key cannot encrypt")
-    }
-    let pkesk = create_pkesk(
-      enc_key,
-      session_key.exact_view(),
-      @primitives.Aes256,
-    )
-    let body = pkesk.to_body()
-    w.bytes(
-      @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
-    )
-  }
-  let bc = @primitives.new_block_cipher(
-    @primitives.Aes256,
-    session_key.exact_view(),
-  )
-  let seipd_ct = @cipher.seipd_v1_encrypt(bc, inner)
-  let seipd : @packet.SeipdPacket = { version: 1, ciphertext: seipd_ct, }
-  w.bytes(
-    @packet.serialize_packet(@packet.Seipd, seipd.to_body().exact_view()).exact_view(),
-  )
-  @armor.Message.encode(w.to_bytes().exact_view())
+  seal_to_recipients(inner.to_bytes().exact_view(), recipients)
 }
 
 ///|
@@ -479,69 +460,25 @@ pub fn decrypt_and_verify(
   // path only when no keys given? Keep explicit: caller decides.
   let block = @armor.decode(message)
   let data_bytes = @armor.ArmorBlock::data(block)
-  // Decrypt
   let packets = @packet.parse_packets(data_bytes.exact_view())
-  let mut session : (Int, Bytes)? = None
+  // Try each key in turn. `decrypt_inner_with_key` is the same matcher the
+  // plain private-key path uses, so it covers v6 PKESKs (fingerprint) and
+  // v3 PKESKs (key id) as well as SEIPD v1 and v2 — this pipeline must not
+  // be able to reject a message the library itself can produce.
+  let mut inner_opt : Bytes? = None
   for key in decryption_keys {
-    let mut found = false
-    for p in packets {
-      if p.tag() == @packet.Pkesk {
-        let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
-        let candidates = [key.primary]
-        match key.encryption_subkey {
-          Some(sk) => candidates.push(sk)
-          None => ()
-        }
-        for sk in candidates {
-          // Lenient on purpose (F15): an unusable candidate simply does not
-          // match the PKESK; decryption must not fail for it.
-          let my_id : Bytes? = Some(sk.public.key_id()) catch { _ => None }
-          match my_id {
-            Some(id) =>
-              if id.equal(pkesk.key_id()) {
-                session = Some(unwrap_pkesk(pkesk, sk))
-                found = true
-                break
-              }
-            None => ()
-          }
-        }
-        if found {
-          break
-        }
+    match decrypt_inner_with_key(packets, key) {
+      Some(b) => {
+        inner_opt = Some(b)
+        break
       }
-    }
-    if found {
-      break
+      None => ()
     }
   }
-  // Decrypt the SEIPD and keep the raw inner packet stream (it may carry
-  // a one-pass signature around the literal data).
-  let inner : Bytes = match session {
-    Some((algo_id, sk)) => {
-      let mut found : Bytes? = None
-      for p in packets {
-        if p.tag() == @packet.Seipd {
-          let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
-          guard seipd.version == 1 else {
-            @error.fail("api: unsupported SEIPD version \{seipd.version}")
-          }
-          let algo = match @primitives.cipher_algo_of_number(algo_id) {
-            Some(a) => a
-            None => @error.fail("api: unsupported session cipher \{algo_id}")
-          }
-          let bc = @primitives.new_block_cipher(algo, sk.exact_view())
-          found = Some(
-            @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view()),
-          )
-          break
-        }
-      }
-      match found {
-        Some(b) => b
-        None => @error.fail("api: no encrypted data packet found")
-      }
-    }
+  // Keep the raw inner packet stream (it may carry a one-pass signature
+  // around the literal data).
+  let inner : Bytes = match inner_opt {
+    Some(b) => b
     None => @error.fail("api: no matching decryption key")
   }
   // Walk inner packets: OPS? literal | compressed; trailing sig.

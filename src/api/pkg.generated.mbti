@@ -2,6 +2,7 @@
 package "justinwongcn/openpgp/src/api"
 
 import {
+  "justinwongcn/openpgp/src/cipher",
   "justinwongcn/openpgp/src/packet",
   "justinwongcn/openpgp/src/primitives",
   "moonbitlang/core/debug",
@@ -10,19 +11,25 @@ import {
 // Values
 pub fn decrypt_and_verify(String, Array[PrivateKey], PublicKey?) -> (Bytes, VerifyStatus) raise
 
-pub fn decrypt_binary_with_password(BytesView, String) -> Bytes raise
+pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int) -> Bytes raise
 
 pub fn decrypt_binary_with_private_key(BytesView, PrivateKey) -> Bytes raise
 
-pub fn decrypt_with_password(String, String) -> Bytes raise
+pub fn decrypt_with_password(String, String, argon2_max_memory_kib? : Int) -> Bytes raise
 
 pub fn decrypt_with_private_key(String, PrivateKey) -> Bytes raise
 
 pub fn encrypt_to_recipients(BytesView, Array[PublicKey], file_name? : String) -> String raise
 
-pub fn encrypt_with_password(BytesView, String, file_name? : String) -> String raise
+pub fn encrypt_with_password(BytesView, String, file_name? : String, aead? : Bool, argon2? : Bool, argon2_memory_exp? : Int) -> String raise
+
+pub fn encrypt_with_password_argon2(BytesView, String, file_name? : String, passes? : Int, parallelism? : Int, memory_exp? : Int) -> String raise
+
+pub fn encrypt_with_password_v6(BytesView, String, file_name? : String, aead? : @cipher.AeadMode, argon2? : Bool, passes? : Int, parallelism? : Int, memory_exp? : Int) -> String raise
 
 pub fn generate_ed25519_key(String) -> PrivateKey raise
+
+pub fn generate_ed25519_v6_key(String) -> PrivateKey raise
 
 pub fn generate_key(String, bits? : Int) -> PrivateKey raise
 
@@ -44,7 +51,7 @@ pub fn verify_detached(BytesView, String, PublicKey) -> VerifyStatus raise
 
 pub fn verify_inline(String, PublicKey) -> (Bytes, VerifyStatus) raise
 
-pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @packet.PublicKeyPacket, user_id? : String) -> Bool raise
+pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @packet.PublicKeyPacket, user_id? : String, direct? : Bool) -> Bool raise
 
 // Errors
 
@@ -103,26 +110,30 @@ pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
   user_id : String
   self_signature : @packet.SignaturePacket
+  direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.SecretKeyPacket?
   subkey_binding : @packet.SignaturePacket?
 } derive(@debug.Debug)
 pub fn PrivateKey::fingerprint(Self) -> Bytes raise
 pub fn PrivateKey::from_armored(String) -> Self raise
 pub fn PrivateKey::from_bytes(BytesView) -> Self raise
+pub fn PrivateKey::is_aead_protected(Self) -> Bool
 pub fn PrivateKey::is_locked(Self) -> Bool
 pub fn PrivateKey::key_id(Self) -> Bytes raise
 pub fn PrivateKey::lock(Self, String) -> Self raise
+pub fn PrivateKey::lock_argon2(Self, String, passes? : Int, parallelism? : Int, memory_exp? : Int) -> Self raise
 pub fn PrivateKey::to_armored(Self) -> String
 pub fn PrivateKey::to_bytes(Self) -> Bytes
 pub fn PrivateKey::to_public(Self) -> PublicKey
 pub fn PrivateKey::to_repr(Self) -> @debug.Repr
-pub fn PrivateKey::unlock(Self, String) -> Self raise
+pub fn PrivateKey::unlock(Self, String, argon2_max_memory_kib? : Int) -> Self raise
 pub fn PrivateKey::user_id(Self) -> String
 
 pub struct PublicKey {
   primary : @packet.PublicKeyPacket
   user_id : String
   self_signature : @packet.SignaturePacket
+  direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.PublicKeyPacket?
   subkey_binding : @packet.SignaturePacket?
 } derive(@debug.Debug)
@@ -131,6 +142,8 @@ pub fn PublicKey::fingerprint(Self) -> Bytes raise
 pub fn PublicKey::from_armored(String) -> Self raise
 pub fn PublicKey::from_bytes(BytesView) -> Self raise
 pub fn PublicKey::key_id(Self) -> Bytes raise
+pub fn PublicKey::preferred_aead(Self) -> Array[(Int, Int)]
+pub fn PublicKey::supports_seipd_v2(Self) -> Bool
 pub fn PublicKey::to_armored(Self) -> String
 pub fn PublicKey::to_bytes(Self) -> Bytes
 pub fn PublicKey::to_repr(Self) -> @debug.Repr

@@ -140,7 +140,10 @@ test "signature packet roundtrip (RSA-shaped)" {
 ///|
 test "pkesk and skesk roundtrip" {
   let pkesk : @packet.PkeskPacket = {
+    version: 3,
     key_id: @primitives.from_hex("0123456789abcdef"),
+    key_version: 0,
+    fingerprint: Bytes::new(0),
     pub_algo: @packet.RsaEncryptOrSign,
     encrypted: @primitives.from_hex("feedface01"),
     ecdh_ephemeral: Bytes::new(0),
@@ -182,10 +185,9 @@ test "literal packet roundtrip with utf8 file name" {
 
 ///|
 test "seipd packet roundtrip" {
-  let seipd : @packet.SeipdPacket = {
-    version: 1,
-    ciphertext: Bytes::make(37, b'\x03'),
-  }
+  let seipd : @packet.SeipdPacket = @packet.SeipdPacket::v1(
+    Bytes::make(37, b'\x03').exact_view(),
+  )
   let parsed = @packet.SeipdPacket::parse(seipd.to_body().exact_view())
   assert_eq(parsed.version, 1)
   assert_eq(parsed.ciphertext, Bytes::make(37, b'\x03'))

@@ -181,13 +181,21 @@ test "v6 keygen signs and verifies; key armor round-trips" {
 }
 
 ///|
-test "v6 keys refuse inline signing (v6 OPS not implemented yet)" {
+test "v6 keys inline-sign with a v6 One-Pass Signature packet" {
   let key = @api.generate_ed25519_v6_key("MoonBit V6 <v6@example.org>")
-  let raised = try {
-    let _ = @api.sign_inline(@utf8.encode("data"), key)
-    false
-  } catch {
-    _ => true
-  }
-  assert_true(raised)
+  let data = @utf8.encode("data")
+  let armored = @api.sign_inline(data, key)
+  let packets = @packet.parse_packets(
+    @armor.decode(armored).data().exact_view(),
+  )
+  assert_eq(packets[0].tag(), @packet.OnePassSig)
+  let ops = @packet.OnePassSigPacket::parse(packets[0].body().exact_view())
+  assert_eq(ops.version(), 6)
+  // RFC 9580 §5.4: a v6 OPS carries the signature's salt and the
+  // 32-octet fingerprint of the signing key.
+  assert_eq(ops.salt().length(), 16)
+  assert_eq(ops.fingerprint(), key.fingerprint())
+  let (text, status) = @api.verify_inline(armored, key.to_public())
+  assert_eq(text, data)
+  assert_eq(status, @api.VerifyStatus::Ok)
 }

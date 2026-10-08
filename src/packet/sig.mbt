@@ -119,6 +119,21 @@ pub const SIGSUB_SIGNATURE_TARGET : Int = 31
 pub const SIGSUB_KEY_FLAGS : Int = 27
 
 ///|
+/// Preferred AEAD Ciphersuites (RFC 9580 §5.2.3.15). Table 5 of RFC 9580
+/// assigns type 39; type 34 is Reserved, so using it here made the
+/// preference invisible to every other implementation (and hid theirs
+/// from us) while our own round-trip tests stayed green.
+pub const SIGSUB_PREFERRED_AEAD : Int = 39
+
+///|
+/// The Features flags octet (RFC 9580 §5.2.3.32): 0x01 = v1 SEIPD,
+/// 0x08 = v2 SEIPD.
+pub const FEATURE_SEIPD_V1 : Int = 0x01
+
+///|
+pub const FEATURE_SEIPD_V2 : Int = 0x08
+
+///|
 pub const SIGSUB_SIGNER_USER_ID : Int = 28
 
 ///|
@@ -330,13 +345,27 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   match pub_algo {
     RsaEncryptOrSign | RsaEncryptOnly | RsaSignOnly => params.push(r.read_mpi())
     EdDsaLegacy => {
+      // RFC 9580 §5.2.3.3.1: "Ed25519Legacy MUST NOT be used in Signature
+      // packets version 6 or above" — only for reading historic v4 keys.
+      guard version < 6 else {
+        @error.fail(
+          "packet: EdDsaLegacy must not be used in a v6 signature packet",
+        )
+      }
       // EdDSA legacy carries two MPIs: r then s (RFC 9580 §5.2.3.1).
       params.push(r.read_mpi())
       params.push(r.read_mpi())
     }
-    Ed25519 =>
+    Ed25519 => {
       // v6 Ed25519 carries 64 raw octets, not MPIs (§5.2.3.4).
-      params.push(r.read_rest())
+      let sig = r.read_rest()
+      guard sig.length() == 64 else {
+        @error.fail(
+          "packet: an Ed25519 signature must be 64 octets, got \{sig.length()}",
+        )
+      }
+      params.push(sig)
+    }
     _ =>
       // Unknown material is carried raw so the packet still round-trips.
       params.push(r.read_rest())
@@ -470,6 +499,42 @@ pub fn SignaturePacket::key_flags(self : SignaturePacket) -> Bytes? {
 }
 
 ///|
+/// The Features flags octet (RFC 9580 §5.2.3.32), when present.
+pub fn SignaturePacket::features(self : SignaturePacket) -> Bytes? {
+  find_subpacket(self.hashed_subpackets, SIGSUB_FEATURES)
+}
+
+///|
+/// True when the Features subpacket advertises the v2 SEIPD flag
+/// (RFC 9580 §5.2.3.32/§13.7).
+pub fn SignaturePacket::supports_seipd_v2(self : SignaturePacket) -> Bool {
+  match self.features() {
+    Some(f) => f.length() > 0 && (f[0].to_int() & FEATURE_SEIPD_V2) != 0
+    None => false
+  }
+}
+
+///|
+/// The Preferred AEAD Ciphersuites list as (cipher, AEAD) pairs, most
+/// preferred first (RFC 9580 §5.2.3.15). A trailing odd octet is ignored.
+pub fn SignaturePacket::preferred_aead(
+  self : SignaturePacket,
+) -> Array[(Int, Int)]? {
+  match find_subpacket(self.hashed_subpackets, SIGSUB_PREFERRED_AEAD) {
+    Some(b) => {
+      let out : Array[(Int, Int)] = []
+      let mut i = 0
+      while i + 1 < b.length() {
+        out.push((b[i].to_int(), b[i + 1].to_int()))
+        i = i + 2
+      }
+      Some(out)
+    }
+    None => None
+  }
+}
+
+///|
 /// The hash prefix: version | type | pubalgo | hashalgo |
 /// hashed_len | hashed area (raw wire bytes when available). Version 6
 /// uses a 4-octet subpacket-area length (RFC 9580 §5.2.3).
@@ -505,38 +570,98 @@ pub fn signature_trailer(version : Int, hashed_body_len : Int) -> Bytes {
 }
 
 ///|
-/// A one-pass signature packet body (RFC 9580 §5.4).
+/// A one-pass signature packet body: version 3 (RFC 9580 §5.4, what a v4
+/// key emits) and version 6 (the same fields plus a hash salt and the
+/// 32-octet signing-key fingerprint, and with the 8-octet key id gone).
 pub(all) struct OnePassSigPacket {
+  version : Int
   sig_type : SigType
   hash_algo : Int
   pub_algo : PubKeyAlgo
+  /// v3 only: the 8-octet signing key id.
   key_id : Bytes
+  /// v6 only: the hash salt (its size comes from the hash algorithm).
+  salt : Bytes
+  /// v6 only: the 32-octet signing key fingerprint.
+  fingerprint : Bytes
   nested : Bool
 } derive(Debug)
+
+///|
+pub fn OnePassSigPacket::version(self : OnePassSigPacket) -> Int {
+  self.version
+}
+
+///|
+pub fn OnePassSigPacket::key_id(self : OnePassSigPacket) -> Bytes {
+  self.key_id
+}
+
+///|
+pub fn OnePassSigPacket::salt(self : OnePassSigPacket) -> Bytes {
+  self.salt
+}
+
+///|
+pub fn OnePassSigPacket::fingerprint(self : OnePassSigPacket) -> Bytes {
+  self.fingerprint
+}
 
 ///|
 pub fn OnePassSigPacket::parse(body : BytesView) -> OnePassSigPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
-  guard version == 3 else {
+  guard version == 3 || version == 6 else {
     @error.fail("packet: unsupported one-pass signature version \{version}")
   }
   let sig_type = sig_type_of_number(r.read_u8())
   let hash_algo = r.read_u8()
   let pub_algo = pub_key_algo_of_number(r.read_u8())
-  let key_id = r.read_bytes(8)
+  let mut key_id = Bytes::new(0)
+  let mut salt = Bytes::new(0)
+  let mut fingerprint = Bytes::new(0)
+  if version == 6 {
+    let salt_len = r.read_u8()
+    // RFC 9580 §5.4: the size MUST match the hash algorithm's Table 23
+    // value (a mismatch is malformed, §5.2.5) — same rule the Signature
+    // packet enforces when parsing.
+    guard salt_len == salt_size_of_hash(hash_algo) else {
+      @error.fail(
+        "packet: one-pass signature salt size \{salt_len} does not match hash algorithm \{hash_algo}",
+      )
+    }
+    salt = r.read_bytes(salt_len)
+    fingerprint = r.read_bytes(32)
+  } else {
+    key_id = r.read_bytes(8)
+  }
   let nested = r.read_u8() != 0
-  OnePassSigPacket::{ sig_type, hash_algo, pub_algo, key_id, nested, }
+  OnePassSigPacket::{
+    version,
+    sig_type,
+    hash_algo,
+    pub_algo,
+    key_id,
+    salt,
+    fingerprint,
+    nested,
+  }
 }
 
 ///|
 pub fn OnePassSigPacket::to_body(self : OnePassSigPacket) -> Bytes {
   let w = Writer::new()
-  w.u8(3)
+  w.u8(self.version)
   w.u8(self.sig_type.number())
   w.u8(self.hash_algo)
   w.u8(self.pub_algo.number())
-  w.bytes(self.key_id.exact_view())
+  if self.version == 6 {
+    w.u8(self.salt.length())
+    w.bytes(self.salt.exact_view())
+    w.bytes(self.fingerprint.exact_view())
+  } else {
+    w.bytes(self.key_id.exact_view())
+  }
   w.u8(if self.nested { 1 } else { 0 })
   w.to_bytes()
 }

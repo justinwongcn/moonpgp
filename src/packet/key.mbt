@@ -247,27 +247,53 @@ pub fn PublicKeyPacket::key_id(self : PublicKeyPacket) -> Bytes raise {
 }
 
 ///|
-/// A version 4 secret key packet: public part plus secret material.
+/// A version 4 or 6 secret key packet: public part plus secret material.
 /// The secret material is kept in wire form; unlocking/locking happens at
 /// the key-management layer.
 pub(all) struct SecretKeyPacket {
   public : PublicKeyPacket
-  /// S2K usage: 0 = plaintext secret, 254 = CFB + SHA-1 check,
-  /// 255 = CFB + 2-octet checksum, other = legacy cipher id + checksum.
+  /// S2K usage: 0 = plaintext secret, 253 = AEAD + HKDF key separation,
+  /// 254 = CFB + SHA-1 check, 255 = CFB + 2-octet checksum, other = legacy
+  /// cipher id + checksum.
   s2k_usage : Int
   /// Cipher algorithm id when the secret material is encrypted (0 otherwise).
   cipher_algo : Int
+  /// AEAD algorithm id for usage 253 (0 otherwise).
+  aead_algo : Int
   /// S2K specifier bytes when encrypted.
   s2k_spec : Bytes
-  /// IV bytes when encrypted.
+  /// IV (or AEAD nonce) bytes when encrypted.
   iv : Bytes
   /// The (possibly still encrypted) algorithm-specific secret material,
-  /// exactly as found on the wire after the S2K/IV fields.
+  /// exactly as found on the wire after the S2K/IV fields. For usage 253
+  /// this includes the trailing AEAD authentication tag.
   secret_material : Bytes
   /// True for GnuPG "GNU dummy" keys whose secret material lives on a
   /// smartcard (S2K type 101 marker); there is nothing to unlock.
   dummy : Bool
 } derive(Debug)
+
+///|
+/// Read an S2K specifier from `r`, honouring the v6 length octet, and
+/// return both the parsed specifier and its raw wire bytes.
+fn read_s2k_specifier(r : Reader, v6 : Bool) -> (@s2k.S2k, Bytes) raise {
+  if v6 {
+    // RFC 9580 §5.5.3: v6 prefixes the specifier with a 1-octet count of
+    // the field that follows it (usage 253 or 254 only).
+    let declared = r.read_u8()
+    guard rest_after(r, declared) else {
+      @error.fail("packet: truncated v6 S2K specifier")
+    }
+    let (s2k, used) = @s2k.parse(r.view()[0:declared])
+    guard used == declared else {
+      @error.fail("packet: v6 S2K specifier length mismatch")
+    }
+    (s2k, r.read_bytes(declared))
+  } else {
+    let (s2k, used) = @s2k.parse(r.view())
+    (s2k, r.read_bytes(used))
+  }
+}
 
 ///|
 pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
@@ -283,19 +309,64 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
       public,
       s2k_usage: 0,
       cipher_algo: 0,
+      aead_algo: 0,
       s2k_spec: Bytes::new(0),
       iv: Bytes::new(0),
       secret_material: r.read_rest(),
       dummy: false,
     }
   } else if usage == 253 {
-    // RFC 9580: AEAD-protected secret key material (OCB by default).
-    @error.fail(
-      "packet: AEAD-protected secret key material (S2K usage 253) is not supported yet",
-    )
+    // RFC 9580 §5.5.3: AEAD-protected secret key material. This is the only
+    // usage octet that may carry an Argon2 specifier for a secret key.
+    // The 1-octet count covers every field that follows it, so it must be
+    // compared against the octets actually consumed (a "enough bytes left"
+    // guard alone would accept a wrong count and split the fields by luck).
+    let mut declared_params : Int? = None
+    let mut params_start = 0
+    if v6 {
+      let params_len = r.read_u8()
+      guard rest_after(r, params_len) else {
+        @error.fail("packet: truncated v6 AEAD secret key parameters")
+      }
+      declared_params = Some(params_len)
+      params_start = r.position()
+    }
+    let cipher_algo = r.read_u8()
+    let aead_algo = r.read_u8()
+    let (_s2k, spec) = read_s2k_specifier(r, v6)
+    let iv = r.read_bytes(aead_iv_len(aead_algo))
+    match declared_params {
+      Some(n) =>
+        if r.position() - params_start != n {
+          @error.fail(
+            "packet: v6 AEAD secret key parameter count \{n} does not match the \{r.position() - params_start} octets read",
+          )
+        }
+      None => ()
+    }
+    SecretKeyPacket::{
+      public,
+      s2k_usage: usage,
+      cipher_algo,
+      aead_algo,
+      s2k_spec: spec,
+      iv,
+      secret_material: r.read_rest(),
+      dummy: false,
+    }
   } else if usage == 254 || usage == 255 {
     guard !(v6 && usage == 255) else {
       @error.fail("packet: a v6 secret key must not use S2K usage 255")
+    }
+    let mut declared_params : Int? = None
+    let mut params_start = 0
+    if v6 {
+      let params_len = r.read_u8()
+      guard rest_after(r, params_len) else {
+        @error.fail("packet: truncated v6 secret key parameters")
+      }
+      declared_params = Some(params_len)
+      params_start = r.position()
     }
     let cipher_algo = r.read_u8()
     // GnuPG dummy marker: cipher 0 and the S2K "GNU" extension
@@ -311,52 +382,51 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
         public,
         s2k_usage: usage,
         cipher_algo: 0,
+        aead_algo: 0,
         s2k_spec: r.read_rest(),
         iv: Bytes::new(0),
         secret_material: Bytes::new(0),
         dummy: true,
       }
-    } else if v6 {
-      // v6 encrypted packets carry a 1-octet count of the following S2K
-      // parameter fields (RFC 9580 §5.5.3).
-      let declared = r.read_u8()
-      guard rest_after(r, declared) else {
-        @error.fail("packet: truncated v6 S2K specifier")
-      }
-      let (s2k, used) = @s2k.parse(r.view()[0:declared])
-      ignore(s2k)
-      guard used == declared else {
-        @error.fail("packet: v6 S2K specifier length mismatch")
-      }
-      let spec = r.read_bytes(declared)
-      let bs = cipher_block_size(cipher_algo)
-      let iv = r.read_bytes(bs)
-      SecretKeyPacket::{
-        public,
-        s2k_usage: usage,
-        cipher_algo,
-        s2k_spec: spec,
-        iv,
-        secret_material: r.read_rest(),
-        dummy: false,
-      }
     } else {
-      let (s2k, used) = @s2k.parse(r.view())
-      ignore(s2k)
-      let consumed = r.read_bytes(used)
+      let (s2k, spec) = read_s2k_specifier(r, v6)
+      guard !s2k.is_argon2() else {
+        @error.fail("packet: using Argon2 S2K without AEAD is not allowed")
+      }
       let bs = cipher_block_size(cipher_algo)
       let iv = r.read_bytes(bs)
+      // Same exact-consumption check as usage 253. The GnuPG "GNU dummy"
+      // branch above deliberately keeps the lenient treatment: its layout
+      // ends in an implementation-defined extension we must not second-guess.
+      match declared_params {
+        Some(n) =>
+          if r.position() - params_start != n {
+            @error.fail(
+              "packet: v6 secret key parameter count \{n} does not match the \{r.position() - params_start} octets read",
+            )
+          }
+        None => ()
+      }
       SecretKeyPacket::{
         public,
         s2k_usage: usage,
         cipher_algo,
-        s2k_spec: consumed,
+        aead_algo: 0,
+        s2k_spec: spec,
         iv,
         secret_material: r.read_rest(),
         dummy: false,
       }
     }
   } else {
+    // RFC 9580 §3.7.2.1: the cipher-id usage rows are for reading version
+    // 4 and earlier keys only; "Version 6 secret keys using these formats
+    // MUST be rejected" rather than accepted with an implied Simple/MD5.
+    guard !v6 else {
+      @error.fail(
+        "packet: a v6 secret key must not use a legacy cipher-id usage octet \{usage}",
+      )
+    }
     // Legacy: the usage octet is itself the cipher algorithm id and a
     // simple S2K (MD5) is implied.
     let cipher_algo = usage
@@ -367,6 +437,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
       public,
       s2k_usage: usage,
       cipher_algo,
+      aead_algo: 0,
       s2k_spec: simple_spec,
       iv,
       secret_material: r.read_rest(),
@@ -398,23 +469,64 @@ fn cipher_block_size(algo : Int) -> Int raise {
   match algo {
     1 => 8
     2 | 3 | 4 => 8
-    7 | 8 | 9 | 10 | 11 | 12 => 16
+    7 | 8 | 9 | 10 | 11 | 12 | 13 => 16
     _ => @error.fail("packet: unknown cipher algorithm \{algo}")
   }
 }
 
 ///|
+/// The cumulative octet count of the v6 S2K parameter fields that follow
+/// the count octet itself (RFC 9580 §5.5.3): cipher, optional AEAD mode,
+/// the optional S2K-spec length octet, the specifier, and the IV.
+fn v6_params_length(key : SecretKeyPacket) -> Int {
+  let mut n = 1 // symmetric cipher octet
+  if key.s2k_usage == 253 {
+    n = n + 1 // AEAD mode octet
+  }
+  n = n + 1 + key.s2k_spec.length() // S2K spec length octet + specifier
+  n = n + key.iv.length()
+  n
+}
+
+///|
 /// Serialize: public body followed by the secret-material wire bytes.
+///
+/// The caller is responsible for the RFC 9580 §5.5.3 generation rules that
+/// `parse` enforces (no usage 255 on a v6 packet, and a v6 S2K parameter
+/// block that fits its 1-octet count); `api.lock_secret_key` is the only
+/// producer of protected packets and validates them there.
 pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes {
   let w = Writer::new()
   w.bytes(self.public.to_body().exact_view())
-  w.u8(self.s2k_usage)
+  let v6 = self.public.version() >= 6
+  // Each branch writes its own usage octet. For the legacy form that octet
+  // IS the cipher id, and writing it twice shifted the IV by one octet on
+  // every re-serialization (import -> export corruption).
   if self.s2k_usage == 0 {
+    w.u8(0)
+    w.bytes(self.secret_material.exact_view())
+  } else if self.s2k_usage == 253 {
+    w.u8(253)
+    if v6 {
+      w.u8(v6_params_length(self))
+    }
+    w.u8(self.cipher_algo)
+    w.u8(self.aead_algo)
+    if v6 {
+      w.u8(self.s2k_spec.length())
+    }
+    w.bytes(self.s2k_spec.exact_view())
+    w.bytes(self.iv.exact_view())
     w.bytes(self.secret_material.exact_view())
   } else if self.s2k_usage == 254 || self.s2k_usage == 255 {
+    w.u8(self.s2k_usage)
+    if v6 {
+      w.u8(v6_params_length(self))
+    }
     w.u8(self.cipher_algo)
-    if self.public.version() >= 6 {
-      // v6: 1-octet count of the S2K parameter fields.
+    if v6 {
+      // RFC 9580 §5.5.3: the S2K-spec length octet exists for usage 253
+      // and 254 only.
       w.u8(self.s2k_spec.length())
     }
     w.bytes(self.s2k_spec.exact_view())

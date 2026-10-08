@@ -7,12 +7,151 @@ pub fn encrypt_with_password(
   passphrase : String,
   file_name? : String,
   aead? : Bool = false,
+  argon2? : Bool = false,
+  argon2_memory_exp? : Int = 16,
 ) -> String raise {
   if aead {
-    return seal_aead_with_password(plaintext, passphrase, file_name?)
+    return seal_aead_with_password(
+      plaintext,
+      passphrase,
+      file_name?,
+      argon2~,
+      argon2_memory_exp~,
+    )
+  }
+  // `argon2` selects the S2K specifier (RFC 9580 §3.7.1.4) and is
+  // orthogonal to the SKESK/SEIPD versions: the v4 SKESK form carries any
+  // specifier. Ignoring it here (and using iterated SHA-256) would be a
+  // silent KDF downgrade.
+  let s2k : @s2k.S2k = if argon2 {
+    let salt = @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE)
+    @s2k.Argon2(salt, 3, 4, argon2_memory_exp)
+  } else {
+    let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
+    @s2k.Iterated(@primitives.Sha256, salt, @s2k.encode_count(S2K_COUNT_TARGET))
+  }
+  seal_skesk_with_password(plaintext, passphrase, s2k, file_name?)
+}
+
+///|
+/// Encrypt plaintext to a passphrase using Argon2id as the S2K specifier
+/// (type 4, RFC 9580 §3.7.1.4) — the RFC's recommendation, and the shape of
+/// Appendix A.12. The message keeps the v4 SKESK form (CFB with an
+/// all-zero IV) plus a v1 SEIPD packet, so every reader that understands
+/// Argon2 can consume it.
+///
+/// `memory_exp` is the exponent of the Argon2 memory size in KiB (default
+/// 16 → 64 MiB, go-crypto's default); `passes` and `parallelism` default to
+/// t=3, p=4.
+pub fn encrypt_with_password_argon2(
+  plaintext : BytesView,
+  passphrase : String,
+  file_name? : String,
+  passes? : Int = 3,
+  parallelism? : Int = 4,
+  memory_exp? : Int = 16,
+) -> String raise {
+  let salt = @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE)
+  let s2k : @s2k.S2k = @s2k.Argon2(salt, passes, parallelism, memory_exp)
+  seal_skesk_with_password(plaintext, passphrase, s2k, file_name?)
+}
+
+///|
+/// Encrypt plaintext to a passphrase in the RFC 9580 v6 shape: a v6 SKESK
+/// (AEAD + HKDF-SHA256 key separation, §5.3.2) followed by a v2 SEIPD
+/// packet (§5.13.2). `argon2` (default true) selects the Argon2id S2K the
+/// RFC recommends for v6; set it to false for the much cheaper
+/// iterated+salted SHA-256.
+pub fn encrypt_with_password_v6(
+  plaintext : BytesView,
+  passphrase : String,
+  file_name? : String,
+  aead? : @cipher.AeadMode = @cipher.Ocb,
+  argon2? : Bool = true,
+  passes? : Int = 3,
+  parallelism? : Int = 4,
+  memory_exp? : Int = 16,
+) -> String raise {
+  let algo = @primitives.Aes256
+  let s2k : @s2k.S2k = if argon2 {
+    @s2k.Argon2(
+      @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE),
+      passes,
+      parallelism,
+      memory_exp,
+    )
+  } else {
+    @s2k.Iterated(
+      @primitives.Sha256,
+      @primitives.random_bytes(@s2k.SALT_SIZE),
+      @s2k.encode_count(S2K_COUNT_TARGET),
+    )
   }
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let skesk = build_skesk(session_key.exact_view(), passphrase)
+  let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
+  let literal_wire = @packet.serialize_packet(
+    @packet.Literal,
+    literal.to_body().exact_view(),
+  )
+  let seipd = seal_seipd_v2(
+    algo,
+    aead,
+    SEIPD_V2_CHUNK_OCTET,
+    session_key,
+    literal_wire,
+  )
+  let cipher_algo = algo.number()
+  let aead_algo = aead.number()
+  let ad = Bytes::from_array([
+    0xC3,
+    6,
+    cipher_algo.to_byte(),
+    aead_algo.to_byte(),
+  ])
+  let kek = s2k.derive_key(
+    @primitives.utf8_bytes(passphrase).exact_view(),
+    algo.key_size(),
+  )
+  let dek = @primitives.hkdf_sha256(kek, Bytes::new(0), ad, algo.key_size())
+  let bc = @primitives.new_block_cipher(algo, dek.exact_view())
+  let nonce = @primitives.random_bytes(aead.iv_length())
+  let esk = aead_seal_session_key(
+    bc,
+    aead,
+    nonce.exact_view(),
+    ad.exact_view(),
+    session_key.exact_view(),
+  )
+  let skesk : @packet.SkeskPacket = {
+    version: 6,
+    cipher_algo,
+    aead_algo,
+    s2k,
+    iv: nonce,
+    encrypted_session_key: esk,
+  }
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(@packet.Seipd, seipd.to_body().exact_view()).exact_view(),
+  )
+  @armor.Message.encode(w.to_bytes().exact_view())
+}
+
+///|
+/// Wrap `session_key` with `s2k` into a v4 SKESK and seal the literal data
+/// with a v1 SEIPD packet. Shared by every passphrase-encryption entry
+/// point; the caller supplies the already-parameterised S2K.
+fn seal_skesk_with_password(
+  plaintext : BytesView,
+  passphrase : String,
+  s2k : @s2k.S2k,
+  file_name? : String,
+) -> String raise {
+  let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
+  let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let literal_wire = @packet.serialize_packet(
     @packet.Literal,
@@ -40,9 +179,14 @@ pub fn encrypt_with_password(
 pub fn decrypt_with_password(
   message : String,
   passphrase : String,
+  argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> Bytes raise {
   let armored = @armor.decode(message)
-  decrypt_binary_with_password(@armor.ArmorBlock::data(armored), passphrase)
+  decrypt_binary_with_password(
+    @armor.ArmorBlock::data(armored),
+    passphrase,
+    argon2_max_memory_kib~,
+  )
 }
 
 ///|
@@ -50,9 +194,12 @@ pub fn decrypt_with_password(
 pub fn decrypt_binary_with_password(
   data : BytesView,
   passphrase : String,
+  argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> Bytes raise {
   let packets = @packet.parse_packets(data)
-  let session_key = unwrap_skesk(packets, passphrase)
+  let (msg_algo, session_key, skesk_version) = unwrap_skesk(
+    packets, passphrase, argon2_max_memory_kib,
+  )
   for p in packets {
     if p.tag() == @packet.AeadEncData {
       let aead = @packet.AeadPacket::parse(p.body().exact_view())
@@ -91,13 +238,27 @@ pub fn decrypt_binary_with_password(
     }
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
+      // RFC 9580 §10.3.2.1 (Table 26): a v4 SKESK pairs with a v1 SEIPD and
+      // a v6 SKESK with a v2 SEIPD; a mismatched ESK version must be
+      // discarded. (The tag-20 4880bis AEAD container above is not part of
+      // RFC 9580 and keeps its lenient handling for GnuPG interop.)
+      guard (seipd.version == 2) == (skesk_version == 6) else {
+        @error.fail(
+          "api: SKESK version \{skesk_version} does not align with SEIPD version \{seipd.version}",
+        )
+      }
+      if seipd.version == 2 {
+        return decrypt_seipd_v2(seipd, session_key)
+      }
       guard seipd.version == 1 else {
         @error.fail("api: unsupported SEIPD version \{seipd.version}")
       }
-      let bc = @primitives.new_block_cipher(
-        @primitives.Aes256,
-        session_key.exact_view(),
-      )
+      // The SEIPD cipher is the one named inside the unwrapped session key,
+      // which need not match the SKESK's wrapping cipher (RFC 9580 §5.3.1).
+      guard session_key.length() == msg_algo.key_size() else {
+        @error.fail("api: session key length does not match the message cipher")
+      }
+      let bc = @primitives.new_block_cipher(msg_algo, session_key.exact_view())
       let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())
       return extract_literal(inner)
     }
@@ -129,14 +290,14 @@ fn write_packet_length(w : @packet.Writer, length : Int) -> Unit {
 }
 
 ///|
+/// Build a v4 SKESK whose S2K-derived key wraps `[algo || session key]` with
+/// CFB under an all-zero IV (RFC 9580 §5.3.1: an all-zero IV requires a
+/// salted or Argon2 specifier).
 fn build_skesk(
   session_key : BytesView,
   passphrase : String,
+  s2k : @s2k.S2k,
 ) -> @packet.SkeskPacket raise {
-  let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
-  // ~1 MiB of hashed material: a defensible interactive cost.
-  let count_byte = @s2k.encode_count(S2K_COUNT_TARGET)
-  let s2k : @s2k.S2k = @s2k.Iterated(@primitives.Sha256, salt, count_byte)
   // The S2K key wraps [algo byte || session key] with CFB, zero IV.
   let wrapping_key = s2k.derive_key(
     @primitives.utf8_bytes(passphrase).exact_view(),
@@ -165,10 +326,14 @@ fn build_skesk(
 }
 
 ///|
+/// Recover the session key and its message cipher algorithm from the
+/// packet stream's SKESK. The algorithm is the SKESK's own when the S2K key
+/// is the session key, and the wrapped algorithm octet otherwise.
 fn unwrap_skesk(
   packets : Array[@packet.RawPacket],
   passphrase : String,
-) -> Bytes raise {
+  argon2_max_memory_kib : Int,
+) -> (@primitives.CipherAlgo, Bytes, Int) raise {
   for p in packets {
     if p.tag() == @packet.Skesk {
       let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
@@ -180,10 +345,59 @@ fn unwrap_skesk(
           )
       }
       let pass = @primitives.utf8_bytes(passphrase)
+      if skesk.version() == 6 {
+        // RFC 9580 §5.3.2: the same HKDF-SHA256 key separation as a
+        // usage-253 secret key, with info/AD = tag | version | cipher |
+        // aead, and the session key sealed alone (no algorithm octet).
+        let kek = skesk
+          .s2k()
+          .derive_key_capped(
+            pass.exact_view(),
+            algo.key_size(),
+            argon2_max_memory_kib,
+          )
+        let mode = match @cipher.aead_mode_of_number(skesk.aead_algo()) {
+          Some(m) => m
+          None =>
+            @error.fail(
+              "api: unknown SKESK AEAD algorithm \{skesk.aead_algo()}",
+            )
+        }
+        let ad = Bytes::from_array([
+          0xC3,
+          6,
+          skesk.cipher_algo().to_byte(),
+          skesk.aead_algo().to_byte(),
+        ])
+        let dek = @primitives.hkdf_sha256(
+          kek,
+          Bytes::new(0),
+          ad,
+          algo.key_size(),
+        )
+        let bc = @primitives.new_block_cipher(algo, dek.exact_view())
+        let key = aead_open_session_key(
+          bc,
+          mode,
+          skesk.iv().exact_view(),
+          ad.exact_view(),
+          skesk.encrypted_session_key().exact_view(),
+        )
+        guard key.length() == algo.key_size() else {
+          @error.fail("api: AEAD-wrapped session key has the wrong length")
+        }
+        return (algo, key, skesk.version())
+      }
       if skesk.version() == 5 {
         // v5: the S2K-derived key is the AEAD key directly (no HKDF — the
         // HKDF step belongs to the v6 SKESK); AD = C3 05 cipher aead.
-        let kek = skesk.s2k().derive_key(pass.exact_view(), algo.key_size())
+        let kek = skesk
+          .s2k()
+          .derive_key_capped(
+            pass.exact_view(),
+            algo.key_size(),
+            argon2_max_memory_kib,
+          )
         let mode = match @cipher.aead_mode_of_number(skesk.aead_algo()) {
           Some(m) => m
           None =>
@@ -198,34 +412,41 @@ fn unwrap_skesk(
           skesk.cipher_algo().to_byte(),
           skesk.aead_algo().to_byte(),
         ])
-        let key = match mode {
-          @cipher.Ocb =>
-            @cipher.ocb_decrypt(
-              bc,
-              skesk.iv().exact_view(),
-              ad.exact_view(),
-              skesk.encrypted_session_key().exact_view(),
-            )
-          @cipher.Gcm =>
-            @cipher.gcm_decrypt(
-              bc,
-              skesk.iv().exact_view(),
-              ad.exact_view(),
-              skesk.encrypted_session_key().exact_view(),
-            )
-          @cipher.Eax => @error.fail("api: EAX is not implemented")
-        }
+        let key = aead_open_session_key(
+          bc,
+          mode,
+          skesk.iv().exact_view(),
+          ad.exact_view(),
+          skesk.encrypted_session_key().exact_view(),
+        )
         guard key.length() == algo.key_size() else {
           @error.fail("api: AEAD-wrapped session key has the wrong length")
         }
-        return key
+        return (algo, key, skesk.version())
       }
       if skesk.encrypted_session_key().length() == 0 {
-        return skesk.s2k().derive_key(pass.exact_view(), algo.key_size())
+        return (
+          algo,
+          skesk
+          .s2k()
+          .derive_key_capped(
+            pass.exact_view(),
+            algo.key_size(),
+            argon2_max_memory_kib,
+          ),
+          skesk.version(),
+        )
       }
       let bc = @primitives.new_block_cipher(
         algo,
-        skesk.s2k().derive_key(pass.exact_view(), algo.key_size()).exact_view(),
+        skesk
+        .s2k()
+        .derive_key_capped(
+          pass.exact_view(),
+          algo.key_size(),
+          argon2_max_memory_kib,
+        )
+        .exact_view(),
       )
       let wrapped = @cipher.cfb_decrypt(
         bc,
@@ -233,7 +454,8 @@ fn unwrap_skesk(
         skesk.encrypted_session_key().exact_view(),
       )
       guard wrapped.length() >= 1 else { @error.fail("api: empty session key") }
-      // The wrapped value carries the message cipher algorithm octet.
+      // The wrapped value carries the message cipher algorithm octet, which
+      // may differ from the SKESK's own wrapping cipher (RFC 9580 §5.3.1).
       let inner_algo = match
         @primitives.cipher_algo_of_number(wrapped[0].to_int()) {
         Some(a) => a
@@ -242,7 +464,11 @@ fn unwrap_skesk(
       guard wrapped.length() - 1 == inner_algo.key_size() else {
         @error.fail("api: session key length mismatch")
       }
-      return wrapped[1:wrapped.length()].to_owned()
+      return (
+        inner_algo,
+        wrapped[1:wrapped.length()].to_owned(),
+        skesk.version(),
+      )
     }
   }
   @error.fail("api: no SKESK packet found")
@@ -265,13 +491,24 @@ fn seal_aead_with_password(
   plaintext : BytesView,
   passphrase : String,
   file_name? : String,
+  argon2? : Bool = false,
+  argon2_memory_exp? : Int = 16,
 ) -> String raise {
   let cipher_algo = @primitives.Aes256.number()
   let aead_algo = @cipher.Ocb.number()
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
-  let count_byte = @s2k.encode_count(S2K_COUNT_TARGET)
-  let s2k : @s2k.S2k = @s2k.Iterated(@primitives.Sha256, salt, count_byte)
+  let s2k : @s2k.S2k = if argon2 {
+    @s2k.Argon2(
+      @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE),
+      3,
+      4,
+      argon2_memory_exp,
+    )
+  } else {
+    let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
+    let count_byte = @s2k.encode_count(S2K_COUNT_TARGET)
+    @s2k.Iterated(@primitives.Sha256, salt, count_byte)
+  }
   let pass = @primitives.utf8_bytes(passphrase)
   let kek = s2k.derive_key(pass.exact_view(), SESSION_KEY_SIZE)
   let kek_bc = @primitives.new_block_cipher(
@@ -384,4 +621,96 @@ fn extract_literal(inner : BytesView) -> Bytes raise {
     )
   }
   @error.fail("api: literal data not found")
+}
+
+///|
+/// AEAD-open a wrapped session key with any supported mode.
+fn aead_open_session_key(
+  bc : &@primitives.BlockCipher,
+  mode : @cipher.AeadMode,
+  nonce : BytesView,
+  ad : BytesView,
+  cipher : BytesView,
+) -> Bytes raise {
+  match mode {
+    @cipher.Ocb => @cipher.ocb_decrypt(bc, nonce, ad, cipher)
+    @cipher.Gcm => @cipher.gcm_decrypt(bc, nonce, ad, cipher)
+    @cipher.Eax => @cipher.eax_decrypt(bc, nonce, ad, cipher)
+  }
+}
+
+///|
+/// AEAD-seal a session key with any supported mode.
+fn aead_seal_session_key(
+  bc : &@primitives.BlockCipher,
+  mode : @cipher.AeadMode,
+  nonce : BytesView,
+  ad : BytesView,
+  plain : BytesView,
+) -> Bytes raise {
+  match mode {
+    @cipher.Ocb => @cipher.ocb_encrypt(bc, nonce, ad, plain)
+    @cipher.Gcm => @cipher.gcm_encrypt(bc, nonce, ad, plain)
+    @cipher.Eax => @cipher.eax_encrypt(bc, nonce, ad, plain)
+  }
+}
+
+///|
+/// Open a v2 SEIPD packet (RFC 9580 §5.13.2): derive the message key and
+/// nonce prefix from the session key and the packet salt, and decrypt the
+/// chunked AEAD payload. Returns the raw inner packet stream, so callers
+/// that need the signature packets get them too.
+fn open_seipd_v2(
+  seipd : @packet.SeipdPacket,
+  session_key : BytesView,
+) -> Bytes raise {
+  let algo = @error.require(
+    @primitives.cipher_algo_of_number(seipd.cipher_algo()),
+    "api: unsupported SEIPD v2 cipher",
+  )
+  let mode = @error.require(
+    @cipher.aead_mode_of_number(seipd.aead_algo()),
+    "api: unknown SEIPD v2 AEAD algorithm",
+  )
+  guard session_key.length() == algo.key_size() else {
+    @error.fail("api: session key length does not match the SEIPD v2 cipher")
+  }
+  let header5 = Bytes::from_array([
+    0xD2,
+    2,
+    seipd.cipher_algo().to_byte(),
+    seipd.aead_algo().to_byte(),
+    seipd.chunk_octet().to_byte(),
+  ])
+  let (key, iv) = @cipher.seipd_v2_kdf(
+    session_key,
+    seipd.salt().exact_view(),
+    algo.key_size(),
+    mode,
+    header5.exact_view(),
+  )
+  let bc = @primitives.new_block_cipher(algo, key.exact_view())
+  let inner = @cipher.seipd_v2_open(
+    bc,
+    mode,
+    header5.exact_view(),
+    iv.exact_view(),
+    seipd.chunk_octet(),
+    seipd.ciphertext.exact_view(),
+  ) catch {
+    _ =>
+      @error.fail(
+        "api: SEIPD v2 decryption failed (wrong key or corrupted message)",
+      )
+  }
+  inner
+}
+
+///|
+/// Open a v2 SEIPD packet and extract its literal payload.
+fn decrypt_seipd_v2(
+  seipd : @packet.SeipdPacket,
+  session_key : BytesView,
+) -> Bytes raise {
+  extract_literal(open_seipd_v2(seipd, session_key))
 }

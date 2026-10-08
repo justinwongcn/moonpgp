@@ -1,20 +1,41 @@
 ///|
-/// PKESK v3 packet body (RFC 9580 §5.1).
+/// PKESK packet body, versions 3 (RFC 9580 §5.1.1) and 6 (§5.1.2).
 pub(all) struct PkeskPacket {
-  /// Recipient key id (0 for hidden recipients).
+  version : Int
+  /// v3 only: recipient key id (all zero for a hidden recipient).
   key_id : Bytes
+  /// v6 only: recipient key version (0 for an anonymous recipient).
+  key_version : Int
+  /// v6 only: recipient fingerprint (empty for an anonymous recipient).
+  fingerprint : Bytes
   pub_algo : PubKeyAlgo
-  /// RSA: the encrypted session key MPI value. ECDH: the key-wrapped
-  /// session key (§5.1.5), serialized after `ecdh_ephemeral`.
+  /// RSA: the encrypted session key MPI value. X25519/ECDH: the
+  /// key-wrapped session key (§5.1.5/§5.1.6), serialized after
+  /// `ecdh_ephemeral`.
   encrypted : Bytes
-  /// ECDH only: the MPI value of the ephemeral point (0x40 || X).
-  /// Empty for RSA.
+  /// X25519 only: the 32-octet native ephemeral public key. ECDH only:
+  /// the MPI value of the ephemeral point (0x40 || X). Empty for RSA.
   ecdh_ephemeral : Bytes
 } derive(Debug)
 
 ///|
+pub fn PkeskPacket::version(self : PkeskPacket) -> Int {
+  self.version
+}
+
+///|
 pub fn PkeskPacket::key_id(self : PkeskPacket) -> Bytes {
   self.key_id
+}
+
+///|
+pub fn PkeskPacket::key_version(self : PkeskPacket) -> Int {
+  self.key_version
+}
+
+///|
+pub fn PkeskPacket::fingerprint(self : PkeskPacket) -> Bytes {
+  self.fingerprint
 }
 
 ///|
@@ -36,19 +57,51 @@ pub fn PkeskPacket::ecdh_ephemeral(self : PkeskPacket) -> Bytes {
 pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
-  guard version == 3 else {
+  guard version == 3 || version == 6 else {
     @error.fail("packet: unsupported PKESK version \{version}")
   }
-  let key_id = r.read_bytes(8)
+  let mut key_id = Bytes::new(0)
+  let mut key_version = 0
+  let mut fingerprint = Bytes::new(0)
+  if version == 6 {
+    // §5.1.2: a 1-octet size covering the key-version and fingerprint
+    // fields; zero means an anonymous recipient and both are absent. The
+    // fingerprint length follows from the key version (20 octets for a v4
+    // key, 32 for v5/v6), so any other size is malformed: a size of 1 used
+    // to be accepted and then re-serialized as 0, silently dropping the
+    // key version on an import/export round trip.
+    let size = r.read_u8()
+    if size > 0 {
+      key_version = r.read_u8()
+      let fp_len = match key_version {
+        4 => 20
+        5 | 6 => 32
+        _ => 0
+      }
+      guard fp_len > 0 && size == 1 + fp_len else {
+        @error.fail(
+          "packet: v6 PKESK size \{size} does not match key version \{key_version}",
+        )
+      }
+      fingerprint = r.read_bytes(size - 1)
+    }
+  } else {
+    key_id = r.read_bytes(8)
+  }
   let algo = pub_key_algo_of_number(r.read_u8())
   match algo {
-    RsaEncryptOrSign | RsaEncryptOnly | RsaSignOnly => {
-      let encrypted = r.read_mpi()
+    X25519 => {
+      let eph = r.read_bytes(32)
+      let size = r.read_u8()
+      let wrapped = r.read_bytes(size)
       PkeskPacket::{
+        version,
         key_id,
+        key_version,
+        fingerprint,
         pub_algo: algo,
-        encrypted,
-        ecdh_ephemeral: Bytes::new(0),
+        encrypted: wrapped,
+        ecdh_ephemeral: eph,
       }
     }
     Ecdh => {
@@ -56,16 +109,22 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
       let size = r.read_u8()
       let wrapped = r.read_bytes(size)
       PkeskPacket::{
+        version,
         key_id,
+        key_version,
+        fingerprint,
         pub_algo: algo,
         encrypted: wrapped,
         ecdh_ephemeral: eph,
       }
     }
     _ => {
-      let encrypted = r.read_rest()
+      let encrypted = if algo.is_rsa() { r.read_mpi() } else { r.read_rest() }
       PkeskPacket::{
+        version,
         key_id,
+        key_version,
+        fingerprint,
         pub_algo: algo,
         encrypted,
         ecdh_ephemeral: Bytes::new(0),
@@ -77,26 +136,47 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
 ///|
 pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
   let w = Writer::new()
-  w.u8(3)
-  w.bytes(self.key_id.exact_view())
+  w.u8(self.version)
+  if self.version == 6 {
+    if self.fingerprint.length() == 0 {
+      w.u8(0)
+    } else {
+      w.u8(1 + self.fingerprint.length())
+      w.u8(self.key_version)
+      w.bytes(self.fingerprint.exact_view())
+    }
+  } else {
+    w.bytes(self.key_id.exact_view())
+  }
   w.u8(self.pub_algo.number())
   match self.pub_algo {
+    X25519 => {
+      w.bytes(self.ecdh_ephemeral.exact_view())
+      w.u8(self.encrypted.length())
+      w.bytes(self.encrypted.exact_view())
+    }
     Ecdh => {
       w.mpi(self.ecdh_ephemeral.exact_view())
       w.u8(self.encrypted.length())
       w.bytes(self.encrypted.exact_view())
     }
-    _ => w.mpi(self.encrypted.exact_view())
+    _ =>
+      if self.pub_algo.is_rsa() {
+        w.mpi(self.encrypted.exact_view())
+      } else {
+        w.bytes(self.encrypted.exact_view())
+      }
   }
   w.to_bytes()
 }
 
 ///|
-/// SKESK packet body, versions 4 (RFC 9580 §5.3.1) and 5 (the 4880bis /
+/// SKESK packet body, versions 4 (RFC 9580 §5.3.1), 5 (the 4880bis /
 /// crypto-refresh AEAD-wrapped session key GnuPG 2.4 emits under
-/// --force-aead). Version 5 adds the AEAD algorithm and an IV; its
-/// encrypted session key is sealed with the S2K-derived key directly
-/// (the HKDF step belongs to the v6 SKESK, not implemented).
+/// --force-aead) and 6 (§5.3.2). Version 5 adds the AEAD algorithm and a
+/// nonce and seals the session key with the S2K-derived key directly;
+/// version 6 adds the two count octets and the HKDF-SHA256 key
+/// separation (`info`/AD = tag | version | cipher | aead).
 pub(all) struct SkeskPacket {
   version : Int
   /// Symmetric algorithm used for the message; also the default derivation
@@ -161,17 +241,47 @@ fn aead_iv_len(algo : Int) -> Int raise {
 pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
-  guard version == 4 || version == 5 else {
+  guard version == 4 || version == 5 || version == 6 else {
     @error.fail("packet: unsupported SKESK version \{version}")
   }
+  // §5.3.2: a v6 packet opens with a 1-octet count of the cipher, AEAD
+  // mode, S2K-length, specifier and nonce fields.
+  let v6_params_len = if version == 6 {
+    let n = r.read_u8()
+    guard rest_after(r, n) else {
+      @error.fail("packet: truncated v6 SKESK parameters")
+    }
+    n
+  } else {
+    0
+  }
   let cipher_algo = r.read_u8()
-  let aead_algo = if version == 5 { r.read_u8() } else { 0 }
-  let (s2k, used) = @s2k.parse(r.view())
-  ignore(r.read_bytes(used))
-  let iv = if version == 5 {
+  let aead_algo = if version == 5 || version == 6 { r.read_u8() } else { 0 }
+  let (s2k, spec_len) = if version == 6 {
+    let declared = r.read_u8()
+    guard rest_after(r, declared) else {
+      @error.fail("packet: truncated v6 SKESK S2K specifier")
+    }
+    let (s2k, used) = @s2k.parse(r.view()[0:declared])
+    guard used == declared else {
+      @error.fail("packet: v6 SKESK S2K specifier length mismatch")
+    }
+    ignore(r.read_bytes(declared))
+    (s2k, declared)
+  } else {
+    let (s2k, used) = @s2k.parse(r.view())
+    ignore(r.read_bytes(used))
+    (s2k, used)
+  }
+  let iv = if version == 5 || version == 6 {
     r.read_bytes(aead_iv_len(aead_algo))
   } else {
     Bytes::new(0)
+  }
+  if version == 6 {
+    guard v6_params_len == 3 + spec_len + iv.length() else {
+      @error.fail("packet: v6 SKESK parameter count mismatch")
+    }
   }
   let esk = r.read_rest()
   SkeskPacket::{
@@ -188,15 +298,24 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
 pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(self.version)
+  let spec = self.s2k.encode()
+  if self.version != 4 {
+    guard self.iv.length() == aead_iv_len(self.aead_algo) else {
+      @error.fail("packet: bad SKESK IV length")
+    }
+  }
+  if self.version == 6 {
+    w.u8(3 + spec.length() + self.iv.length())
+  }
   w.u8(self.cipher_algo)
-  if self.version == 5 {
+  if self.version == 5 || self.version == 6 {
     w.u8(self.aead_algo)
   }
-  w.bytes(self.s2k.encode().exact_view())
-  if self.version == 5 {
-    guard self.iv.length() == aead_iv_len(self.aead_algo) else {
-      @error.fail("packet: bad SKESK v5 IV length")
-    }
+  if self.version == 6 {
+    w.u8(spec.length())
+  }
+  w.bytes(spec.exact_view())
+  if self.version == 5 || self.version == 6 {
     w.bytes(self.iv.exact_view())
   }
   w.bytes(self.encrypted_session_key.exact_view())
@@ -401,24 +520,90 @@ pub fn CompressedPacket::to_body(self : CompressedPacket) -> Bytes {
 }
 
 ///|
-/// SEIPD v1 packet body (RFC 9580 §5.13.1): version octet + ciphertext.
+/// SEIPD packet body: version 1 (RFC 9580 §5.13.1, the MDC-protected CFB
+/// shape) and version 2 (§5.13.2, the chunked AEAD shape).
 pub(all) struct SeipdPacket {
   version : Int
+  /// v2 only: symmetric cipher algorithm id.
+  cipher_algo : Int
+  /// v2 only: AEAD algorithm id.
+  aead_algo : Int
+  /// v2 only: chunk-size octet (`chunk = 2^(c+6)` octets).
+  chunk_octet : Int
+  /// v2 only: 32-octet HKDF salt.
+  salt : Bytes
   ciphertext : Bytes
 } derive(Debug)
+
+///|
+pub fn SeipdPacket::cipher_algo(self : SeipdPacket) -> Int {
+  self.cipher_algo
+}
+
+///|
+pub fn SeipdPacket::aead_algo(self : SeipdPacket) -> Int {
+  self.aead_algo
+}
+
+///|
+pub fn SeipdPacket::chunk_octet(self : SeipdPacket) -> Int {
+  self.chunk_octet
+}
+
+///|
+pub fn SeipdPacket::salt(self : SeipdPacket) -> Bytes {
+  self.salt
+}
+
+///|
+/// A v1 SEIPD packet literal.
+pub fn SeipdPacket::v1(ciphertext : BytesView) -> SeipdPacket {
+  {
+    version: 1,
+    cipher_algo: 0,
+    aead_algo: 0,
+    chunk_octet: 0,
+    salt: Bytes::new(0),
+    ciphertext: ciphertext.to_owned(),
+  }
+}
 
 ///|
 pub fn SeipdPacket::parse(body : BytesView) -> SeipdPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
-  let ct = r.read_rest()
-  SeipdPacket::{ version, ciphertext: ct, }
+  if version == 2 {
+    let cipher_algo = r.read_u8()
+    let aead_algo = r.read_u8()
+    let chunk_octet = r.read_u8()
+    let salt = r.read_bytes(32)
+    let ct = r.read_rest()
+    SeipdPacket::{
+      version,
+      cipher_algo,
+      aead_algo,
+      chunk_octet,
+      salt,
+      ciphertext: ct,
+    }
+  } else if version == 1 {
+    let ct = r.read_rest()
+    SeipdPacket::v1(ct)
+  } else {
+    @error.fail("packet: unsupported SEIPD version \{version}")
+  }
 }
 
 ///|
 pub fn SeipdPacket::to_body(self : SeipdPacket) -> Bytes {
   let w = Writer::new()
   w.u8(self.version)
+  if self.version == 2 {
+    w.u8(self.cipher_algo)
+    w.u8(self.aead_algo)
+    w.u8(self.chunk_octet)
+    w.bytes(self.salt.exact_view())
+  }
   w.bytes(self.ciphertext.exact_view())
   w.to_bytes()
 }

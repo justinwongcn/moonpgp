@@ -17,3 +17,5 @@ GEMINI.md
 .continue/
 .codeium/
 .github/workflows/copilot-setup-steps.yml
+# ---- 工作区文档/参考实现：仅本地保留，禁止入库 ----
+docs/HANDOFF.md

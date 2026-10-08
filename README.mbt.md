@@ -4,26 +4,71 @@ An OpenPGP (RFC 4880/9580) email encryption, decryption, signing,
 verification and sending library implemented from scratch in MoonBit,
 matching the core capabilities of ProtonMail gopenpgp v3 — including
 PGP/MIME (RFC 3156) composition/parsing and end-to-end signed+encrypted
-mail submission. Built for the OSC 2026 open-source ecosystem competition.
+mail submission. Built for the October MoonBit hackathon.
 
 中文文档：[README.zh-CN.md](./README.zh-CN.md)
+
+## Installation
+
+**Requirements.** MoonBit toolchain `moon 0.1.20260920` / `moonc
+v0.10.14+7d59c7ec9` (moonc 0.10.14 or newer). No C toolchain, no FFI, no
+vendored code: the library is pure MoonBit and depends only on
+`moonbitlang/x`, `moonbitlang/async` and `moonbit-community/flate`, which
+`moon` resolves automatically. The library target is `native` (see
+`preferred_target` in `moon.mod`).
+
+**Add it to an existing MoonBit project:**
+
+```bash
+moon add justinwongcn/openpgp
+```
+
+Then declare the packages you need in that project's `moon.pkg`:
+
+```text
+import {
+  "justinwongcn/openpgp/src/api",
+  "justinwongcn/openpgp/src/mime",   // PGP/MIME (RFC 3156) parsing/verification
+  "justinwongcn/openpgp/src/mail",   // RFC 5322 / MIME assembly
+}
+```
+
+**Use the CLI without writing any code** — run it straight from a clone of
+this repository:
+
+```bash
+git clone https://github.com/justinwongcn/openpgp
+cd openpgp
+moon run cmd/main -- help
+```
+
+**Build and test a clone** (the exact commands CI runs):
+
+```bash
+moon check --target all --deny-warn
+moon build --target all
+moon test --target native      # 347 tests
+moon fmt --check
+```
 
 ## Features (P0 + P1 + email pipeline + mail sending complete)
 
 | Domain | What's implemented |
 |---|---|
 | ASCII Armor | CRC-24 checksum, multi-block parsing, CRLF tolerance |
-| Packet engine | RFC 9580 packet headers (old/new formats, partial lengths), PKESK v3, SKESK v4, PublicKey/SecretKey, UserID, Signature v4 (subpacket parsing), OnePassSig, Literal, Compressed, SEIPD v1+MDC |
-| Symmetric encryption | AES-128/192/256, OpenPGP-CFB (both the resync and no-resync variants), MDC integrity protection |
-| S2K | Simple / Salted / Iterated+Salted (SHA-256/SHA-1/RIPEMD-160/MD5) |
+| Packet engine | RFC 9580 packet headers (old/new formats, partial lengths), PKESK v3+v6, SKESK v4/v5/v6, PublicKey/SecretKey/SecretSubkey (v4+v6), UserID, Signature v4+v6 (subpacket parsing), OnePassSig v3+v6, Literal, Padding, Compressed, SEIPD v1+MDC and v2 |
+| Symmetric encryption | AES-128/192/256, OpenPGP-CFB (both the resync and no-resync variants), MDC integrity protection, and the **v2 SEIPD chunked-AEAD layer** (salt + HKDF message key/IV, `0xD2` header, per-chunk AD, final length-bound tag) |
+| S2K | Simple / Salted / Iterated+Salted (SHA-256/SHA-1/RIPEMD-160/MD5) and **Argon2 (type 4, RFC 9580 §3.7.1.4)** |
+| Argon2 primitives | Self-implemented **BLAKE2b** (RFC 7693), **Argon2id** (RFC 9106, v=0x13) and **HKDF-SHA256** (RFC 5869) in `src/primitives`, with an explicit memory cap before allocating |
 | RSA | PKCS#1 v1.5 encryption, signing, verification; key generation (Miller-Rabin, CRT, extended-Euclid modular inverse) |
 | Ed25519 | EdDSA legacy (algorithm 22) signing/verification and key generation (self-implemented on `@bigint`, `pki/ed25519.mbt`) |
-| ECDH | Curve25519Legacy (algorithm 18) session-key wrap/unwrap: X25519 + SHA-256 KDF (§11.4) + AES Key Wrap (RFC 3394), PKESK v3 ephemeral-point format |
-| Key management | Transferable-key assembly/parsing, creation and verification of self-signatures and subkey binding signatures, passphrase locking/unlocking (usage 254), armored import/export, keyring |
-| Signing/verification | inline (OnePassSig), detached, cleartext (§7 canonicalization), text-mode CRLF canonicalization |
+| ECDH / X25519 | **X25519 v6 (algorithm 25)** native-key wrap/unwrap: HKDF-SHA256 with `info = "OpenPGP X25519"` + AES-128 Key Wrap, v6 PKESK by fingerprint; Curve25519Legacy (algorithm 18) X25519 + SHA-256 KDF (§11.4) + AES Key Wrap (RFC 3394) with the PKESK v3 ephemeral-point format |
+| Key management | Transferable-key assembly/parsing, creation and verification of self-signatures and subkey binding signatures, passphrase locking/unlocking (usage 254 CFB, and **usage 253 AEAD + HKDF** with Argon2id or iterated S2K), armored import/export, keyring |
+| AEAD modes | OCB (RFC 7253, MTI), EAX and GCM (RFC 9580 §5.13.3–5.13.5), all three usable for v2 SEIPD, v5/v6 SKESK and usage-253 secret keys |
 | Compression | Compressed packet: ZIP (raw DEFLATE) / ZLIB / uncompressed; the decompressor fully supports dynamic Huffman |
 | MIME | PGP/MIME (RFC 3156): multipart/signed construction + verification, multipart/encrypted parsing, RFC 5322 header parsing; email pipeline aligned with gopenpgp v3 `mime/`: Content-Type parameter parsing, Content-Transfer-Encoding decoding (base64/quoted-printable), byte-exact MIME tree parsing, body/attachment collection (gomime semantics), one-shot `decrypt_mime` with callback delivery and gopenpgp signature-status merge (Ok/NotSigned/NoVerifier/Failed) |
 | Email assembly (library) | `src/mail`: RFC 5322 headers (Date/Message-ID/atext-quoting addresses, RFC 2047 encoded words), multipart/mixed with the RFC 3156 §3 7-bit strategy (ASCII→7bit / non-ASCII→QP / attachments base64), generalized multipart/signed over pre-built entities, one-shot `build_encrypted_mail` — the composing half of PGP/MIME, symmetric with `src/mime` parsing |
+| v6 message encryption | v6 PKESK + **v2 SEIPD** for v6 X25519 subkeys, v6 SKESK + v2 SEIPD for passphrases, honoring the recipient's Preferred AEAD Ciphersuites; `generate_ed25519_v6_key` now emits the X25519 encryption subkey with a v6 binding signature |
 | Top-level API | `pgp().encryption()/decryption()/key_generation()` builders, KeyRing |
 
 ## Interoperability (all verified by real cross-testing)
@@ -38,6 +83,11 @@ mail submission. Built for the OSC 2026 open-source ecosystem competition.
   - gpg verifies our RSA/Ed25519 signatures (Good signature); we verify gpg's signatures.
 - **openssl 3.x**: RSA-2048 signatures reproduced byte-for-byte; ciphertexts produced by openssl decrypt correctly.
 - **ProtonMail gopenpgp testdata**: unlocking an OpenPGP.js private key (passphrase "apple"), decrypting `message_signed` → `message_plaintext`, verifying its v4 self-signature, parsing a GPG smartcard dummy key.
+- **go-crypto v1.4.1 (the version gopenpgp v3 pins)**: we unlock go-crypto-written v4 **and** v6 secret keys protected with Argon2id + AES-256/OCB + HKDF (usage 253), decrypt a go-crypto-written Argon2 S2K message, and decrypt go-crypto's **v6 PKESK + v2 SEIPD** and **v6 SKESK + v2 SEIPD** messages (fixtures + generator in `testdata/gen_gocrypto_argon2_vectors.md`). In the other direction a go-crypto harness unlocks our Argon2-locked v4/v6 keys, decrypts our v4/v6 Argon2 S2K messages, our v6 PKESK+v2 SEIPD and v6 SKESK+v2 SEIPD messages, and verifies our v6 inline signature.
+- **RFC 9580 Appendix A.8–A.11**: the four complete v6 message sequences (X25519 + AEAD-OCB, AEAD-EAX, AEAD-OCB, AEAD-GCM) decrypt to "Hello, world!", together with A.4 (unprotected v6 key) and the per-chunk intermediate values; `src/cipher/seipd_v2_test.mbt` also checks the A.8/A.9/A.10 HKDF outputs octet for octet.
+- **RFC 4493 CMAC / RFC 9106 §5.3 / RFC 7693 / RFC 5869**: known-answer tests for every new primitive, including Argon2 memory sizes that are not a multiple of `4*parallelism` and tag lengths above 64 octets.
+- **RFC 9580 Appendix A.12/A.5**: the three A.12 SKESK messages (AES-128/192/256, Argon2 t=1 p=4 m=2^21) decrypt to "Hello, world!", and the A.5 v6 Ed25519 key unlocks with its passphrase and signs. Both are 2 GiB Argon2 derivations, so they are `#skip`ped by default and run with `moon test src/api --target native --include-skipped --filter 'slow:*'`.
+- **RFC 9106 / RFC 7693 / RFC 5869 known-answer tests**: the Argon2id KAT including secret and associated data, the x/crypto vector table, all BLAKE2b reference vectors, and the three HKDF Appendix A cases.
 - Known-answer vectors: SEIPD v1 produced by openssl AES-CFB; AES Key Wrap against the official RFC 3394 Appendix B vectors.
 
 One command runs the full GnuPG interop matrix (six directions, a freshly
@@ -47,7 +97,14 @@ generated key every run):
 ./scripts/interop_check.sh
 ```
 
-Automated tests: `moon test` (246 tests covering all vectors above; 238 on wasm).
+Automated tests: `moon test --target native` (347 tests covering all vectors
+above; two RFC 9580 Argon2 fixtures are `#skip`ped because each derivation
+needs 2 GiB — run them with `--include-skipped --filter 'slow:*'`).
+`moon test --target wasm` and `--target js` run 339 tests. wasm-gc has no
+platform entropy source: its entropy-free subset still passes, but the 100
+tests that generate key material (keygen, random IV/salt, Argon2) fail there
+with `platform entropy source unavailable`; use native, wasm or js for the
+full suite.
 
 ## Quick start (CLI demo)
 
@@ -160,8 +217,37 @@ MIT attribution).
   generation side emits v4 packets by default. RFC 9580 v6 Ed25519
   signing keys/signatures and the AEAD (OCB/GCM) message shapes are
   implemented (v6: detached signatures only; AEAD: symkey/tag-20 for
-  GnuPG `--force-aead` interop — new keys still use SEIPD v1). Argon2
-  S2K remains a roadmap item.
+  GnuPG `--force-aead` interop — new keys still use SEIPD v1). Argon2 S2K
+  (type 4), the usage-253 secret-key protection (Argon2 + HKDF-SHA256 +
+  AES-256/OCB), v6 PKESK/SKESK and v2 SEIPD message encryption are all
+  implemented; Ed448/X448 and v5 keys remain out of scope.
+- **No hidden-length padding**: the Padding packet (tag 21) is parsed and
+  skipped on decryption (the RFC 9580 appendix samples use it), but
+  `encrypt_to_recipients` / `encrypt_with_password_v6` do not add it, so a
+  v2 SEIPD message reveals its approximate length.
+- **Argon2 memory is attacker-controlled**: a 20-octet S2K specifier can
+  ask for up to 2^31 KiB, and the derivation runs before any
+  authentication. Entry points that parse untrusted packets
+  (`decrypt_with_password`, `decrypt_binary_with_password`,
+  `PrivateKey::unlock`) therefore default to
+  `DEFAULT_ARGON2_MAX_MEMORY_KIB` = 256 MiB and refuse an oversized request
+  **before allocating** — 4x the 64 MiB profile every mainstream writer
+  emits, 8x below the implementation ceiling `ARGON2_MAX_MEMORY_KIB`
+  (2 GiB, RFC 9106's first recommended option, used by RFC 9580 Appendix
+  A.5/A.12). Opening such a message needs the wider policy explicitly:
+  `decrypt_with_password(msg, pass, argon2_max_memory_kib=@primitives.ARGON2_MAX_MEMORY_KIB)`,
+  which is what `scripts/acceptance.sh` does for those RFC vectors. For
+  scale: OpenPGP.js defaults its cap to 1 TiB and go-crypto/gopenpgp impose
+  none.
+- **No certificate / self-signature validation**: key parsing is
+  structural only. A v6 key must *carry* a Direct Key signature
+  (RFC 9580 §5.2.3.10) but it is **not** cryptographically verified, and
+  algorithm preferences, expiry and revocation are read from the signature
+  as given. This matches gopenpgp/go-crypto, the reference this library
+  targets (which also selects self-signatures without verifying them);
+  applications that need trust must verify keys themselves — cf.
+  `gpg --check-sigs`, OpenPGP.js `verifyPrimaryKey`, Sequoia
+  `Cert::with_policy`.
 - Non-native backends (wasm/js) have no clock API yet; key creation timestamps
   are placeholders (see `primitives/clock.mbt`).
 - The demo transports (`example/netmail`) are **native-only**. SMTP
@@ -195,10 +281,23 @@ MIT attribution).
   and GCM with the 4880bis tag-20 chunk layer and v5 SKESK
   (`encpass ... aead`), byte-level gpg `--force-aead` interop in both
   directions (`scripts/interop_aead_gpg.sh`).
-- Post-contest roadmap: Argon2 S2K (BLAKE2b + Argon2id self-implementation
-  planned), SEIPD v2 and v6 message encryption (v6 subkeys, v6 one-pass
-  signatures), self-implemented DEFLATE (replacing
-  moonbit-community/flate, differential-testing plan).
+- Argon2 S2K (2026-10-08): self-implemented BLAKE2b (RFC 7693), Argon2id
+  (RFC 9106) and HKDF-SHA256 (RFC 5869); S2K specifier type 4; the
+  usage-253 secret-key protection path (HKDF key separation + AES-256/OCB +
+  public-key-associated data); `PrivateKey::lock_argon2` / `unlock`, and
+  `encrypt_with_password_argon2`. Verified against RFC 9106 §5.3, the
+  x/crypto vector table, RFC 9580 Appendix A.12/A.5, and go-crypto v1.4.1
+  in both directions.
+- v6 message encryption (2026-10-08): v6 PKESK (§5.1.2) with X25519 key
+  wrap, v6 SKESK (§5.3.2) with HKDF key separation, v2 SEIPD (§5.13.2)
+  chunked AEAD, v6 X25519 encryption subkeys with v6 binding signatures,
+  v6 One-Pass Signatures, the Features / Preferred AEAD Ciphersuites
+  subpackets, and EAX (RFC 9580 §5.13.3). Verified against RFC 9580
+  Appendix A.8 (X25519+OCB), A.9 (EAX), A.10 (OCB) and A.11 (GCM), plus
+  go-crypto v1.4.1 differentials in both directions.
+- Post-contest roadmap: Ed448/X448 and v5 key support, hidden-recipient
+  v6 PKESK, self-implemented DEFLATE (replacing moonbit-community/flate,
+  differential-testing plan).
 
 New capabilities (P1):
 
@@ -216,6 +315,14 @@ let payload = @mime.extract_pgp_encrypted(mime_msg)   // extract the PGP MESSAGE
 // encryption subkey — the gopenpgp "Default" profile shape, verified live
 // against gpg in both directions
 let key = @api.generate_ed25519_key("Ed <ed@example.com>")
+
+// Argon2 S2K (RFC 9580 §3.7.1.4, specifier type 4) — the RFC's recommended
+// passphrase KDF, in the gopenpgp RFC 9580 profile's default shape
+// (t=3, p=4, m=2^16 KiB); unlock() handles usage 253 and 254 alike.
+let locked = key.lock_argon2("passphrase", memory_exp=16)
+let unlocked = locked.unlock("passphrase")
+let msg = @api.encrypt_with_password_argon2(plaintext, "passphrase")
+let back = @api.decrypt_with_password(msg, "passphrase")
 
 // Email (MIME) support aligned with gopenpgp v3's mime/ domain:
 // decrypt an armored PGP mail, walk the MIME tree, verify a root

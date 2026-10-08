@@ -8,7 +8,11 @@ import {
 // Values
 pub fn bytes_lossy(Bytes) -> String
 
+pub fn close_fd_raw(Int) -> Unit
+
 pub fn connect_imap(String, Int, Bool) -> ImapClient raise
+
+pub fn connect_sock(String, Int) -> &Sock raise
 
 pub fn connect_socket(String, Int) -> &Socket raise
 
@@ -16,7 +20,7 @@ pub fn is_local_host(String) -> Bool
 
 pub fn parse_int(String) -> Int?
 
-pub fn smtp_send(&Socket, String, String, Array[String], String, (String, String)?) -> Unit raise
+pub async fn smtp_send(&Sock, String, String, Array[String], String, (String, String)?) -> Unit
 
 pub fn status_names(Array[@api.VerifyStatus]) -> String
 
@@ -57,6 +61,11 @@ pub(all) struct MailboxState {
   mut uidvalidity : Int
 }
 
+pub(all) enum SmtpTlsMode {
+  Implicit
+  Starttls
+}
+
 pub(all) struct SmtpTransport {
   host : String
   port : Int
@@ -64,11 +73,34 @@ pub(all) struct SmtpTransport {
   user : String?
   password : String?
 }
-pub fn SmtpTransport::send(Self, String, String, Array[String]) -> Unit raise
+pub async fn SmtpTransport::send(Self, String, String, Array[String]) -> Unit
+
+pub(all) enum SmtpTrust {
+  System
+  PemFile(String)
+  Insecure
+}
+
+pub(all) struct TlsTransport {
+  host : String
+  port : Int
+  mode : SmtpTlsMode
+  trust : SmtpTrust
+  ehlo_domain : String
+  user : String?
+  password : String?
+}
+pub async fn TlsTransport::send(Self, String, String, Array[String]) -> Unit
 
 // Type aliases
 
 // Traits
+pub(open) trait Sock {
+  async fn write_all(Self, Bytes) -> Unit
+  async fn read_line(Self) -> String
+  fn close(Self) -> Unit
+}
+
 pub(open) trait Socket {
   fn write_all(Self, Bytes) -> Unit raise
   fn read_line(Self) -> String raise

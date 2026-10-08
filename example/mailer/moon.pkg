@@ -10,3 +10,10 @@ import {
 }
 
 pkgtype(kind: "executable")
+
+// `moonbitlang/async` exposes no async entry point on wasm-gc
+// (`run_async_main` is absent there), so the demo declares the backends it
+// can actually run on. wasm-gc builds skip the package instead of failing;
+// native/wasm/js keep the single `async fn main` used by every transport.
+
+supported_targets = "native+wasm+js"

@@ -14,3 +14,10 @@ import {
 import {
   "moonbitlang/async",
 } for "wbtest"
+
+// `@socket` and `@tls` are referenced only from `#cfg(target="native")`
+// code (transport_tls.mbt, async_sock.mbt). moon.pkg cannot express
+// target-conditional imports yet, so on wasm/js the imports are flagged
+// unused; the transports are native-only by design (socket_stub.mbt).
+
+warnings = "-unused_package"

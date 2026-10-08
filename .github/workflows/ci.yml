@@ -1,0 +1,70 @@
+name: CI
+
+# Full check / build / test pipeline for the module: every push and every PR.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same ref cancels the run that is still in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast gate: formatting + strict analysis with warnings denied.
+  check:
+    name: check (fmt + moon check --target all --deny-warn)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-moonbit
+      - name: moon fmt --check
+        run: moon fmt --check
+      - name: moon check --target all --deny-warn
+        run: moon check --target all --deny-warn
+
+  # Build every supported backend.
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [native, wasm, js]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-moonbit
+      - name: moon build --target ${{ matrix.target }}
+        run: moon build --target ${{ matrix.target }}
+
+  # Run the suite on every backend that has a platform entropy source.
+  test:
+    name: test (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [native, wasm, js]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-moonbit
+      - name: moon test --target ${{ matrix.target }}
+        run: moon test --target ${{ matrix.target }}
+
+  # The runnable example promised by the README, end to end.
+  smoke:
+    name: example smoke test (keygen → encrypt → decrypt)
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-moonbit
+      - name: bash scripts/ci_smoke.sh
+        run: bash scripts/ci_smoke.sh

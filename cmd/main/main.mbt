@@ -1,6 +1,7 @@
 ///|
 /// moonpgp — OpenPGP mail encryption demo CLI.
 ///
+///   moon run cmd/main -- help
 ///   moon run cmd/main -- keygen "Name <me@example.com>" key.asc pub.asc [bits]
 ///   moon run cmd/main -- encpass <passphrase> <in> <out>
 ///   moon run cmd/main -- decpass <passphrase> <in> <out>
@@ -12,6 +13,11 @@ fn main {
   let args = @env.args()
   if args.length() < 2 {
     usage()
+  }
+  // `help`, `--help` and `-h` print the usage text and exit successfully.
+  if args[1] == "help" || args[1] == "--help" || args[1] == "-h" {
+    print_usage()
+    return
   }
   let rest : Array[String] = args[2:args.length()].to_owned()
   run(args[1], rest) catch {
@@ -142,8 +148,15 @@ fn parse_bits(rest : Array[String], default : Int) -> Int {
 
 ///|
 fn usage() -> Unit {
+  print_usage()
+  abort("missing arguments")
+}
+
+///|
+fn print_usage() -> Unit {
   println(
     "usage:\n" +
+    "  help                                     print this message\n" +
     "  keygen \"Name <me@example.com>\" key.asc pub.asc [bits]\n" +
     "  edkeygen \"Name <me@example.com>\" key.asc pub.asc\n" +
     "  v6keygen \"Name <me@example.com>\" key.asc pub.asc   (RFC 9580 v6 Ed25519)\n" +
@@ -154,5 +167,4 @@ fn usage() -> Unit {
     "  sign <secret-key.asc> <in> <out.sig>\n" +
     "  verify <public-key.asc> <in> <sig.asc>",
   )
-  abort("missing arguments")
 }

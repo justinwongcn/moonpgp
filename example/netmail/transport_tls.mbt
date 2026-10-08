@@ -47,6 +47,7 @@ pub(all) enum SmtpTlsMode {
 }
 
 ///|
+#cfg(target="native")
 fn SmtpTrust::to_trusted_root(self : SmtpTrust) -> @tls.TrustedRoot {
   match self {
     System => @tls.SystemRoot
@@ -60,6 +61,7 @@ fn SmtpTrust::to_trusted_root(self : SmtpTrust) -> @tls.TrustedRoot {
 ///|
 /// Format the resolver's UInt as dotted-quad IPv4 (network order:
 /// most significant octet first — verified against 127.0.0.1).
+#cfg(target="native")
 fn ipv4_string(ip : UInt) -> String {
   let a = (ip >> 24) & 0xFF
   let b = (ip >> 16) & 0xFF
@@ -70,6 +72,7 @@ fn ipv4_string(ip : UInt) -> String {
 
 ///|
 /// Extract the DER bytes of the first PEM CERTIFICATE block.
+#cfg(target="native")
 fn first_cert_der(text : String) -> Bytes raise {
   let begin = "-----BEGIN CERTIFICATE-----"
   let end = "-----END CERTIFICATE-----"
@@ -91,6 +94,7 @@ fn first_cert_der(text : String) -> Bytes raise {
 ///|
 /// PemFile trust: the handshake ran without verification, so pin the
 /// peer certificate to the anchor NOW, before any SMTP byte flows.
+#cfg(target="native")
 fn verify_peer_certificate(tls : @tls.Tls, trust : SmtpTrust) -> Unit raise {
   match trust {
     PemFile(path) => {
@@ -224,7 +228,10 @@ pub async fn TlsTransport::send(
 ///|
 /// Non-native stub: the TLS transport rides the POSIX socket and the
 /// system SSL library — native-only like every mail transport here.
+/// It keeps the `async` shape of the native method so callers compile
+/// unchanged on every backend; hence the silenced `unused_async`.
 #cfg(not(target="native"))
+#warnings("-unused_async")
 pub async fn TlsTransport::send(
   _self : TlsTransport,
   _message : String,

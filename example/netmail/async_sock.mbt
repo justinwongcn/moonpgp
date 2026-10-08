@@ -8,8 +8,12 @@
 /// transport closes) and an idempotence flag so the close-once
 /// ownership transfer at the STARTTLS upgrade cannot turn into a
 /// double close.
+///
+/// Native-only: it wraps `@tls.Tls`, which exists only where sockets do,
+/// so every declaration here carries `#cfg(target="native")`.
 
 ///|
+#cfg(target="native")
 priv struct AsyncSock[R] {
   rw : R
   buf : FixedArray[Byte]
@@ -20,6 +24,7 @@ priv struct AsyncSock[R] {
 }
 
 ///|
+#cfg(target="native")
 fn[R] AsyncSock::new(rw : R, close_fn : () -> Unit) -> AsyncSock[R] {
   {
     rw,
@@ -38,6 +43,7 @@ fn[R] AsyncSock::new(rw : R, close_fn : () -> Unit) -> AsyncSock[R] {
 /// fill's negative-is-error policy).
 
 ///|
+#cfg(target="native")
 async fn[R : @io.Reader] AsyncSock::refill(self : AsyncSock[R]) -> Unit {
   self.rstart = 0
   self.rend = 0
@@ -49,6 +55,7 @@ async fn[R : @io.Reader] AsyncSock::refill(self : AsyncSock[R]) -> Unit {
 }
 
 ///|
+#cfg(target="native")
 impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn write_all(
   self : AsyncSock[R],
   data : Bytes,
@@ -62,6 +69,7 @@ impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn write_all(
 /// invalid code units become '?').
 
 ///|
+#cfg(target="native")
 impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn read_line(
   self : AsyncSock[R],
 ) -> String raise {
@@ -91,6 +99,7 @@ impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn read_line(
 }
 
 ///|
+#cfg(target="native")
 impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn close(
   self : AsyncSock[R],
 ) -> Unit {

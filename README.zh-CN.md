@@ -1,23 +1,67 @@
 # moonpgp — OpenPGP 邮件加解密（MoonBit 实现）
 
 用 MoonBit 从零实现的 OpenPGP（RFC 4880/9580）邮件加密/解密/签名/验证库，
-对标 ProtonMail gopenpgp v3 的核心能力，为国产开源生态大赛 OSC 2026 而生。
+对标 ProtonMail gopenpgp v3 的核心能力，为十月份 MoonBit 黑客松而作。
+
+## 安装方式
+
+**环境要求。** MoonBit 工具链 `moon 0.1.20260920` / `moonc
+v0.10.14+7d59c7ec9`（moonc 需 0.10.14 及以上）。不需要 C 工具链、不使用 FFI、
+不 vendor 任何源码：本库是纯 MoonBit 实现，只依赖 `moonbitlang/x`、
+`moonbitlang/async` 与 `moonbit-community/flate`，由 `moon` 自动解析。库目标为
+`native`（见 `moon.mod` 的 `preferred_target`）。
+
+**加入已有 MoonBit 项目：**
+
+```bash
+moon add justinwongcn/openpgp
+```
+
+然后在该项目的 `moon.pkg` 中声明需要的包：
+
+```text
+import {
+  "justinwongcn/openpgp/src/api",
+  "justinwongcn/openpgp/src/mime",   // PGP/MIME（RFC 3156）解析与验证
+  "justinwongcn/openpgp/src/mail",   // RFC 5322 / MIME 组装
+}
+```
+
+**不写代码直接用 CLI** —— 从本仓库克隆后即可运行：
+
+```bash
+git clone https://github.com/justinwongcn/openpgp
+cd openpgp
+moon run cmd/main -- help
+```
+
+**克隆后的构建与测试**（与 CI 执行完全一致）：
+
+```bash
+moon check --target all --deny-warn
+moon build --target all
+moon test --target native      # 347 个测试
+moon fmt --check
+```
 
 ## 当前能力（P0 全部完成，P1 全部完成）
 
 | 域 | 内容 |
 |---|---|
 | ASCII Armor | CRC-24 校验、多块解析、CRLF 容错 |
-| 包格式引擎 | RFC 9580 包头（新旧格式、partial length）、PKESK v3、SKESK v4、PublicKey/SecretKey、UserID、Signature v4（子包解析）、OnePassSig、Literal、Compressed、SEIPD v1+MDC |
-| 对称加密 | AES-128/192/256、OpenPGP-CFB（resync 与 no-resync 两种变体）、MDC 完整性 |
-| S2K | Simple / Salted / Iterated+Salted（SHA-256/SHA-1/RIPEMD-160/MD5） |
+| 包格式引擎 | RFC 9580 包头（新旧格式、partial length）、PKESK v3+v6、SKESK v4/v5/v6、PublicKey/SecretKey/SecretSubkey（v4+v6）、UserID、Signature v4+v6（子包解析）、OnePassSig v3+v6、Literal、Padding、Compressed、SEIPD v1+MDC 与 v2 |
+| 对称加密 | AES-128/192/256、OpenPGP-CFB（resync 与 no-resync 两种变体）、MDC 完整性，以及 **v2 SEIPD 分块 AEAD 层**（salt + HKDF 消息密钥/IV、`0xD2` 头、分块 AD、末块长度绑定 tag） |
+| S2K | Simple / Salted / Iterated+Salted（SHA-256/SHA-1/RIPEMD-160/MD5）与 **Argon2（type 4，RFC 9580 §3.7.1.4）** |
+| Argon2 原语 | `src/primitives` 自实现 **BLAKE2b**（RFC 7693）、**Argon2id**（RFC 9106，v=0x13）与 **HKDF-SHA256**（RFC 5869）；解析不可信报文时默认 256 MiB 内存策略，超限在分配前拒绝 |
 | RSA | PKCS#1 v1.5 加解密、签名、验证；密钥生成（Miller-Rabin、CRT、扩展欧几里得模逆） |
 | Ed25519 | EdDSA legacy（算法 22）签名/验证、密钥生成（自实现 @bigint 算术，`pki/ed25519.mbt`） |
-| ECDH | Curve25519Legacy（算法 18）会话密钥封装/解封：X25519 + SHA-256 KDF（§11.4）+ AES Key Wrap（RFC 3394），PKESK v3 临时点格式 |
-| 密钥管理 | 传输型密钥组装/解析、自签名与子钥绑定签名的创建与验证、口令锁定/解锁（usage 254）、armor 导入导出、keyring |
-| 签名/验证 | inline（OnePassSig）、detached、cleartext（§7 规范化）、文本模式 CRLF 规范化 |
+| ECDH / X25519 | **X25519 v6（算法 25）**原生密钥封装/解封：HKDF-SHA256（`info = "OpenPGP X25519"`）+ AES-128 Key Wrap，v6 PKESK 按指纹寻址；Curve25519Legacy（算法 18）X25519 + SHA-256 KDF（§11.4）+ AES Key Wrap（RFC 3394）与 PKESK v3 临时点格式 |
+| AEAD 模式 | OCB（RFC 7253，MTI）、EAX、GCM（RFC 9580 §5.13.3–5.13.5），三种模式均可用于 v2 SEIPD、v5/v6 SKESK 与 usage-253 私钥 |
+| 密钥管理 | 传输型密钥组装/解析、自签名与子钥绑定签名的创建与验证、口令锁定/解锁（usage 254 CFB，以及 **usage 253 AEAD + HKDF**，支持 Argon2id 或 iterated S2K）、armor 导入导出、keyring |
+| 签名/验证 | inline（v4 密钥用 OnePassSig v3，v6 密钥用携带相同 hash salt 与 32 字节指纹的 v6 OPS）、detached、cleartext（§7 规范化）、文本模式 CRLF 规范化 |
 | 压缩 | Compressed 包：ZIP（raw DEFLATE）/ZLIB/无压缩，解压端完整支持动态哈夫曼 |
 | MIME | PGP/MIME（RFC 3156）：multipart/signed 构建+验证、multipart/encrypted 解析、RFC 5322 头解析 |
+| v6 消息加密 | v6 PKESK + **v2 SEIPD**（面向 v6 X25519 子钥）、v6 SKESK + v2 SEIPD（口令），并遵循接收方 Preferred AEAD Ciphersuites；`generate_ed25519_v6_key` 现在同时生成带 v6 绑定签名的 X25519 加密子钥 |
 | 顶层 API | `pgp().encryption()/decryption()/key_generation()` builder、KeyRing |
 
 ## 互操作验证（全部实测通过）
@@ -31,6 +75,21 @@
 - **openssl 3.x**：RSA-2048 签名逐字节复现、openssl 加密的密文我们解密。
 - **ProtonMail gopenpgp testdata**：解锁 OpenPGP.js 私钥（口令 "apple"）、解密
   `message_signed` → `message_plaintext`、验证其 v4 自签名、解析 GPG smartcard dummy 密钥。
+- **go-crypto v1.4.1（gopenpgp v3 锁定的版本）**：我们能解锁它写出的 v4/v6 私钥
+  （Argon2id + AES-256/OCB + HKDF，usage 253）、解密其 Argon2 S2K 消息，以及
+  **v6 PKESK + v2 SEIPD** 与 **v6 SKESK + v2 SEIPD** 消息（夹具与生成脚本见
+  `testdata/gen_gocrypto_argon2_vectors.md`）；反方向上，go-crypto 程序能解锁本库
+  锁定的 v4/v6 密钥、解密本库的 v4/v6 Argon2 消息与 v6 消息，并验证本库的 v6 内联签名。
+- **RFC 9580 附录 A.8–A.11**：四条完整的 v6 消息序列（X25519+OCB、EAX、OCB、GCM）
+  均解出 "Hello, world!"；`src/cipher/seipd_v2_test.mbt` 还逐字节核对了 A.8/A.9/A.10
+  的 HKDF 输出。
+- **RFC 4493 CMAC / RFC 9106 §5.3 / RFC 7693 / RFC 5869**：全部新原语的已知答案测试，
+  包含内存不是 `4*parallelism` 整数倍的 Argon2 参数与超过 64 字节的 tag。
+- **RFC 9580 附录 A.12/A.5**：三个 A.12 SKESK 消息（AES-128/192/256，Argon2 t=1 p=4 m=2^21）
+  均解出 "Hello, world!"；A.5 的 v6 Ed25519 私钥能用口令解锁并签名。两者每次派生需 2 GiB，
+  默认 `#skip`，用 `moon test src/api --target native --include-skipped --filter 'slow:*'` 运行。
+- **RFC 9106 / RFC 7693 / RFC 5869 已知答案测试**：含 secret 与 AD 的 Argon2id KAT、
+  x/crypto 向量表、全部 BLAKE2b 参考向量、三个 HKDF 附录 A 用例。
 - openssl AES-CFB 生成的 SEIPD v1 已知答案向量；AES Key Wrap 采用 RFC 3394 附录 B 官方向量。
 
 一条命令跑完整 GnuPG 互验矩阵（六个方向，每次全新密钥）：
@@ -39,7 +98,11 @@
 ./scripts/interop_check.sh
 ```
 
-自动化测试：`moon test`（246 个测试，含上述全部向量；wasm 目标 238 个）。
+自动化测试：`moon test --target native`（347 个测试，含上述全部向量；两个 RFC 9580
+Argon2 夹具因每次派生需 2 GiB 而默认 `#skip`，用 `--include-skipped --filter 'slow:*'` 运行）。
+`moon test --target wasm` 与 `--target js` 各运行 339 个测试。wasm-gc 无平台熵源：
+不含熵的测试仍通过，但 100 个需要生成密钥材料（keygen、随机 IV/salt、Argon2）的用例
+会以 `platform entropy source unavailable` 失败；完整套件请用 native / wasm / js。
 
 ## 快速上手（CLI 演示）
 
@@ -75,6 +138,22 @@ let armored = @api.encrypt_to_recipients(data, [key.to_public()])
 
 ///|
 let plain = @api.decrypt_with_private_key(armored, key)
+
+// Argon2 S2K（RFC 9580 §3.7.1.4，specifier type 4）——RFC 推荐的口令 KDF，
+// 默认参数与 gopenpgp RFC 9580 profile 一致（t=3、p=4、m=2^16 KiB）；
+// unlock() 同时处理 usage 253 与 254。
+
+///|
+let locked = key.lock_argon2("口令", memory_exp=16)
+
+///|
+let unlocked = locked.unlock("口令")
+
+///|
+let armored = @api.encrypt_with_password_argon2(plaintext, "口令")
+
+///|
+let plain = @api.decrypt_with_password(armored, "口令")
 
 // gopenpgp 风格 builder
 
@@ -137,7 +216,22 @@ core `@bigint` 自实现（`pki/curve25519.mbt`），公钥路径无第三方依
 - 支持解密侧的 v3 遗留特性有限；生成端默认产出 v4 格式。RFC 9580 v6 Ed25519
   签名密钥/签名与 AEAD（OCB/GCM）消息形态已实现（v6 仅分离签名；AEAD 为
   对称密钥/tag-20 形态，用于 GnuPG `--force-aead` 互通——新键消息仍走 SEIPD v1）。
-  Argon2 S2K 仍在路线图上。
+  **Argon2 S2K（type 4）、usage 253 私钥保护（Argon2 + HKDF-SHA256 + AES-256/OCB）、
+  v6 PKESK/SKESK 与 v2 SEIPD 消息加解密均已实现**；Ed448/X448 与 v5 密钥不在范围内。
+- **Argon2 内存由攻击者控制**：20 字节 S2K specifier 最多可要求 2^31 KiB，且派生发生在
+  任何认证**之前**。解析不可信报文的入口（`decrypt_with_password`、
+  `decrypt_binary_with_password`、`PrivateKey::unlock`）默认
+  `DEFAULT_ARGON2_MAX_MEMORY_KIB` = 256 MiB，超限时**在分配之前**直接失败——这是主流实现
+  写出默认 64 MiB 档的 4 倍，也低于实现硬顶 `ARGON2_MAX_MEMORY_KIB`（2 GiB，RFC 9106 首选档，
+  RFC 9580 附录 A.5/A.12 使用的值）8 倍。要打开这类报文必须显式放宽：
+  `decrypt_with_password(msg, pass, argon2_max_memory_kib=@primitives.ARGON2_MAX_MEMORY_KIB)`
+  ——`scripts/acceptance.sh` 正是这样跑 A.5/A.12 的。量级参照：OpenPGP.js 默认上限 1 TiB，
+  go-crypto/gopenpgp 不设上限。
+- **不验证证书/自签名**：密钥解析只做结构校验。v6 密钥必须*带有* Direct Key 签名
+  （RFC 9580 §5.2.3.10），但**不做**密码学验证；算法偏好、有效期与吊销信息按签名
+  原样读取。这与本库对标的 gopenpgp/go-crypto 一致（它同样只"选取"自签名而不验签）；
+  需要信任的应用必须自行验证密钥——参见 `gpg --check-sigs`、OpenPGP.js
+  `verifyPrimaryKey`、Sequoia `Cert::with_policy`。
 - 非 native 后端（wasm/js）暂无时钟 API，密钥创建时间为占位值（见 `primitives/clock.mbt`）。
 - 演示传输（`example/netmail`）仅 native 目标。SMTP 提交默认加密（465 隐式 TLS /
   587 STARTTLS,对系统根证书校验）;`--smtp-trust pem:FILE` 钉扎对端证书

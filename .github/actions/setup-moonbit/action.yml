@@ -1,0 +1,25 @@
+name: Setup MoonBit
+description: Install the MoonBit toolchain and warm the dependency cache.
+
+runs:
+  using: composite
+  steps:
+    - name: Install MoonBit
+      shell: bash
+      run: |
+        curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+        echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+    - name: Cache the mooncakes registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.moon/registry
+        key: moon-registry-${{ runner.os }}-${{ hashFiles('moon.mod') }}
+        restore-keys: |
+          moon-registry-${{ runner.os }}-
+
+    - name: Show toolchain and sync dependencies
+      shell: bash
+      run: |
+        moon version --all
+        moon update

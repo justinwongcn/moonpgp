@@ -115,6 +115,12 @@ async fn smtp_greeting(sock : &Sock) -> Unit {
 /// handshake on the same connection; the session continues with the
 /// second EHLO inside smtp_session (the plaintext EHLO's capabilities
 /// are void after the upgrade).
+//
+// Only the native TLS transport calls this in production, so a non-test
+// wasm/js build reports it as unused; the white-box SMTP suite drives it
+// on every target, so keep it compiled everywhere and silence the false
+// positive.
+#warnings("-unused_value")
 async fn smtp_starttls_ehlo(sock : &Sock, ehlo_domain : String) -> Unit {
   smtp_command(sock, "EHLO \{ehlo_domain}")
   let (_, caps) = expect(sock, 250, "EHLO")

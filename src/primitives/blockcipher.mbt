@@ -56,6 +56,16 @@ pub fn CipherAlgo::key_size(self : CipherAlgo) -> Int {
 pub const BLOCK_SIZE : Int = 16
 
 ///|
+/// Display name of a symmetric cipher algorithm, for error messages.
+fn cipher_algo_name(algo : CipherAlgo) -> String {
+  match algo {
+    Aes128 => "AES-128"
+    Aes192 => "AES-192"
+    Aes256 => "AES-256"
+  }
+}
+
+///|
 /// Construct the block cipher for `algo` under `key`.
 pub fn new_block_cipher(
   algo : CipherAlgo,
@@ -63,7 +73,7 @@ pub fn new_block_cipher(
 ) -> &BlockCipher raise {
   guard key.length() == algo.key_size() else {
     @error.fail(
-      "key length \{key.length()} does not match {algo_name(algo)} key size \{algo.key_size()}",
+      "key length \{key.length()} does not match \{cipher_algo_name(algo)} key size \{algo.key_size()}",
     )
   }
   new_aes(key)

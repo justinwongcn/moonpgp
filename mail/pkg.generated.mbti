@@ -1,0 +1,48 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/moonpgp/mail"
+
+import {
+  "justinwongcn/moonpgp/api",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn build_encrypted_mail(MailAddress, Array[MailAddress], subject~ : String, text~ : String, attachments~ : Array[MailAttachment], signer~ : @api.PrivateKey, recipients~ : Array[@api.PublicKey], domain~ : String, now_unix? : Int64, tz_offset_minutes? : Int) -> String raise
+
+pub fn build_multipart_mixed(String, Array[MailAttachment]) -> String raise
+
+pub fn build_pgp_mime_signed_entity(String, @api.PrivateKey) -> String raise
+
+pub fn decode_rfc2047(String) -> String
+
+pub fn encode_quoted_printable(BytesView) -> Bytes
+
+pub fn encode_rfc2047(String) -> String raise
+
+pub fn format_address(MailAddress) -> String raise
+
+pub fn local_tz_offset_minutes(Int64) -> Int raise
+
+pub fn message_id(Bytes, String) -> String raise
+
+pub fn rfc5322_date(Int64, Int) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct MailAddress {
+  display_name : String
+  addr : String
+} derive(@debug.Debug)
+pub fn MailAddress::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MailAttachment {
+  filename : String
+  content_type : String
+  data : Bytes
+} derive(@debug.Debug)
+pub fn MailAttachment::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

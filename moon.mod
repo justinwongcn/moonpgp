@@ -9,13 +9,13 @@
 //   "moonbitlang/x@0.4.6",
 // }
 
-name = "justinwongcn/openpgp"
+name = "justinwongcn/moonpgp"
 
 version = "0.1.0"
 
 readme = "README.mbt.md"
 
-repository = "https://github.com/justinwongcn/openpgp"
+repository = "https://github.com/justinwongcn/moonpgp"
 
 license = "Apache-2.0"
 

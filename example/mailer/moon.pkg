@@ -1,10 +1,10 @@
 import {
   "moonbitlang/async",
-  "justinwongcn/openpgp/example/netmail",
-  "justinwongcn/openpgp/src/error",
-  "justinwongcn/openpgp/src/api",
-  "justinwongcn/openpgp/src/mime",
-  "justinwongcn/openpgp/src/mail",
+  "justinwongcn/moonpgp/example/netmail",
+  "justinwongcn/moonpgp/error",
+  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp/mime",
+  "justinwongcn/moonpgp/mail",
   "moonbitlang/x/fs",
   "moonbitlang/core/env",
 }

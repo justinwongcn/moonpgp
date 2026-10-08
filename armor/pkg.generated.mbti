@@ -1,0 +1,45 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/moonpgp/armor"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn crc24(BytesView) -> Int
+
+pub fn decode(String) -> ArmorBlock raise
+
+pub fn decode_all(String) -> Array[ArmorBlock] raise
+
+pub fn encode(BytesView, headers? : Array[(String, String)]) -> String
+
+// Errors
+
+// Types and methods
+pub struct ArmorBlock {
+  armor_type : ArmorType
+  headers : Array[(String, String)]
+  data : Bytes
+} derive(@debug.Debug)
+pub fn ArmorBlock::armor_type(Self) -> ArmorType
+pub fn ArmorBlock::data(Self) -> Bytes
+pub fn ArmorBlock::header(Self, String) -> String?
+pub fn ArmorBlock::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ArmorType {
+  Message
+  PublicKey
+  PrivateKey
+  Signature
+} derive(Eq, @debug.Debug)
+pub fn ArmorType::begin_marker(Self) -> String
+pub fn ArmorType::encode(Self, BytesView, headers? : Array[(String, String)]) -> String
+pub fn ArmorType::end_marker(Self) -> String
+pub fn ArmorType::equal(Self, Self) -> Bool
+pub fn ArmorType::not_equal(Self, Self) -> Bool
+pub fn ArmorType::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

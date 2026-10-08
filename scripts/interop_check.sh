@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# GnuPG interop check for justinwongcn/openpgp (moonpgp).
+# GnuPG interop check for justinwongcn/moonpgp (moonpgp).
 #
 # Builds the release CLI, generates a fresh Ed25519(+cv25519) key with the
 # moonpgp CLI, imports it into a throwaway GNUPGHOME, and cross-verifies six

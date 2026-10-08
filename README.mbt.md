@@ -1,5 +1,7 @@
 # moonpgp — OpenPGP email encryption in pure MoonBit
 
+**Module:** `justinwongcn/moonpgp` · [mooncakes.io/docs/justinwongcn/moonpgp](https://mooncakes.io/docs/justinwongcn/moonpgp)
+
 An OpenPGP (RFC 4880/9580) email encryption, decryption, signing,
 verification and sending library implemented from scratch in MoonBit,
 matching the core capabilities of ProtonMail gopenpgp v3 — including
@@ -20,16 +22,16 @@ vendored code: the library is pure MoonBit and depends only on
 **Add it to an existing MoonBit project:**
 
 ```bash
-moon add justinwongcn/openpgp
+moon add justinwongcn/moonpgp
 ```
 
 Then declare the packages you need in that project's `moon.pkg`:
 
 ```text
 import {
-  "justinwongcn/openpgp/src/api",
-  "justinwongcn/openpgp/src/mime",   // PGP/MIME (RFC 3156) parsing/verification
-  "justinwongcn/openpgp/src/mail",   // RFC 5322 / MIME assembly
+  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp/mime",   // PGP/MIME (RFC 3156) parsing/verification
+  "justinwongcn/moonpgp/mail",   // RFC 5322 / MIME assembly
 }
 ```
 
@@ -37,8 +39,8 @@ import {
 this repository:
 
 ```bash
-git clone https://github.com/justinwongcn/openpgp
-cd openpgp
+git clone https://github.com/justinwongcn/moonpgp
+cd moonpgp
 moon run cmd/main -- help
 ```
 
@@ -59,7 +61,7 @@ moon fmt --check
 | Packet engine | RFC 9580 packet headers (old/new formats, partial lengths), PKESK v3+v6, SKESK v4/v5/v6, PublicKey/SecretKey/SecretSubkey (v4+v6), UserID, Signature v4+v6 (subpacket parsing), OnePassSig v3+v6, Literal, Padding, Compressed, SEIPD v1+MDC and v2 |
 | Symmetric encryption | AES-128/192/256, OpenPGP-CFB (both the resync and no-resync variants), MDC integrity protection, and the **v2 SEIPD chunked-AEAD layer** (salt + HKDF message key/IV, `0xD2` header, per-chunk AD, final length-bound tag) |
 | S2K | Simple / Salted / Iterated+Salted (SHA-256/SHA-1/RIPEMD-160/MD5) and **Argon2 (type 4, RFC 9580 §3.7.1.4)** |
-| Argon2 primitives | Self-implemented **BLAKE2b** (RFC 7693), **Argon2id** (RFC 9106, v=0x13) and **HKDF-SHA256** (RFC 5869) in `src/primitives`, with an explicit memory cap before allocating |
+| Argon2 primitives | Self-implemented **BLAKE2b** (RFC 7693), **Argon2id** (RFC 9106, v=0x13) and **HKDF-SHA256** (RFC 5869) in `primitives`, with an explicit memory cap before allocating |
 | RSA | PKCS#1 v1.5 encryption, signing, verification; key generation (Miller-Rabin, CRT, extended-Euclid modular inverse) |
 | Ed25519 | EdDSA legacy (algorithm 22) signing/verification and key generation (self-implemented on `@bigint`, `pki/ed25519.mbt`) |
 | ECDH / X25519 | **X25519 v6 (algorithm 25)** native-key wrap/unwrap: HKDF-SHA256 with `info = "OpenPGP X25519"` + AES-128 Key Wrap, v6 PKESK by fingerprint; Curve25519Legacy (algorithm 18) X25519 + SHA-256 KDF (§11.4) + AES Key Wrap (RFC 3394) with the PKESK v3 ephemeral-point format |
@@ -67,7 +69,7 @@ moon fmt --check
 | AEAD modes | OCB (RFC 7253, MTI), EAX and GCM (RFC 9580 §5.13.3–5.13.5), all three usable for v2 SEIPD, v5/v6 SKESK and usage-253 secret keys |
 | Compression | Compressed packet: ZIP (raw DEFLATE) / ZLIB / uncompressed; the decompressor fully supports dynamic Huffman |
 | MIME | PGP/MIME (RFC 3156): multipart/signed construction + verification, multipart/encrypted parsing, RFC 5322 header parsing; email pipeline aligned with gopenpgp v3 `mime/`: Content-Type parameter parsing, Content-Transfer-Encoding decoding (base64/quoted-printable), byte-exact MIME tree parsing, body/attachment collection (gomime semantics), one-shot `decrypt_mime` with callback delivery and gopenpgp signature-status merge (Ok/NotSigned/NoVerifier/Failed) |
-| Email assembly (library) | `src/mail`: RFC 5322 headers (Date/Message-ID/atext-quoting addresses, RFC 2047 encoded words), multipart/mixed with the RFC 3156 §3 7-bit strategy (ASCII→7bit / non-ASCII→QP / attachments base64), generalized multipart/signed over pre-built entities, one-shot `build_encrypted_mail` — the composing half of PGP/MIME, symmetric with `src/mime` parsing |
+| Email assembly (library) | `mail`: RFC 5322 headers (Date/Message-ID/atext-quoting addresses, RFC 2047 encoded words), multipart/mixed with the RFC 3156 §3 7-bit strategy (ASCII→7bit / non-ASCII→QP / attachments base64), generalized multipart/signed over pre-built entities, one-shot `build_encrypted_mail` — the composing half of PGP/MIME, symmetric with `mime` parsing |
 | v6 message encryption | v6 PKESK + **v2 SEIPD** for v6 X25519 subkeys, v6 SKESK + v2 SEIPD for passphrases, honoring the recipient's Preferred AEAD Ciphersuites; `generate_ed25519_v6_key` now emits the X25519 encryption subkey with a v6 binding signature |
 | Top-level API | `pgp().encryption()/decryption()/key_generation()` builders, KeyRing |
 
@@ -84,9 +86,9 @@ moon fmt --check
 - **openssl 3.x**: RSA-2048 signatures reproduced byte-for-byte; ciphertexts produced by openssl decrypt correctly.
 - **ProtonMail gopenpgp testdata**: unlocking an OpenPGP.js private key (passphrase "apple"), decrypting `message_signed` → `message_plaintext`, verifying its v4 self-signature, parsing a GPG smartcard dummy key.
 - **go-crypto v1.4.1 (the version gopenpgp v3 pins)**: we unlock go-crypto-written v4 **and** v6 secret keys protected with Argon2id + AES-256/OCB + HKDF (usage 253), decrypt a go-crypto-written Argon2 S2K message, and decrypt go-crypto's **v6 PKESK + v2 SEIPD** and **v6 SKESK + v2 SEIPD** messages (fixtures + generator in `testdata/gen_gocrypto_argon2_vectors.md`). In the other direction a go-crypto harness unlocks our Argon2-locked v4/v6 keys, decrypts our v4/v6 Argon2 S2K messages, our v6 PKESK+v2 SEIPD and v6 SKESK+v2 SEIPD messages, and verifies our v6 inline signature.
-- **RFC 9580 Appendix A.8–A.11**: the four complete v6 message sequences (X25519 + AEAD-OCB, AEAD-EAX, AEAD-OCB, AEAD-GCM) decrypt to "Hello, world!", together with A.4 (unprotected v6 key) and the per-chunk intermediate values; `src/cipher/seipd_v2_test.mbt` also checks the A.8/A.9/A.10 HKDF outputs octet for octet.
+- **RFC 9580 Appendix A.8–A.11**: the four complete v6 message sequences (X25519 + AEAD-OCB, AEAD-EAX, AEAD-OCB, AEAD-GCM) decrypt to "Hello, world!", together with A.4 (unprotected v6 key) and the per-chunk intermediate values; `cipher/seipd_v2_test.mbt` also checks the A.8/A.9/A.10 HKDF outputs octet for octet.
 - **RFC 4493 CMAC / RFC 9106 §5.3 / RFC 7693 / RFC 5869**: known-answer tests for every new primitive, including Argon2 memory sizes that are not a multiple of `4*parallelism` and tag lengths above 64 octets.
-- **RFC 9580 Appendix A.12/A.5**: the three A.12 SKESK messages (AES-128/192/256, Argon2 t=1 p=4 m=2^21) decrypt to "Hello, world!", and the A.5 v6 Ed25519 key unlocks with its passphrase and signs. Both are 2 GiB Argon2 derivations, so they are `#skip`ped by default and run with `moon test src/api --target native --include-skipped --filter 'slow:*'`.
+- **RFC 9580 Appendix A.12/A.5**: the three A.12 SKESK messages (AES-128/192/256, Argon2 t=1 p=4 m=2^21) decrypt to "Hello, world!", and the A.5 v6 Ed25519 key unlocks with its passphrase and signs. Both are 2 GiB Argon2 derivations, so they are `#skip`ped by default and run with `moon test api --target native --include-skipped --filter 'slow:*'`.
 - **RFC 9106 / RFC 7693 / RFC 5869 known-answer tests**: the Argon2id KAT including secret and associated data, the x/crypto vector table, all BLAKE2b reference vectors, and the three HKDF Appendix A cases.
 - Known-answer vectors: SEIPD v1 produced by openssl AES-CFB; AES Key Wrap against the official RFC 3394 Appendix B vectors.
 
@@ -152,8 +154,8 @@ let decrypt = @api.pgp().decryption().password("pw").finish()
 
 ### Email demo pipeline (`example/`, not part of the library API)
 
-The library's email scope is **assembly (`src/mail`) + parsing/verification
-(`src/mime`)**. The wire transports — a POSIX-socket SMTP client, an
+The library's email scope is **assembly (`mail`) + parsing/verification
+(`mime`)**. The wire transports — a POSIX-socket SMTP client, an
 IMAP4rev1 subset client (`example/netmail`) and the two CLI demos
 (`example/mailer`, `example/mailreader`) — are **demo and test
 infrastructure**, not published API: they exist to prove the library
@@ -172,22 +174,25 @@ See Security notes.
 ## Module layout (designed for replaceability)
 
 ```
-src/
-├── primitives/  # isolation layer: the only third-party crypto entry point; BlockCipher trait, HashId, asserted entropy
-├── armor/       # CRC-24 + armor (PGP-specific, never replaced)
-├── s2k/         # S2K (PGP-specific, never replaced)
-├── packet/      # packet format engine (PGP-specific, never replaced)
-├── cipher/      # OpenPGP-CFB variants + SEIPD v1/MDC + AES Key Wrap (RFC 3394)
-├── pki/         # RSA (keygen/PKCS#1 v1.5), Ed25519/X25519 (self-implemented per RFC 8032/7748, `curve25519.mbt`)
-├── compress/    # DEFLATE/ZLIB (currently moonbit-community/flate, replaceable)
-├── mime/        # PGP/MIME (RFC 3156), MIME tree parsing/collectors, transfer-encoding decoding
-├── mail/        # RFC 5322 mail assembly (headers, QP/7bit strategy, attachments) — no transport
-├── api/         # key management, signing, ECDH/RSA session-key wrapping, keyring, builders
-└── interop/     # interop tests against gopenpgp/GnuPG/openssl
+primitives/  # isolation layer: the only third-party crypto entry point; BlockCipher trait, HashId, asserted entropy
+armor/       # CRC-24 + armor (PGP-specific, never replaced)
+s2k/         # S2K (PGP-specific, never replaced)
+packet/      # packet format engine (PGP-specific, never replaced)
+cipher/      # OpenPGP-CFB variants + SEIPD v1/MDC + AES Key Wrap (RFC 3394)
+pki/         # RSA (keygen/PKCS#1 v1.5), Ed25519/X25519 (self-implemented per RFC 8032/7748, `curve25519.mbt`)
+compress/    # DEFLATE/ZLIB (currently moonbit-community/flate, replaceable)
+mime/        # PGP/MIME (RFC 3156), MIME tree parsing/collectors, transfer-encoding decoding
+mail/        # RFC 5322 mail assembly (headers, QP/7bit strategy, attachments) — no transport
+api/         # key management, signing, ECDH/RSA session-key wrapping, keyring, builders
+interop/     # interop tests against gopenpgp/GnuPG/openssl
 ```
 
-Wire transports and the CLI demos live under `example/` (netmail, mailer,
-mailreader) as demo/test infrastructure — see "Email demo pipeline" above.
+Every library package sits directly at the repository root, so the import
+path is the module name plus the package name (`justinwongcn/moonpgp/api`),
+with no intermediate directory layer. Support material lives in `cmd/` (the
+demo CLI), `example/` (wire transports and the mailer/mailreader demos) and
+`testdata/` (fixtures) — demo/test infrastructure, not published library
+API. See "Email demo pipeline" above.
 
 ## Dependencies (version-pinned)
 
@@ -269,7 +274,7 @@ MIT attribution).
   encryption side (X25519 + KDF + key wrap, bidirectional gpg interop).
 - Email pipeline (2026-10-02): gopenpgp v3 `mime/`-aligned decrypt_mime +
   MIME tree/collectors + Content-Type/CTE decoding, gpg cross-verified.
-- Mail sending (2026-10-02): `src/mail` composition + `example/mailer`
+- Mail sending (2026-10-02): `mail` composition + `example/mailer`
   SMTP/file transports, gpg-verified end-to-end. TLS submission
   (2026-10-06): implicit TLS/STARTTLS via `moonbitlang/async/tls`,
   gpg-verified end-to-end against a local TLS sink

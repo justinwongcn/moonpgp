@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/moonpgp/s2k"
+
+import {
+  "justinwongcn/moonpgp/primitives",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const ARGON2_SALT_SIZE : Int = 16
+
+pub const SALT_SIZE : Int = 8
+
+pub fn decode_count(Int) -> Int
+
+pub fn encode_count(Int) -> Int
+
+pub fn parse(BytesView) -> (S2k, Int) raise
+
+// Errors
+
+// Types and methods
+pub(all) enum S2k {
+  Simple(@primitives.HashId)
+  Salted(@primitives.HashId, Bytes)
+  Iterated(@primitives.HashId, Bytes, Int)
+  Argon2(Bytes, Int, Int, Int)
+} derive(Eq, @debug.Debug)
+pub fn S2k::derive_key(Self, BytesView, Int) -> Bytes raise
+pub fn S2k::derive_key_capped(Self, BytesView, Int, Int) -> Bytes raise
+pub fn S2k::encode(Self) -> Bytes raise
+pub fn S2k::equal(Self, Self) -> Bool
+pub fn S2k::is_argon2(Self) -> Bool
+pub fn S2k::not_equal(Self, Self) -> Bool
+pub fn S2k::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

@@ -1,15 +1,30 @@
 # Changelog
 
-All notable changes to `justinwongcn/openpgp` (moonpgp) are documented in this
-file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project are documented in this file. The format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
+project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 The module version lives in `moon.mod` (`version`); a section is only renamed to
 a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
-Nothing yet — the RFC 9580 v6/AEAD/Argon2 work landed in 0.1.0 below.
+### Changed (breaking)
+
+- **Module renamed: `justinwongcn/openpgp` → `justinwongcn/moonpgp`**, and the
+  flat layout replaced the `src/` layer. Import paths lose both the old module
+  name and the intermediate directory:
+  - `justinwongcn/openpgp/src/api` → `justinwongcn/moonpgp/api`
+  - `justinwongcn/openpgp/src/mime` → `justinwongcn/moonpgp/mime`
+  - `justinwongcn/openpgp/src/mail` → `justinwongcn/moonpgp/mail`
+  - …and likewise for `primitives`, `armor`, `s2k`, `packet`, `cipher`, `pki`,
+    `compress` and `interop`.
+  Dependents must update `moon add justinwongcn/moonpgp` and every import path.
+  The former `justinwongcn/openpgp@0.1.0` release is deprecated on mooncakes.io
+  in favour of this module; no further versions will be published under it.
+- `moon.mod` `repository` now points at `https://github.com/justinwongcn/moonpgp`.
+- Documentation, CI and the interop scripts follow the new module name and the
+  flat layout.
 
 ## [0.1.0] - 2026-10-08
 
@@ -28,7 +43,7 @@ GnuPG 2.4.5, OpenSSL 3.x, ProtonMail gopenpgp v3 and go-crypto v1.4.1.
   resync, MDC integrity protection.
 - **S2K** — Simple / Salted / Iterated+Salted (SHA-256, SHA-1, RIPEMD-160,
   MD5) and Argon2 (specifier type 4, RFC 9580 §3.7.1.4).
-- **Self-implemented primitives** (`src/primitives`) — BLAKE2b (RFC 7693),
+- **Self-implemented primitives** (`primitives`) — BLAKE2b (RFC 7693),
   Argon2id (RFC 9106, v=0x13), HKDF-SHA256 (RFC 5869), with an explicit
   memory cap enforced *before* allocation when parsing untrusted messages.
 - **RSA** — PKCS#1 v1.5 encryption, signing, verification, and key generation
@@ -59,7 +74,7 @@ GnuPG 2.4.5, OpenSSL 3.x, ProtonMail gopenpgp v3 and go-crypto v1.4.1.
   collection with gomime semantics, and one-shot `decrypt_mime` with callback
   delivery and the gopenpgp signature-status merge (Ok/NotSigned/NoVerifier/
   Failed).
-- **Email assembly** (`src/mail`) — RFC 5322 headers (Date, Message-ID,
+- **Email assembly** (`mail`) — RFC 5322 headers (Date, Message-ID,
   atext-quoting addresses, RFC 2047 encoded words), multipart/mixed with the
   RFC 3156 §3 7-bit strategy, generalised `multipart/signed` over pre-built
   entities, and one-shot `build_encrypted_mail` (sign-then-encrypt).

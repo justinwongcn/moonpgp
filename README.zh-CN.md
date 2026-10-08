@@ -1,5 +1,7 @@
 # moonpgp — OpenPGP 邮件加解密（MoonBit 实现）
 
+**模块名：** `justinwongcn/moonpgp` · [mooncakes.io/docs/justinwongcn/moonpgp](https://mooncakes.io/docs/justinwongcn/moonpgp)
+
 用 MoonBit 从零实现的 OpenPGP（RFC 4880/9580）邮件加密/解密/签名/验证库，
 对标 ProtonMail gopenpgp v3 的核心能力，为十月份 MoonBit 黑客松而作。
 
@@ -14,24 +16,24 @@ v0.10.14+7d59c7ec9`（moonc 需 0.10.14 及以上）。不需要 C 工具链、�
 **加入已有 MoonBit 项目：**
 
 ```bash
-moon add justinwongcn/openpgp
+moon add justinwongcn/moonpgp
 ```
 
 然后在该项目的 `moon.pkg` 中声明需要的包：
 
 ```text
 import {
-  "justinwongcn/openpgp/src/api",
-  "justinwongcn/openpgp/src/mime",   // PGP/MIME（RFC 3156）解析与验证
-  "justinwongcn/openpgp/src/mail",   // RFC 5322 / MIME 组装
+  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp/mime",   // PGP/MIME（RFC 3156）解析与验证
+  "justinwongcn/moonpgp/mail",   // RFC 5322 / MIME 组装
 }
 ```
 
 **不写代码直接用 CLI** —— 从本仓库克隆后即可运行：
 
 ```bash
-git clone https://github.com/justinwongcn/openpgp
-cd openpgp
+git clone https://github.com/justinwongcn/moonpgp
+cd moonpgp
 moon run cmd/main -- help
 ```
 
@@ -52,7 +54,7 @@ moon fmt --check
 | 包格式引擎 | RFC 9580 包头（新旧格式、partial length）、PKESK v3+v6、SKESK v4/v5/v6、PublicKey/SecretKey/SecretSubkey（v4+v6）、UserID、Signature v4+v6（子包解析）、OnePassSig v3+v6、Literal、Padding、Compressed、SEIPD v1+MDC 与 v2 |
 | 对称加密 | AES-128/192/256、OpenPGP-CFB（resync 与 no-resync 两种变体）、MDC 完整性，以及 **v2 SEIPD 分块 AEAD 层**（salt + HKDF 消息密钥/IV、`0xD2` 头、分块 AD、末块长度绑定 tag） |
 | S2K | Simple / Salted / Iterated+Salted（SHA-256/SHA-1/RIPEMD-160/MD5）与 **Argon2（type 4，RFC 9580 §3.7.1.4）** |
-| Argon2 原语 | `src/primitives` 自实现 **BLAKE2b**（RFC 7693）、**Argon2id**（RFC 9106，v=0x13）与 **HKDF-SHA256**（RFC 5869）；解析不可信报文时默认 256 MiB 内存策略，超限在分配前拒绝 |
+| Argon2 原语 | `primitives` 自实现 **BLAKE2b**（RFC 7693）、**Argon2id**（RFC 9106，v=0x13）与 **HKDF-SHA256**（RFC 5869）；解析不可信报文时默认 256 MiB 内存策略，超限在分配前拒绝 |
 | RSA | PKCS#1 v1.5 加解密、签名、验证；密钥生成（Miller-Rabin、CRT、扩展欧几里得模逆） |
 | Ed25519 | EdDSA legacy（算法 22）签名/验证、密钥生成（自实现 @bigint 算术，`pki/ed25519.mbt`） |
 | ECDH / X25519 | **X25519 v6（算法 25）**原生密钥封装/解封：HKDF-SHA256（`info = "OpenPGP X25519"`）+ AES-128 Key Wrap，v6 PKESK 按指纹寻址；Curve25519Legacy（算法 18）X25519 + SHA-256 KDF（§11.4）+ AES Key Wrap（RFC 3394）与 PKESK v3 临时点格式 |
@@ -81,13 +83,13 @@ moon fmt --check
   `testdata/gen_gocrypto_argon2_vectors.md`）；反方向上，go-crypto 程序能解锁本库
   锁定的 v4/v6 密钥、解密本库的 v4/v6 Argon2 消息与 v6 消息，并验证本库的 v6 内联签名。
 - **RFC 9580 附录 A.8–A.11**：四条完整的 v6 消息序列（X25519+OCB、EAX、OCB、GCM）
-  均解出 "Hello, world!"；`src/cipher/seipd_v2_test.mbt` 还逐字节核对了 A.8/A.9/A.10
+  均解出 "Hello, world!"；`cipher/seipd_v2_test.mbt` 还逐字节核对了 A.8/A.9/A.10
   的 HKDF 输出。
 - **RFC 4493 CMAC / RFC 9106 §5.3 / RFC 7693 / RFC 5869**：全部新原语的已知答案测试，
   包含内存不是 `4*parallelism` 整数倍的 Argon2 参数与超过 64 字节的 tag。
 - **RFC 9580 附录 A.12/A.5**：三个 A.12 SKESK 消息（AES-128/192/256，Argon2 t=1 p=4 m=2^21）
   均解出 "Hello, world!"；A.5 的 v6 Ed25519 私钥能用口令解锁并签名。两者每次派生需 2 GiB，
-  默认 `#skip`，用 `moon test src/api --target native --include-skipped --filter 'slow:*'` 运行。
+  默认 `#skip`，用 `moon test api --target native --include-skipped --filter 'slow:*'` 运行。
 - **RFC 9106 / RFC 7693 / RFC 5869 已知答案测试**：含 secret 与 AD 的 Argon2id KAT、
   x/crypto 向量表、全部 BLAKE2b 参考向量、三个 HKDF 附录 A 用例。
 - openssl AES-CFB 生成的 SEIPD v1 已知答案向量；AES Key Wrap 采用 RFC 3394 附录 B 官方向量。
@@ -166,7 +168,7 @@ let decrypt = @api.pgp().decryption().password("pw").finish()
 
 ### 邮件演示管线（`example/`,不属于库 API）
 
-库的邮件能力是**组装（`src/mail`）+ 解析验签（`src/mime`）**两半。线上传输——
+库的邮件能力是**组装（`mail`）+ 解析验签（`mime`）**两半。线上传输——
 POSIX socket SMTP 客户端、IMAP4rev1 子集客户端（`example/netmail`）与两个
 CLI 演示（`example/mailer`、`example/mailreader`）——是**演示与测试基建**,
 不作为发布 API：它们的存在是为了端到端验证库本身（一封签名+加密邮件经
@@ -181,22 +183,23 @@ SMTP 提交、再经 IMAP 取回、解密验签,一条命令闭环——`example
 ## 模块布局（可替换性设计）
 
 ```
-src/
-├── primitives/  # 隔离层：唯一的第三方 crypto 接入点；BlockCipher trait、HashId、熵源断言
-├── armor/       # CRC-24 + armor（PGP 专属，永不替换）
-├── s2k/         # S2K（PGP 专属，永不替换）
-├── packet/      # 包格式引擎（PGP 专属，永不替换）
-├── cipher/      # OpenPGP-CFB 变体 + SEIPD v1/MDC + AES Key Wrap（RFC 3394）
-├── pki/         # RSA（keygen/PKCS#1 v1.5）、Ed25519/X25519（RFC 8032/7748 自实现，`curve25519.mbt`）
-├── compress/    # DEFLATE/ZLIB（当前走 moonbit-community/flate，可替换点）
-├── mime/        # PGP/MIME（RFC 3156）：解析、验签、收件交付
-├── mail/        # RFC 5322 邮件组装（头、QP/7bit 策略、附件）——不含传输
-├── api/         # 密钥管理、签名、ECDH/RSA 会话密钥封装、keyring、builder
-└── interop/     # 与 gopenpgp/GnuPG/openssl 的互通测试
+primitives/  # 隔离层：唯一的第三方 crypto 接入点；BlockCipher trait、HashId、熵源断言
+armor/       # CRC-24 + armor（PGP 专属，永不替换）
+s2k/         # S2K（PGP 专属，永不替换）
+packet/      # 包格式引擎（PGP 专属，永不替换）
+cipher/      # OpenPGP-CFB 变体 + SEIPD v1/MDC + AES Key Wrap（RFC 3394）
+pki/         # RSA（keygen/PKCS#1 v1.5）、Ed25519/X25519（RFC 8032/7748 自实现，`curve25519.mbt`）
+compress/    # DEFLATE/ZLIB（当前走 moonbit-community/flate，可替换点）
+mime/        # PGP/MIME（RFC 3156）：解析、验签、收件交付
+mail/        # RFC 5322 邮件组装（头、QP/7bit 策略、附件）——不含传输
+api/         # 密钥管理、签名、ECDH/RSA 会话密钥封装、keyring、builder
+interop/     # 与 gopenpgp/GnuPG/openssl 的互通测试
 ```
 
-线上传输与 CLI 演示在 `example/`（netmail、mailer、mailreader）,属演示与
-测试基建——见上文"邮件演示管线"。
+库包直接位于仓库根目录，因此 import 路径 = 模块名 + 包名
+（`justinwongcn/moonpgp/api`），不经过任何中间目录层。支撑材料放在 `cmd/`
+（演示 CLI）、`example/`（传输与 mailer/mailreader 演示）与 `testdata/`
+（夹具），属演示与测试基建，不属于发布出去的库 API——见上文"邮件演示管线"。
 
 依赖（版本固定）：`moonbitlang/x@0.5.5`（哈希全家桶/HMAC/AES-ECB 单块原语）、
 `moonbit-community/flate@0.8.4`（DEFLATE）。Ed25519/X25519 按 RFC 8032/7748 基于

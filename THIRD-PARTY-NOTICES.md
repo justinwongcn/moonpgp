@@ -56,6 +56,18 @@ IN THE SOFTWARE.
 
 Repository: https://github.com/ProtonMail/gopenpgp
 
+**ProtonMail go-crypto v1.4.1**（gopenpgp v3 的 `go.mod` 锁定版本；`reference/gopenpgp/go.mod`）。
+用途：Argon2 S2K（S2K type 4）与 usage-253 私钥保护的**双向差分对标**。
+`testdata/interop_gocrypto_v4_argon2_key.asc`、`interop_gocrypto_v6_argon2_key.asc`、
+`interop_gocrypto_argon2_msg.asc`、`interop_gocrypto_v6_aead_key.asc`、
+`interop_gocrypto_v6_aead_msg.asc`、`interop_gocrypto_v6_aead_skesk_msg.asc`
+由 go-crypto 自身 writer 生成（Argon2 夹具参数刻意取最小合法值 t=1/p=1/m=2^5 KiB，
+口令 `go-crypto-argon2`；v6 AEAD 夹据为 v6 Ed25519+X25519 密钥与 v6 PKESK/SKESK +
+v2 SEIPD 消息，口令 `go-crypto-v6`）；生成方式记录在
+`testdata/gen_gocrypto_argon2_vectors.md`。go-crypto 以 BSD-3-Clause 许可发布
+（Copyright (c) 2009 The Go Authors / Proton AG），分发上述夹具时须随附其许可文本：
+https://github.com/ProtonMail/go-crypto/blob/master/LICENSE
+
 ## OpenSSL / LibreSSL（经 moonbitlang/async/tls 动态加载，未随包分发）
 
 `example/netmail` 的 TLS 提交（2026-10-06）通过官方包 `moonbitlang/async/tls`
@@ -69,14 +81,24 @@ SSL 库，其许可条款随之适用。
 
 ## Standards documents（标准文档来源，公有规范，无 license 义务，仅记出处）
 
-测试向量还引用了以下标准中的官方向量：RFC 9580 / RFC 4880（OpenPGP）、
-RFC 3156（PGP/MIME）、RFC 3394（AES Key Wrap，附录 B）、RFC 7748（X25519）、
-RFC 8032（Ed25519）、FIPS 197 与 NIST SP 800-38A（AES/CFB）。
+测试向量还引用了以下标准中的官方向量：RFC 9580 / RFC 4880（OpenPGP，含附录
+A.4 / A.5 / A.8–A.12 的 v6、AEAD 与 Argon2 夹具）、RFC 9106（Argon2，含 §5.3
+Argon2id KAT）、RFC 7693（BLAKE2b，附录 A）、RFC 5869（HKDF，附录 A）、
+RFC 4493（CMAC-AES，§2.4 全部向量）、RFC 7253（OCB）、RFC 3156（PGP/MIME）、
+RFC 3394（AES Key Wrap，附录 B）、RFC 7748（X25519）、RFC 8032（Ed25519）、
+FIPS 197 与 NIST SP 800-38A（AES/CFB）、NIST SP 800-38D（GCM）。RFC 文本本身
+为 IETF 公有规范。
+`src/primitives/argon2_test.mbt` 中的 x/crypto 向量表取自
+`golang.org/x/crypto/argon2`（BSD-3-Clause，Copyright (c) 2017 The Go Authors），
+仅作数值引用，未复制其代码。
 
 ## 本仓库自生成文件（无第三方权利）
 
-`testdata/` 其余文件（`interop_*.asc` 等 11 个 + 少量自有向量）为本地用 GnuPG 2.4.5
-生成的无口令测试密钥与消息，以及 openssl 对拍产物，权利归属本项目。
+`testdata/` 其余文件（`interop_*.asc` 等）为本地用 GnuPG 2.4.5 生成的无口令测试
+密钥与消息，以及 openssl 对拍产物，权利归属本项目；六个
+`interop_gocrypto_*` 夹具来源见上文 go-crypto 段落。
+`src/primitives/blake2b.mbt`、`argon2.mbt`、`hkdf.mbt` 均为本项目从 RFC 文本
+自实现，未引入新的运行时依赖。
 
 ## 本项目许可
 

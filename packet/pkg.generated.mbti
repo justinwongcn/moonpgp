@@ -329,11 +329,13 @@ pub fn SignaturePacket::hash_algo(Self) -> Int
 pub fn SignaturePacket::hash_prefix(Self) -> Bytes
 pub fn SignaturePacket::hashed_subpackets(Self) -> Array[SigSubpacket]
 pub fn SignaturePacket::issuer_key_id(Self) -> Bytes?
+pub fn SignaturePacket::key_expiration_time(Self) -> Int
 pub fn SignaturePacket::key_flags(Self) -> Bytes?
 pub fn SignaturePacket::parse(BytesView) -> Self raise
 pub fn SignaturePacket::preferred_aead(Self) -> Array[(Int, Int)]?
 pub fn SignaturePacket::pub_algo(Self) -> PubKeyAlgo
 pub fn SignaturePacket::salt(Self) -> Bytes
+pub fn SignaturePacket::sig_expiration_time(Self) -> Int
 pub fn SignaturePacket::sig_params(Self) -> Array[Bytes]
 pub fn SignaturePacket::sig_type(Self) -> SigType
 pub fn SignaturePacket::supports_seipd_v2(Self) -> Bool

@@ -6,13 +6,19 @@
 /// mutate them through `lock` / `unlock` so the cross-field invariants hold.
 pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
-  user_id : String
-  self_signature : @packet.SignaturePacket
+  /// All certified User IDs, in wire order (M5). A bare v6 key carries
+  /// none and is self-signed by its Direct Key signature instead.
+  user_ids : Array[UserIdBinding]
   /// v6 keys: the Direct Key signature (type 0x1F) over the primary key,
   /// required by RFC 9580 §5.2.3.10 before a v6 key may be used.
   direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.SecretKeyPacket?
   subkey_binding : @packet.SignaturePacket?
+  /// Primary-key revocation signatures (type 0x20) found on import;
+  /// verified lazily by `is_revoked` (their validity is time-dependent).
+  revocations : Array[@packet.SignaturePacket]
+  /// Subkey revocation signature (type 0x28), when the wire had one.
+  subkey_revocation : @packet.SignaturePacket?
 } derive(Debug)
 
 ///|
@@ -20,12 +26,27 @@ pub struct PrivateKey {
 /// obtain values via `to_public` / `from_armored` / `from_bytes`.
 pub struct PublicKey {
   primary : @packet.PublicKeyPacket
-  user_id : String
-  self_signature : @packet.SignaturePacket
+  /// All certified User IDs, in wire order (M5).
+  user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.PublicKeyPacket?
   subkey_binding : @packet.SignaturePacket?
+  /// Primary-key revocation signatures (type 0x20) found on import.
+  revocations : Array[@packet.SignaturePacket]
+  /// Subkey revocation signature (type 0x28), when the wire had one.
+  subkey_revocation : @packet.SignaturePacket?
 } derive(Debug)
+
+///|
+/// One certified User ID: the identifier plus the self-signature that
+/// binds it to the primary key.
+pub(all) struct UserIdBinding {
+  user_id : String
+  self_signature : @packet.SignaturePacket
+} derive(Debug)
+
+///|
+pub extend UserIdBinding with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// 8-octet key id of the primary key (low 64 bits of the v4 fingerprint).
@@ -40,9 +61,28 @@ pub fn PrivateKey::fingerprint(self : PrivateKey) -> Bytes raise {
 }
 
 ///|
-/// The certified User ID string.
+/// The primary (first) certified User ID string; empty for a bare v6 key.
 pub fn PrivateKey::user_id(self : PrivateKey) -> String {
-  self.user_id
+  match self.user_ids {
+    [] => ""
+    [first, ..] => first.user_id
+  }
+}
+
+///|
+/// The key-level self-signature: the first User ID certification, or the
+/// Direct Key signature of a bare v6 key. Import guarantees one of the
+/// two exists, so this never aborts on a key obtained through
+/// `from_bytes`/`from_armored`/`generate_*`.
+pub fn PrivateKey::self_signature(self : PrivateKey) -> @packet.SignaturePacket {
+  match self.user_ids {
+    [first, ..] => first.self_signature
+    [] =>
+      match self.direct_signature {
+        Some(d) => d
+        None => abort("api: key has no self-signature")
+      }
+  }
 }
 
 ///|
@@ -58,9 +98,28 @@ pub fn PublicKey::fingerprint(self : PublicKey) -> Bytes raise {
 }
 
 ///|
-/// The certified User ID string.
+/// The primary (first) certified User ID string; empty for a bare v6 key.
 pub fn PublicKey::user_id(self : PublicKey) -> String {
-  self.user_id
+  match self.user_ids {
+    [] => ""
+    [first, ..] => first.user_id
+  }
+}
+
+///|
+/// The key-level self-signature: the first User ID certification, or the
+/// Direct Key signature of a bare v6 key. Import guarantees one of the
+/// two exists, so this never aborts on a key obtained through
+/// `from_bytes`/`from_armored`/`generate_*`.
+pub fn PublicKey::self_signature(self : PublicKey) -> @packet.SignaturePacket {
+  match self.user_ids {
+    [first, ..] => first.self_signature
+    [] =>
+      match self.direct_signature {
+        Some(d) => d
+        None => abort("api: key has no self-signature")
+      }
+  }
 }
 
 ///|
@@ -78,14 +137,15 @@ pub fn PublicKey::encryption_key(self : PublicKey) -> @packet.PublicKeyPacket? {
 pub fn PrivateKey::to_public(self : PrivateKey) -> PublicKey {
   PublicKey::{
     primary: self.primary.public,
-    user_id: self.user_id,
-    self_signature: self.self_signature,
+    user_ids: self.user_ids,
     direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) => Some(sk.public)
       None => None
     },
     subkey_binding: self.subkey_binding,
+    revocations: self.revocations,
+    subkey_revocation: self.subkey_revocation,
   }
 }
 
@@ -678,11 +738,12 @@ pub fn generate_key(user_id : String, bits? : Int = 3072) -> PrivateKey raise {
   )
   PrivateKey::{
     primary,
-    user_id,
-    self_signature: self_sig,
+    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
     direct_signature: None,
     encryption_subkey: Some(subkey),
     subkey_binding: Some(binding),
+    revocations: [],
+    subkey_revocation: None,
   }
 }
 
@@ -705,15 +766,18 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
       )
     None => ()
   }
-  if self.user_id != "" {
-    let uid = @primitives.utf8_bytes(self.user_id)
+  // Emit every certified User ID with its own certification (M5). A
+  // bare v6 key emits none here; its Direct Key signature was already
+  // written above.
+  for binding in self.user_ids {
+    let uid = @primitives.utf8_bytes(binding.user_id)
     w.bytes(
       @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
     )
     w.bytes(
       @packet.serialize_packet(
         @packet.Signature,
-        self.self_signature.to_body().exact_view(),
+        binding.self_signature.to_body().exact_view(),
       ).exact_view(),
     )
   }
@@ -753,7 +817,7 @@ pub fn PrivateKey::to_armored(self : PrivateKey) -> String {
 /// self-signature first, then the Direct Key signature of a v6 key, and
 /// returns an empty list when the key advertises none.
 pub fn PublicKey::preferred_aead(self : PublicKey) -> Array[(Int, Int)] {
-  match self.self_signature.preferred_aead() {
+  match self.self_signature().preferred_aead() {
     Some(list) => if !list.is_empty() { return list }
     None => ()
   }
@@ -772,7 +836,7 @@ pub fn PublicKey::preferred_aead(self : PublicKey) -> Array[(Int, Int)] {
 /// True when the key advertises v2 SEIPD support in its Features
 /// subpacket (RFC 9580 §5.2.3.32).
 pub fn PublicKey::supports_seipd_v2(self : PublicKey) -> Bool {
-  if self.self_signature.supports_seipd_v2() {
+  if self.self_signature().supports_seipd_v2() {
     return true
   }
   match self.direct_signature {
@@ -798,15 +862,18 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
       )
     None => ()
   }
-  if self.user_id != "" {
-    let uid = @primitives.utf8_bytes(self.user_id)
+  // Emit every certified User ID with its own certification (M5). A
+  // bare v6 key emits none here; its Direct Key signature was already
+  // written above.
+  for binding in self.user_ids {
+    let uid = @primitives.utf8_bytes(binding.user_id)
     w.bytes(
       @packet.serialize_packet(@packet.UserId, uid.exact_view()).exact_view(),
     )
     w.bytes(
       @packet.serialize_packet(
         @packet.Signature,
-        self.self_signature.to_body().exact_view(),
+        binding.self_signature.to_body().exact_view(),
       ).exact_view(),
     )
   }
@@ -848,11 +915,15 @@ fn packets_of(data : BytesView) -> Array[@packet.RawPacket] raise {
 ///|
 fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
   let mut primary : @packet.PublicKeyPacket? = None
-  let mut user_id = ""
-  let mut self_sig : @packet.SignaturePacket? = None
+  // User IDs pair with the certification that follows them (wire order;
+  // a later certification of the same User ID replaces the earlier one).
+  let bindings : Array[UserIdBinding] = []
+  let mut pending_uid : String? = None
   let mut direct : @packet.SignaturePacket? = None
   let mut subkey : @packet.PublicKeyPacket? = None
   let mut binding : @packet.SignaturePacket? = None
+  let revocations : Array[@packet.SignaturePacket] = []
+  let mut subkey_revocation : @packet.SignaturePacket? = None
   for p in packets {
     match p.tag() {
       @packet.PublicKey =>
@@ -865,14 +936,37 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
         // Lossy on purpose: a key with an undecodable User ID stays usable
         // for its subkeys (gopenpgp keeps raw bytes; we keep a best-effort
         // string instead of failing the whole key).
-        user_id = @utf8.decode_lossy(p.body().exact_view())
+        pending_uid = Some(@utf8.decode_lossy(p.body().exact_view()))
       @packet.Signature => {
         let s = @packet.SignaturePacket::parse(p.body().exact_view())
         match s.sig_type() {
-          @packet.PositiveCertification | @packet.GenericCertification =>
-            self_sig = Some(s)
+          @packet.PositiveCertification | @packet.GenericCertification => {
+            let uid = match pending_uid {
+              Some(u) => u
+              // A certification before any User ID cannot be bound to
+              // anything; keys are not required to interleave, so treat
+              // it as an unbound stray and reject the import (strict).
+              None =>
+                @error.fail("api: certification without a preceding user id")
+            }
+            let cert = UserIdBinding::{ user_id: uid, self_signature: s, }
+            // Last certification of the same User ID wins.
+            let mut replaced = false
+            for i in 0..<bindings.length() {
+              if bindings[i].user_id == uid {
+                bindings[i] = cert
+                replaced = true
+              }
+            }
+            if !replaced {
+              bindings.push(cert)
+            }
+          }
           @packet.DirectSignature => direct = Some(s)
           @packet.SubkeyBinding => binding = Some(s)
+          @packet.KeyRevocation => revocations.push(s)
+          @packet.SubkeyRevocation => subkey_revocation = Some(s)
+          // CertificationRevocation withdrawals are not modeled.
           _ => ()
         }
       }
@@ -893,24 +987,72 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
       if p.version() >= 6 && direct is None {
         @error.fail("api: v6 key has no direct-key signature")
       }
-      let self_signature = match self_sig {
-        Some(s) => s
-        None =>
-          match direct {
-            Some(d) => d
-            None => @error.fail("api: key has no self-signature")
-          }
+      // Only a bare key (no User ID) may rely on its Direct signature
+      // alone; every certified User ID must carry a certification.
+      if bindings.is_empty() && direct is None {
+        @error.fail("api: key has no self-signature")
       }
+      validate_key_signatures(p, bindings, direct, subkey, binding)
       PublicKey::{
         primary: p,
-        user_id,
-        self_signature,
+        user_ids: bindings,
         direct_signature: direct,
         encryption_subkey: subkey,
         subkey_binding: binding,
+        revocations,
+        subkey_revocation,
       }
     }
     None => @error.fail("api: no key packet found")
+  }
+}
+
+///|
+/// Import-time cryptographic validation (M1): every signature the key
+/// model relies on must verify over the material it certifies. Revocation
+/// signatures are excluded — their validity is time-dependent and they
+/// are verified lazily by `is_revoked`.
+fn validate_key_signatures(
+  primary : @packet.PublicKeyPacket,
+  bindings : Array[UserIdBinding],
+  direct : @packet.SignaturePacket?,
+  subkey : @packet.PublicKeyPacket?,
+  binding : @packet.SignaturePacket?,
+) -> Unit raise {
+  for b in bindings {
+    let ok = verify_key_signature(
+      b.self_signature,
+      primary,
+      primary,
+      user_id=b.user_id,
+    ) catch {
+      _ => false
+    }
+    if !ok {
+      @error.fail("api: user id self-signature does not verify over the key")
+    }
+  }
+  match direct {
+    Some(d) => {
+      let ok = verify_key_signature(d, primary, primary, direct=true) catch {
+        _ => false
+      }
+      if !ok {
+        @error.fail("api: direct-key signature does not verify over the key")
+      }
+    }
+    None => ()
+  }
+  match (subkey, binding) {
+    (Some(sk), Some(b)) => {
+      let ok = verify_key_signature(b, primary, sk) catch { _ => false }
+      if !ok {
+        @error.fail(
+          "api: subkey binding signature does not verify over the key",
+        )
+      }
+    }
+    _ => ()
   }
 }
 
@@ -949,11 +1091,12 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
     Some(p) =>
       PrivateKey::{
         primary: p,
-        user_id: pub_half.user_id,
-        self_signature: pub_half.self_signature,
+        user_ids: pub_half.user_ids,
         direct_signature: pub_half.direct_signature,
         encryption_subkey: subkey,
         subkey_binding: binding,
+        revocations: pub_half.revocations,
+        subkey_revocation: pub_half.subkey_revocation,
       }
     None => @error.fail("api: no secret key packet found")
   }
@@ -1011,11 +1154,12 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
   )
   PrivateKey::{
     primary,
-    user_id,
-    self_signature: self_sig,
+    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
     direct_signature: None,
     encryption_subkey: Some(subkey),
     subkey_binding: Some(binding),
+    revocations: [],
+    subkey_revocation: None,
   }
 }
 
@@ -1067,11 +1211,12 @@ pub fn generate_ed25519_v6_key(user_id : String) -> PrivateKey raise {
   )
   PrivateKey::{
     primary,
-    user_id,
-    self_signature: self_sig,
+    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
     direct_signature: Some(direct),
     encryption_subkey: Some(subkey),
     subkey_binding: Some(binding),
+    revocations: [],
+    subkey_revocation: None,
   }
 }
 

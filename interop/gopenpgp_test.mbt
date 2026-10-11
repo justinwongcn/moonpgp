@@ -66,10 +66,10 @@ test "decrypt gopenpgp message_signed to message_plaintext" {
 test "verify self-certification of gopenpgp key" {
   let key = @api.PrivateKey::from_armored(read_testdata("keyring_privateKey"))
   let ok = @api.verify_key_signature(
-    key.self_signature,
+    key.self_signature(),
     key.primary.public,
     key.primary.public,
-    user_id=key.user_id,
+    user_id=key.user_id(),
   )
   assert_true(ok)
 }

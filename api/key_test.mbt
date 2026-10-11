@@ -3,10 +3,10 @@ test "generate key with verifiable self-signatures" {
   let key = @api.generate_key("Tester <tester@example.com>", bits=1024)
   // Primary self-certification verifies.
   let ok = @api.verify_key_signature(
-    key.self_signature,
+    key.self_signature(),
     key.primary.public,
     key.primary.public,
-    user_id=key.user_id,
+    user_id=key.user_id(),
   )
   assert_true(ok)
   // Subkey binding verifies.

@@ -3,29 +3,36 @@ package "justinwongcn/moonpgp/api"
 
 import {
   "justinwongcn/moonpgp/cipher",
+  "justinwongcn/moonpgp/compress",
   "justinwongcn/moonpgp/packet",
   "justinwongcn/moonpgp/primitives",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn decrypt_and_verify(String, Array[PrivateKey], PublicKey?) -> (Bytes, VerifyStatus) raise
+pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int = 536870912
 
-pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int) -> Bytes raise
+pub fn decrypt_and_verify(String, Array[PrivateKey], PublicKey?, max_decompressed? : Int) -> (Bytes, VerifyStatus) raise
 
-pub fn decrypt_binary_with_private_key(BytesView, PrivateKey) -> Bytes raise
+pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int, max_decompressed? : Int) -> Bytes raise
 
-pub fn decrypt_with_password(String, String, argon2_max_memory_kib? : Int) -> Bytes raise
+pub fn decrypt_binary_with_private_key(BytesView, PrivateKey, max_decompressed? : Int) -> Bytes raise
 
-pub fn decrypt_with_private_key(String, PrivateKey) -> Bytes raise
+pub fn decrypt_to_session_key(String, SessionKey) -> Bytes raise
 
-pub fn encrypt_to_recipients(BytesView, Array[PublicKey], file_name? : String) -> String raise
+pub fn decrypt_with_password(String, String, argon2_max_memory_kib? : Int, max_decompressed? : Int) -> Bytes raise
 
-pub fn encrypt_with_password(BytesView, String, file_name? : String, aead? : Bool, argon2? : Bool, argon2_memory_exp? : Int) -> String raise
+pub fn decrypt_with_private_key(String, PrivateKey, max_decompressed? : Int) -> Bytes raise
 
-pub fn encrypt_with_password_argon2(BytesView, String, file_name? : String, passes? : Int, parallelism? : Int, memory_exp? : Int) -> String raise
+pub fn encrypt_to_recipients(BytesView, Array[PublicKey], file_name? : String, compress? : @compress.CompressedAlgo) -> String raise
 
-pub fn encrypt_with_password_v6(BytesView, String, file_name? : String, aead? : @cipher.AeadMode, argon2? : Bool, passes? : Int, parallelism? : Int, memory_exp? : Int) -> String raise
+pub fn encrypt_to_session_key(BytesView, SessionKey, file_name? : String, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_with_password(BytesView, String, file_name? : String, aead? : Bool, argon2? : Bool, argon2_memory_exp? : Int, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_with_password_argon2(BytesView, String, file_name? : String, passes? : Int, parallelism? : Int, memory_exp? : Int, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_with_password_v6(BytesView, String, file_name? : String, aead? : @cipher.AeadMode, argon2? : Bool, passes? : Int, parallelism? : Int, memory_exp? : Int, compress? : @compress.CompressedAlgo) -> String raise
 
 pub fn generate_ed25519_key(String) -> PrivateKey raise
 
@@ -33,9 +40,15 @@ pub fn generate_ed25519_v6_key(String) -> PrivateKey raise
 
 pub fn generate_key(String, bits? : Int) -> PrivateKey raise
 
+pub fn generate_session_key(algo? : @primitives.CipherAlgo) -> SessionKey raise
+
 pub fn pgp() -> Pgp
 
-pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool) -> String raise
+pub fn recover_session_key_with_key(String, PrivateKey) -> SessionKey raise
+
+pub fn recover_session_key_with_password(String, String, argon2_max_memory_kib? : Int) -> SessionKey raise
+
+pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo) -> String raise
 
 pub fn sign_cleartext(String, PrivateKey) -> String raise
 
@@ -49,7 +62,7 @@ pub fn verify_cleartext(String, PublicKey) -> (String, VerifyStatus) raise
 
 pub fn verify_detached(BytesView, String, PublicKey) -> VerifyStatus raise
 
-pub fn verify_inline(String, PublicKey) -> (Bytes, VerifyStatus) raise
+pub fn verify_inline(String, PublicKey, max_decompressed? : Int) -> (Bytes, VerifyStatus) raise
 
 pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @packet.PublicKeyPacket, user_id? : String, direct? : Bool) -> Bool raise
 
@@ -68,12 +81,14 @@ pub struct DecryptionBuilder {
 }
 pub fn DecryptionBuilder::decryption_key(Self, PrivateKey) -> Self
 pub fn DecryptionBuilder::finish(Self) -> (String) -> DecryptResult raise
+pub fn DecryptionBuilder::max_decompressed(Self, Int) -> Self
 pub fn DecryptionBuilder::password(Self, String) -> Self
 pub fn DecryptionBuilder::verification_key(Self, PublicKey) -> Self
 
 pub struct EncryptionBuilder {
   // private fields
 }
+pub fn EncryptionBuilder::compress(Self, @compress.CompressedAlgo) -> Self
 pub fn EncryptionBuilder::file_name(Self, String) -> Self
 pub fn EncryptionBuilder::finish(Self) -> (BytesView) -> String raise
 pub fn EncryptionBuilder::password(Self, String) -> Self
@@ -93,8 +108,8 @@ pub struct KeyRing {
 pub fn KeyRing::add_private(Self, PrivateKey) -> Unit
 pub fn KeyRing::add_public(Self, PublicKey) -> Unit
 pub fn KeyRing::find_decryption_key(Self, BytesView) -> @packet.SecretKeyPacket? raise
-pub fn KeyRing::find_encryption_key(Self, BytesView) -> @packet.PublicKeyPacket? raise
-pub fn KeyRing::find_verification_key(Self, BytesView) -> PublicKey? raise
+pub fn KeyRing::find_encryption_key(Self, BytesView, now? : Int64) -> @packet.PublicKeyPacket? raise
+pub fn KeyRing::find_verification_key(Self, BytesView, now? : Int64) -> PublicKey? raise
 pub fn KeyRing::new() -> Self
 pub fn KeyRing::private_count(Self) -> Int
 pub fn KeyRing::public_count(Self) -> Int
@@ -108,20 +123,26 @@ pub fn Pgp::key_generation(Self) -> KeyGenBuilder
 
 pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
-  user_id : String
-  self_signature : @packet.SignaturePacket
+  user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.SecretKeyPacket?
   subkey_binding : @packet.SignaturePacket?
+  revocations : Array[@packet.SignaturePacket]
+  subkey_revocation : @packet.SignaturePacket?
 } derive(@debug.Debug)
+pub fn PrivateKey::can_encrypt(Self, Int64) -> Bool
+pub fn PrivateKey::can_verify(Self, Int64) -> Bool
 pub fn PrivateKey::fingerprint(Self) -> Bytes raise
 pub fn PrivateKey::from_armored(String) -> Self raise
 pub fn PrivateKey::from_bytes(BytesView) -> Self raise
 pub fn PrivateKey::is_aead_protected(Self) -> Bool
+pub fn PrivateKey::is_expired(Self, Int64) -> Bool
 pub fn PrivateKey::is_locked(Self) -> Bool
+pub fn PrivateKey::is_revoked(Self, Int64) -> Bool
 pub fn PrivateKey::key_id(Self) -> Bytes raise
 pub fn PrivateKey::lock(Self, String) -> Self raise
 pub fn PrivateKey::lock_argon2(Self, String, passes? : Int, parallelism? : Int, memory_exp? : Int) -> Self raise
+pub fn PrivateKey::self_signature(Self) -> @packet.SignaturePacket
 pub fn PrivateKey::to_armored(Self) -> String
 pub fn PrivateKey::to_bytes(Self) -> Bytes
 pub fn PrivateKey::to_public(Self) -> PublicKey
@@ -131,23 +152,45 @@ pub fn PrivateKey::user_id(Self) -> String
 
 pub struct PublicKey {
   primary : @packet.PublicKeyPacket
-  user_id : String
-  self_signature : @packet.SignaturePacket
+  user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
   encryption_subkey : @packet.PublicKeyPacket?
   subkey_binding : @packet.SignaturePacket?
+  revocations : Array[@packet.SignaturePacket]
+  subkey_revocation : @packet.SignaturePacket?
 } derive(@debug.Debug)
+pub fn PublicKey::can_encrypt(Self, Int64) -> Bool
+pub fn PublicKey::can_verify(Self, Int64) -> Bool
 pub fn PublicKey::encryption_key(Self) -> @packet.PublicKeyPacket?
+pub fn PublicKey::encryption_packet_at(Self, Int64) -> @packet.PublicKeyPacket?
 pub fn PublicKey::fingerprint(Self) -> Bytes raise
 pub fn PublicKey::from_armored(String) -> Self raise
 pub fn PublicKey::from_bytes(BytesView) -> Self raise
+pub fn PublicKey::is_expired(Self, Int64) -> Bool
+pub fn PublicKey::is_revoked(Self, Int64) -> Bool
 pub fn PublicKey::key_id(Self) -> Bytes raise
 pub fn PublicKey::preferred_aead(Self) -> Array[(Int, Int)]
+pub fn PublicKey::self_signature(Self) -> @packet.SignaturePacket
 pub fn PublicKey::supports_seipd_v2(Self) -> Bool
 pub fn PublicKey::to_armored(Self) -> String
 pub fn PublicKey::to_bytes(Self) -> Bytes
 pub fn PublicKey::to_repr(Self) -> @debug.Repr
 pub fn PublicKey::user_id(Self) -> String
+
+pub(all) struct SessionKey {
+  key : Bytes
+  algo : @primitives.CipherAlgo
+} derive(@debug.Debug)
+pub fn SessionKey::algo(Self) -> @primitives.CipherAlgo
+pub fn SessionKey::key(Self) -> Bytes
+pub fn SessionKey::new(BytesView, @primitives.CipherAlgo) -> Self raise
+pub fn SessionKey::to_repr(Self) -> @debug.Repr
+
+pub(all) struct UserIdBinding {
+  user_id : String
+  self_signature : @packet.SignaturePacket
+} derive(@debug.Debug)
+pub fn UserIdBinding::to_repr(Self) -> @debug.Repr
 
 pub(all) enum VerifyStatus {
   Ok

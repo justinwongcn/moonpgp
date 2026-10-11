@@ -1,0 +1,104 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "justinwongcn/moonpgp"
+
+import {
+  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp/cipher",
+  "justinwongcn/moonpgp/compress",
+  "justinwongcn/moonpgp/packet",
+  "justinwongcn/moonpgp/primitives",
+}
+
+// Values
+pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int = 536870912
+
+pub fn decrypt_and_verify(String, Array[@api.PrivateKey], @api.PublicKey?, max_decompressed? : Int) -> (Bytes, @api.VerifyStatus) raise
+
+pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int, max_decompressed? : Int) -> Bytes raise
+
+pub fn decrypt_binary_with_private_key(BytesView, @api.PrivateKey, max_decompressed? : Int) -> Bytes raise
+
+pub fn decrypt_to_session_key(String, @api.SessionKey) -> Bytes raise
+
+pub fn decrypt_with_password(String, String, argon2_max_memory_kib? : Int, max_decompressed? : Int) -> Bytes raise
+
+pub fn decrypt_with_private_key(String, @api.PrivateKey, max_decompressed? : Int) -> Bytes raise
+
+pub fn encrypt_to_recipients(BytesView, Array[@api.PublicKey], file_name? : String, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_to_session_key(BytesView, @api.SessionKey, file_name? : String, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_with_password(BytesView, String, file_name? : String, aead? : Bool, argon2? : Bool, argon2_memory_exp? : Int, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_with_password_argon2(BytesView, String, file_name? : String, passes? : Int, parallelism? : Int, memory_exp? : Int, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn encrypt_with_password_v6(BytesView, String, file_name? : String, aead? : @cipher.AeadMode, argon2? : Bool, passes? : Int, parallelism? : Int, memory_exp? : Int, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn generate_ed25519_key(String) -> @api.PrivateKey raise
+
+pub fn generate_ed25519_v6_key(String) -> @api.PrivateKey raise
+
+pub fn generate_key(String, bits? : Int) -> @api.PrivateKey raise
+
+pub fn generate_session_key(algo? : @primitives.CipherAlgo) -> @api.SessionKey raise
+
+pub fn pgp() -> @api.Pgp
+
+pub fn recover_session_key_with_key(String, @api.PrivateKey) -> @api.SessionKey raise
+
+pub fn recover_session_key_with_password(String, String, argon2_max_memory_kib? : Int) -> @api.SessionKey raise
+
+pub fn sign_and_encrypt(BytesView, @api.PrivateKey, Array[@api.PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo) -> String raise
+
+pub fn sign_cleartext(String, @api.PrivateKey) -> String raise
+
+pub fn sign_cleartext_with(String, @api.PrivateKey, @primitives.HashId) -> String raise
+
+pub fn sign_detached(BytesView, @api.PrivateKey, text_mode? : Bool) -> String raise
+
+pub fn sign_inline(BytesView, @api.PrivateKey, text_mode? : Bool) -> String raise
+
+pub fn verify_cleartext(String, @api.PublicKey) -> (String, @api.VerifyStatus) raise
+
+pub fn verify_detached(BytesView, String, @api.PublicKey) -> @api.VerifyStatus raise
+
+pub fn verify_inline(String, @api.PublicKey, max_decompressed? : Int) -> (Bytes, @api.VerifyStatus) raise
+
+pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @packet.PublicKeyPacket, user_id? : String, direct? : Bool) -> Bool raise
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+pub using @cipher {type AeadMode}
+
+pub using @primitives {type CipherAlgo}
+
+pub using @compress {type CompressedAlgo}
+
+pub using @api {type DecryptResult}
+
+pub using @api {type DecryptionBuilder}
+
+pub using @api {type EncryptionBuilder}
+
+pub using @primitives {type HashId}
+
+pub using @api {type KeyGenBuilder}
+
+pub using @api {type KeyRing}
+
+pub using @api {type Pgp}
+
+pub using @api {type PrivateKey}
+
+pub using @api {type PublicKey}
+
+pub using @api {type SessionKey}
+
+pub using @api {type UserIdBinding}
+
+pub using @api {type VerifyStatus}
+
+// Traits

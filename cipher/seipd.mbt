@@ -1,12 +1,12 @@
 ///|
 /// Build and encrypt the plaintext of a SEIPD v1 packet (RFC 9580 §5.13.1):
-/// random prefix (16+2 octets) || inner packets || 0xD3 0x14 || SHA-1 MDC,
+/// random prefix (bs+2 octets) || inner packets || 0xD3 0x14 || SHA-1 MDC,
 /// all in one CFB context with an all-zero IV and no resynchronization.
 pub fn seipd_v1_encrypt(
   bc : &@primitives.BlockCipher,
   inner : BytesView,
 ) -> Bytes raise {
-  let prefix = random_prefix()
+  let prefix = random_prefix(bc.block_size())
   let tail = Bytes::from_array([0xD3, 0x14])
   // Single accumulating buffer (F12): the old Bytes::add chain made three
   // full copies of the plaintext (prefix||inner||tail, then +MDC); this
@@ -30,11 +30,11 @@ pub fn seipd_v1_decrypt(
   ciphertext : BytesView,
 ) -> Bytes raise {
   let bs = bc.block_size()
-  // Plaintext minimum: 18-octet prefix || inner || 0xD3 0x14 || 20-octet MDC
-  // = 40 octets, independent of the block size. A bs-based bound would admit
-  // ciphertexts whose inner slice [18:len-22] inverts (clamped to empty) for
-  // 64-bit ciphers, silently yielding no data instead of failing.
-  guard ciphertext.length() >= 18 + 2 + 20 else {
+  // Plaintext minimum: (bs+2)-octet prefix || inner || 0xD3 0x14 ||
+  // 20-octet MDC. An 18-octet (AES-shaped) bound would still admit
+  // ciphertexts whose inner slice inverts to empty for 64-bit ciphers,
+  // so the bound follows the block size.
+  guard ciphertext.length() >= bs + 2 + 22 else {
     @error.fail("seipd: ciphertext too short")
   }
   let zeros = Bytes::make(bs, b'\x00')
@@ -50,9 +50,11 @@ pub fn seipd_v1_decrypt(
   guard @primitives.ct_equal(computed.exact_view(), stored_mdc.exact_view()) else {
     @error.fail("seipd: MDC mismatch (message modified)")
   }
-  // Quick check: prefix[14..16] repeats at [16..18].
-  guard full[14] == full[16] && full[15] == full[17] else {
+  // Quick check: the last two prefix octets repeat after them. (The old
+  // hardcoded 16-byte-block offsets silently rejected every 8-byte-block
+  // cipher — CAST5/3DES — exposed by the M2 gpg legacy fixtures.)
+  guard full[bs - 2] == full[bs] && full[bs - 1] == full[bs + 1] else {
     @error.fail("seipd: prefix quick check failed (wrong session key?)")
   }
-  hashed[18:len - 22].to_owned()
+  hashed[bs + 2:len - 22].to_owned()
 }

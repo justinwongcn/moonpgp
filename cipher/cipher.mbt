@@ -58,11 +58,13 @@ pub fn cfb_decrypt(
 }
 
 ///|
-/// The 18-octet random prefix of SEIPD v1 / OpenPGP CFB: 16 random octets
-/// then a copy of the last two (RFC 9580 §5.13.1).
-pub fn random_prefix() -> Bytes raise {
-  let p = @primitives.random_bytes(16)
-  p.add(p[14:16].to_owned())
+/// The random prefix of SEIPD v1 / OpenPGP CFB: `bs` random octets then a
+/// copy of the last two (RFC 9580 §5.13.1). `bs` is the block size of the
+/// session-key cipher — 16 for AES but 8 for the legacy CAST5/3DES, where
+/// the old hardcoded 16 quietly produced an invalid prefix.
+pub fn random_prefix(bs : Int) -> Bytes raise {
+  let p = @primitives.random_bytes(bs)
+  p.add(p[bs - 2:bs].to_owned())
 }
 
 ///|

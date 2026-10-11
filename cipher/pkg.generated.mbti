@@ -39,7 +39,7 @@ pub fn openpgp_cfb_decrypt_resync(&@primitives.BlockCipher, BytesView) -> Bytes 
 
 pub fn openpgp_cfb_encrypt_resync(&@primitives.BlockCipher, BytesView, BytesView) -> Bytes raise
 
-pub fn random_prefix() -> Bytes raise
+pub fn random_prefix(Int) -> Bytes raise
 
 pub fn seipd_v1_decrypt(&@primitives.BlockCipher, BytesView) -> Bytes raise
 

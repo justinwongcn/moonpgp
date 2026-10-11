@@ -9,6 +9,7 @@ pub fn encrypt_with_password(
   aead? : Bool = false,
   argon2? : Bool = false,
   argon2_memory_exp? : Int = 16,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   if aead {
     return seal_aead_with_password(
@@ -17,6 +18,7 @@ pub fn encrypt_with_password(
       file_name?,
       argon2~,
       argon2_memory_exp~,
+      compress?,
     )
   }
   // `argon2` selects the S2K specifier (RFC 9580 §3.7.1.4) and is
@@ -30,7 +32,7 @@ pub fn encrypt_with_password(
     let salt = @primitives.random_bytes(@s2k.SALT_SIZE)
     @s2k.Iterated(@primitives.Sha256, salt, @s2k.encode_count(S2K_COUNT_TARGET))
   }
-  seal_skesk_with_password(plaintext, passphrase, s2k, file_name?)
+  seal_skesk_with_password(plaintext, passphrase, s2k, file_name?, compress?)
 }
 
 ///|
@@ -50,10 +52,11 @@ pub fn encrypt_with_password_argon2(
   passes? : Int = 3,
   parallelism? : Int = 4,
   memory_exp? : Int = 16,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let salt = @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE)
   let s2k : @s2k.S2k = @s2k.Argon2(salt, passes, parallelism, memory_exp)
-  seal_skesk_with_password(plaintext, passphrase, s2k, file_name?)
+  seal_skesk_with_password(plaintext, passphrase, s2k, file_name?, compress?)
 }
 
 ///|
@@ -71,6 +74,7 @@ pub fn encrypt_with_password_v6(
   passes? : Int = 3,
   parallelism? : Int = 4,
   memory_exp? : Int = 16,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let algo = @primitives.Aes256
   let s2k : @s2k.S2k = if argon2 {
@@ -98,7 +102,7 @@ pub fn encrypt_with_password_v6(
     aead,
     SEIPD_V2_CHUNK_OCTET,
     session_key,
-    literal_wire,
+    maybe_compress_inner(literal_wire, compress?).exact_view(),
   )
   let cipher_algo = algo.number()
   let aead_algo = aead.number()
@@ -149,6 +153,7 @@ fn seal_skesk_with_password(
   passphrase : String,
   s2k : @s2k.S2k,
   file_name? : String,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
   let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
@@ -159,7 +164,7 @@ fn seal_skesk_with_password(
   )
   let seipd_ciphertext = seal_seipd(
     session_key.exact_view(),
-    literal_wire.exact_view(),
+    maybe_compress_inner(literal_wire, compress?).exact_view(),
   )
   let w = @packet.Writer::new()
   w.u8(0xC0 | @packet.Skesk.number())
@@ -180,12 +185,14 @@ pub fn decrypt_with_password(
   message : String,
   passphrase : String,
   argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let armored = @armor.decode(message)
   decrypt_binary_with_password(
     @armor.ArmorBlock::data(armored),
     passphrase,
     argon2_max_memory_kib~,
+    max_decompressed~,
   )
 }
 
@@ -195,6 +202,7 @@ pub fn decrypt_binary_with_password(
   data : BytesView,
   passphrase : String,
   argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let packets = @packet.parse_packets(data)
   let (msg_algo, session_key, skesk_version) = unwrap_skesk(
@@ -234,7 +242,7 @@ pub fn decrypt_binary_with_password(
         aead.chunk_octet(),
         aead.ciphertext().exact_view(),
       )
-      return extract_literal(inner)
+      return extract_literal(inner, max_decompressed)
     }
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
@@ -248,7 +256,7 @@ pub fn decrypt_binary_with_password(
         )
       }
       if seipd.version == 2 {
-        return decrypt_seipd_v2(seipd, session_key)
+        return decrypt_seipd_v2(seipd, session_key, max_decompressed)
       }
       guard seipd.version == 1 else {
         @error.fail("api: unsupported SEIPD version \{seipd.version}")
@@ -260,7 +268,7 @@ pub fn decrypt_binary_with_password(
       }
       let bc = @primitives.new_block_cipher(msg_algo, session_key.exact_view())
       let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())
-      return extract_literal(inner)
+      return extract_literal(inner, max_decompressed)
     }
   }
   @error.fail("api: no encrypted data packet found")
@@ -493,6 +501,7 @@ fn seal_aead_with_password(
   file_name? : String,
   argon2? : Bool = false,
   argon2_memory_exp? : Int = 16,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let cipher_algo = @primitives.Aes256.number()
   let aead_algo = @cipher.Ocb.number()
@@ -541,6 +550,7 @@ fn seal_aead_with_password(
     @packet.Literal,
     literal.to_body().exact_view(),
   )
+  let literal_wire = maybe_compress_inner(literal_wire, compress?)
   let data_bc = @primitives.new_block_cipher(
     @primitives.Aes256,
     session_key.exact_view(),
@@ -584,7 +594,7 @@ fn seal_aead_with_password(
 /// Walk a decrypted packet stream to the literal data, decompressing on
 /// the way. Trailing signature packets (one-pass) are consumed by later
 /// layers.
-fn extract_literal(inner : BytesView) -> Bytes raise {
+fn extract_literal(inner : BytesView, max_decompressed : Int) -> Bytes raise {
   let mut stream = inner
   // At most two nesting levels: SEIPD -> compressed -> literal. A
   // one-pass signature packet may precede the data.
@@ -613,7 +623,7 @@ fn extract_literal(inner : BytesView) -> Bytes raise {
     }
     if tag == @packet.Compressed {
       let comp = @packet.CompressedPacket::parse(ps[0].body().exact_view())
-      stream = decompress_payload(comp).exact_view()
+      stream = decompress_payload(comp, max_decompressed).exact_view()
       continue
     }
     @error.fail(
@@ -711,6 +721,7 @@ fn open_seipd_v2(
 fn decrypt_seipd_v2(
   seipd : @packet.SeipdPacket,
   session_key : BytesView,
+  max_decompressed : Int,
 ) -> Bytes raise {
-  extract_literal(open_seipd_v2(seipd, session_key))
+  extract_literal(open_seipd_v2(seipd, session_key), max_decompressed)
 }

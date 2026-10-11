@@ -17,6 +17,7 @@ pub struct EncryptionBuilder {
   priv recipients : Array[PublicKey]
   priv signer : PrivateKey?
   priv file_name : String
+  priv compress : @compress.CompressedAlgo?
 }
 
 ///|
@@ -27,7 +28,19 @@ pub fn Pgp::encryption(_self : Pgp) -> EncryptionBuilder {
     recipients: [],
     signer: None,
     file_name: "message.txt",
+    compress: None,
   }
+}
+
+///|
+/// Compress the payload before encryption (ZIP or ZLIB; M4). Off by
+/// default — the historical behavior of this library — and only honored
+/// by the encryption entry points.
+pub fn EncryptionBuilder::compress(
+  self : EncryptionBuilder,
+  algo : @compress.CompressedAlgo,
+) -> EncryptionBuilder {
+  { ..self, compress: Some(algo), }
 }
 
 ///|
@@ -76,17 +89,18 @@ pub fn EncryptionBuilder::finish(
   let recipients = self.recipients
   let signer = self.signer
   let file_name = self.file_name
+  let compress = self.compress
   fn(data : BytesView) -> String raise {
     if !recipients.is_empty() {
       // Public-key path; wrap an inline signature when a signer is set.
       let armored = match signer {
-        Some(sk) => sign_and_encrypt(data, sk, recipients)
-        None => encrypt_to_recipients(data, recipients, file_name~)
+        Some(sk) => sign_and_encrypt(data, sk, recipients, compress?)
+        None => encrypt_to_recipients(data, recipients, file_name~, compress?)
       }
       return armored
     }
     if !passwords.is_empty() {
-      return encrypt_with_password(data, passwords[0], file_name~)
+      return encrypt_with_password(data, passwords[0], file_name~, compress?)
     }
     @error.fail("api: encryption requires a password or a recipient")
   }
@@ -98,12 +112,27 @@ pub struct DecryptionBuilder {
   priv passwords : Array[String]
   priv private_keys : Array[PrivateKey]
   priv verifiers : Array[PublicKey]
+  priv max_decompressed : Int
 }
 
 ///|
 /// Start building a decryption (private keys and optional verifiers).
 pub fn Pgp::decryption(_self : Pgp) -> DecryptionBuilder {
-  DecryptionBuilder::{ passwords: [], private_keys: [], verifiers: [], }
+  DecryptionBuilder::{
+    passwords: [],
+    private_keys: [],
+    verifiers: [],
+    max_decompressed: DEFAULT_MAX_DECOMPRESSED_BYTES,
+  }
+}
+
+///|
+/// Override the decompressed-payload ceiling (M4; default 512 MiB).
+pub fn DecryptionBuilder::max_decompressed(
+  self : DecryptionBuilder,
+  limit : Int,
+) -> DecryptionBuilder {
+  { ..self, max_decompressed: limit, }
 }
 
 ///|
@@ -154,10 +183,11 @@ pub fn DecryptionBuilder::finish(
   let passwords = self.passwords
   let private_keys = self.private_keys
   let verifiers = self.verifiers
+  let max_decompressed = self.max_decompressed
   fn(message : String) -> DecryptResult raise {
     if !private_keys.is_empty() {
       let (d, status) = decrypt_and_verify_list(
-        message, private_keys, verifiers,
+        message, private_keys, verifiers, max_decompressed,
       )
       return match status {
         Ok => Verified(d)
@@ -167,7 +197,9 @@ pub fn DecryptionBuilder::finish(
       }
     }
     if !passwords.is_empty() {
-      return Data(decrypt_with_password(message, passwords[0]))
+      return Data(
+        decrypt_with_password(message, passwords[0], max_decompressed~),
+      )
     }
     @error.fail("api: decryption requires a password or a private key")
   }
@@ -179,17 +211,18 @@ fn decrypt_and_verify_list(
   message : String,
   keys : Array[PrivateKey],
   verifiers : Array[PublicKey],
+  max_decompressed : Int,
 ) -> (Bytes, VerifyStatus) raise {
   if keys.length() == 1 && verifiers.length() == 1 {
-    decrypt_and_verify(message, keys, Some(verifiers[0]))
+    decrypt_and_verify(message, keys, Some(verifiers[0]), max_decompressed~)
   } else if keys.length() == 1 {
-    decrypt_and_verify(message, keys, None)
+    decrypt_and_verify(message, keys, None, max_decompressed~)
   } else {
     // Try each key until one matches.
     let mut last_error : String? = None
     for key in keys {
       try {
-        let (d, s) = decrypt_and_verify(message, [key], None)
+        let (d, s) = decrypt_and_verify(message, [key], None, max_decompressed~)
         return (d, s)
       } catch {
         e => last_error = Some(e.to_string())

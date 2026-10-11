@@ -12,9 +12,13 @@ pub fn zip_compress(BytesView) -> Bytes
 
 pub fn zip_decompress(BytesView) -> Bytes raise
 
+pub fn zip_decompress_capped(BytesView, Int) -> Bytes raise
+
 pub fn zlib_compress(BytesView) -> Bytes
 
 pub fn zlib_decompress(BytesView) -> Bytes raise
+
+pub fn zlib_decompress_capped(BytesView, Int) -> Bytes raise
 
 // Errors
 

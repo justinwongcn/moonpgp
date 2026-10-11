@@ -165,14 +165,59 @@ fn sig_type_of(text_mode : Bool?) -> @packet.SigType {
 }
 
 ///|
+/// Default ceiling on decompressed payload size (M4): a 512 MiB bound on
+/// what an untrusted compressed packet may expand to. Mirrors the Argon2
+/// pre-allocation cap policy; override per call with
+/// `max_decompressed~`.
+pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int = 536870912
+
+///|
 /// Decompress a compressed packet payload (shared by the verification and
-/// decryption walks, F16).
-fn decompress_payload(comp : @packet.CompressedPacket) -> Bytes raise {
+/// decryption walks, F16) under a hard output cap.
+fn decompress_payload(
+  comp : @packet.CompressedPacket,
+  max_out : Int,
+) -> Bytes raise {
   match comp.algo {
     0 => comp.data
-    1 => @compress.zip_decompress(comp.data.exact_view())
-    2 => @compress.zlib_decompress(comp.data.exact_view())
+    1 => @compress.zip_decompress_capped(comp.data.exact_view(), max_out)
+    2 => @compress.zlib_decompress_capped(comp.data.exact_view(), max_out)
     _ => @error.fail("api: unsupported compression algorithm \{comp.algo}")
+  }
+}
+
+///|
+/// Optionally wrap an inner packet stream in a Compressed packet (M4).
+/// Only ZIP/ZLIB have codecs here — BZip2 is decode-only and
+/// `Uncompressed` means the caller passed something odd.
+fn maybe_compress_inner(
+  inner : BytesView,
+  compress? : @compress.CompressedAlgo,
+) -> Bytes raise {
+  match compress {
+    None => inner.to_owned()
+    Some(algo) =>
+      match algo {
+        // Body = algorithm octet || compressed stream (RFC 9580 §5.6).
+        @compress.Zip =>
+          @packet.serialize_packet(
+            @packet.Compressed,
+            Bytes::from_array([1])
+            .add(@compress.zip_compress(inner))
+            .exact_view(),
+          )
+        @compress.Zlib =>
+          @packet.serialize_packet(
+            @packet.Compressed,
+            Bytes::from_array([2])
+            .add(@compress.zlib_compress(inner))
+            .exact_view(),
+          )
+        _ =>
+          @error.fail(
+            "api: unsupported output compression algorithm (BZip2 is decode-only)",
+          )
+      }
   }
 }
 
@@ -185,6 +230,7 @@ fn collect_data_sig(
   packets : Array[@packet.RawPacket],
   data0 : Bytes?,
   sig0 : @packet.SignaturePacket?,
+  max_decompressed : Int,
 ) -> (Bytes?, @packet.SignaturePacket?) raise {
   let mut data = data0
   let mut sig = sig0
@@ -197,11 +243,13 @@ fn collect_data_sig(
       @packet.Compressed => {
         let inner = decompress_payload(
           @packet.CompressedPacket::parse(p.body().exact_view()),
+          max_decompressed,
         )
         let (d2, s2) = collect_data_sig(
           @packet.parse_packets(inner.exact_view()),
           data,
           sig,
+          max_decompressed,
         )
         data = d2
         sig = s2
@@ -416,10 +464,11 @@ pub fn sign_inline(
 pub fn verify_inline(
   message : String,
   verifier : PublicKey,
+  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> (Bytes, VerifyStatus) raise {
   let block = @armor.decode(message)
   let packets = @packet.parse_packets(block.data().exact_view())
-  let (data, sig) = collect_data_sig(packets, None, None)
+  let (data, sig) = collect_data_sig(packets, None, None, max_decompressed)
   finish_inline_verify(data, sig, Some(verifier))
 }
 
@@ -430,6 +479,7 @@ pub fn sign_and_encrypt(
   signer : PrivateKey,
   recipients : Array[PublicKey],
   text_mode? : Bool,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(signer, data, sig_type)
@@ -445,7 +495,10 @@ pub fn sign_and_encrypt(
   inner.bytes(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
-  seal_to_recipients(inner.to_bytes().exact_view(), recipients)
+  seal_to_recipients(
+    maybe_compress_inner(inner.to_bytes().exact_view(), compress?).exact_view(),
+    recipients,
+  )
 }
 
 ///|
@@ -455,6 +508,7 @@ pub fn decrypt_and_verify(
   message : String,
   decryption_keys : Array[PrivateKey],
   verifier : PublicKey?,
+  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> (Bytes, VerifyStatus) raise {
   // Try private-key decryption first, then fall back to no-password
   // path only when no keys given? Keep explicit: caller decides.
@@ -483,7 +537,12 @@ pub fn decrypt_and_verify(
   }
   // Walk inner packets: OPS? literal | compressed; trailing sig.
   let inner_packets = @packet.parse_packets(inner.exact_view())
-  let (data, sig) = collect_data_sig(inner_packets, None, None)
+  let (data, sig) = collect_data_sig(
+    inner_packets,
+    None,
+    None,
+    max_decompressed,
+  )
   finish_inline_verify(data, sig, verifier)
 }
 

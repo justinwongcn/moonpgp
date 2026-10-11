@@ -49,7 +49,7 @@ moon run cmd/main -- help
 ```bash
 moon check --target all --deny-warn
 moon build --target all
-moon test --target native      # 347 tests
+moon test --target native      # 385 tests
 moon fmt --check
 ```
 
@@ -59,13 +59,16 @@ moon fmt --check
 |---|---|
 | ASCII Armor | CRC-24 checksum, multi-block parsing, CRLF tolerance |
 | Packet engine | RFC 9580 packet headers (old/new formats, partial lengths), PKESK v3+v6, SKESK v4/v5/v6, PublicKey/SecretKey/SecretSubkey (v4+v6), UserID, Signature v4+v6 (subpacket parsing), OnePassSig v3+v6, Literal, Padding, Compressed, SEIPD v1+MDC and v2 |
-| Symmetric encryption | AES-128/192/256, OpenPGP-CFB (both the resync and no-resync variants), MDC integrity protection, and the **v2 SEIPD chunked-AEAD layer** (salt + HKDF message key/IV, `0xD2` header, per-chunk AD, final length-bound tag) |
+| Symmetric encryption | AES-128/192/256, plus **CAST5 and 3DES on the decryption side** (RFC 4880 MUST 3DES; GnuPG's pre-AES default CAST5 — legacy payloads and passphrase-protected keys, read-only: generation always emits AES), OpenPGP-CFB (both the resync and no-resync variants), MDC integrity protection, and the **v2 SEIPD chunked-AEAD layer** (salt + HKDF message key/IV, `0xD2` header, per-chunk AD, final length-bound tag) |
 | S2K | Simple / Salted / Iterated+Salted (SHA-256/SHA-1/RIPEMD-160/MD5) and **Argon2 (type 4, RFC 9580 §3.7.1.4)** |
 | Argon2 primitives | Self-implemented **BLAKE2b** (RFC 7693), **Argon2id** (RFC 9106, v=0x13) and **HKDF-SHA256** (RFC 5869) in `primitives`, with an explicit memory cap before allocating |
 | RSA | PKCS#1 v1.5 encryption, signing, verification; key generation (Miller-Rabin, CRT, extended-Euclid modular inverse) |
 | Ed25519 | EdDSA legacy (algorithm 22) signing/verification and key generation (self-implemented on `@bigint`, `pki/ed25519.mbt`) |
+| Key lifecycle | Import-time cryptographic validation of every User-ID certification, subkey binding and (v6) Direct Key signature; `is_expired` / `is_revoked` / `can_encrypt` / `can_verify` aligned with gopenpgp (`now = 0` disables time checks); revocation signatures parsed, cryptographically verified, and enforced at key selection; capability-aware `KeyRing` lookups (key flags, expiry, revocation — no longer RSA-only) |
 | ECDH / X25519 | **X25519 v6 (algorithm 25)** native-key wrap/unwrap: HKDF-SHA256 with `info = "OpenPGP X25519"` + AES-128 Key Wrap, v6 PKESK by fingerprint; Curve25519Legacy (algorithm 18) X25519 + SHA-256 KDF (§11.4) + AES Key Wrap (RFC 3394) with the PKESK v3 ephemeral-point format |
-| Key management | Transferable-key assembly/parsing, creation and verification of self-signatures and subkey binding signatures, passphrase locking/unlocking (usage 254 CFB, and **usage 253 AEAD + HKDF** with Argon2id or iterated S2K), armored import/export, keyring |
+| Session keys | `SessionKey` type + `generate_session_key`; bare-SEIPD `encrypt_to_session_key` / `decrypt_to_session_key` (out-of-band key, gopenpgp's raw-session-key backend); `recover_session_key_with_password` / `recover_session_key_with_key` (the `RetrieveSessionKey` flows) |
+| Compression | Optional ZIP/ZLIB compression on every encryption entry point and the builder (`compress()`), output verified by GnuPG; decompressed-payload ceiling (512 MiB default, `max_decompressed` override) enforced by allocation-bounded streaming decompression |
+| Key management | Transferable-key assembly/parsing with **multiple certified User IDs** (imported in wire order, re-emitted; every certification validated), creation and verification of self-signatures and subkey binding signatures, passphrase locking/unlocking (usage 254 CFB, and **usage 253 AEAD + HKDF** with Argon2id or iterated S2K), armored import/export, keyring |
 | AEAD modes | OCB (RFC 7253, MTI), EAX and GCM (RFC 9580 §5.13.3–5.13.5), all three usable for v2 SEIPD, v5/v6 SKESK and usage-253 secret keys |
 | Compression | Compressed packet: ZIP (raw DEFLATE) / ZLIB / uncompressed; the decompressor fully supports dynamic Huffman |
 | MIME | PGP/MIME (RFC 3156): multipart/signed construction + verification, multipart/encrypted parsing, RFC 5322 header parsing; email pipeline aligned with gopenpgp v3 `mime/`: Content-Type parameter parsing, Content-Transfer-Encoding decoding (base64/quoted-printable), byte-exact MIME tree parsing, body/attachment collection (gomime semantics), one-shot `decrypt_mime` with callback delivery and gopenpgp signature-status merge (Ok/NotSigned/NoVerifier/Failed) |
@@ -99,10 +102,10 @@ generated key every run):
 ./scripts/interop_check.sh
 ```
 
-Automated tests: `moon test --target native` (347 tests covering all vectors
+Automated tests: `moon test --target native` (385 tests covering all vectors
 above; two RFC 9580 Argon2 fixtures are `#skip`ped because each derivation
 needs 2 GiB — run them with `--include-skipped --filter 'slow:*'`).
-`moon test --target wasm` and `--target js` run 339 tests. wasm-gc has no
+`moon test --target wasm` and `--target js` run 377 tests. wasm-gc has no
 platform entropy source: its entropy-free subset still passes, but the 100
 tests that generate key material (keygen, random IV/salt, Argon2) fail there
 with `platform entropy source unavailable`; use native, wasm or js for the
@@ -293,6 +296,13 @@ MIT attribution).
   `encrypt_with_password_argon2`. Verified against RFC 9106 §5.3, the
   x/crypto vector table, RFC 9580 Appendix A.12/A.5, and go-crypto v1.4.1
   in both directions.
+- gopenpgp v3 gap closure (2026-10-11, M1–M5): import-time signature
+  validation + key lifecycle (`is_expired`/`is_revoked`/`can_encrypt`/
+  `can_verify`), CAST5 + 3DES decryption side (with a latent SEIPD v1
+  block-size bug the new fixtures exposed and fixed), the `SessionKey`
+  API, optional compression output + decompression bomb ceiling, and
+  multiple certified User IDs. See `docs/plan-gap-closure-gopenpgp.md`
+  and `docs/HANDOFF.md` §17.
 - v6 message encryption (2026-10-08): v6 PKESK (§5.1.2) with X25519 key
   wrap, v6 SKESK (§5.3.2) with HKDF key separation, v2 SEIPD (§5.13.2)
   chunked AEAD, v6 X25519 encryption subkeys with v6 binding signatures,

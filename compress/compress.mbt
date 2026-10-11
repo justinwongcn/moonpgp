@@ -62,3 +62,50 @@ pub extend CompressedAlgo with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 pub extend CompressedAlgo with Eq::{not_equal, equal}
+
+///|
+/// Raw DEFLATE decompression with a hard output cap (M4): flate's
+/// limited inflater stops (raising) once the cap is exceeded, so the
+/// bomb never materializes.
+pub fn zip_decompress_capped(data : BytesView, max_out : Int) -> Bytes raise {
+  @flate.inflate_all_limited(data.to_owned(), max_output=max_out) catch {
+    _ => @error.fail("compress: inflate failed (limit \{max_out} octets)")
+  }
+}
+
+///|
+/// ZLIB decompression with a hard output cap (M4): the streaming decoder
+/// runs with bounded output windows, so total allocation stays at the cap
+/// instead of materializing the payload first. Checksum and framing stay
+/// with the decoder.
+pub fn zlib_decompress_capped(data : BytesView, max_out : Int) -> Bytes raise {
+  guard max_out >= 0 else { @error.fail("compress: bad output cap") }
+  let dec = @zlib.Decoder::Decoder()
+  let out : Array[Byte] = []
+  let mut pos = 0
+  for ;; {
+    let chunk = FixedArray::make(32768, b'\x00')
+    let status = dec.step(
+      data.exact_view()[pos:data.length()],
+      chunk.mut_view(),
+      end=true,
+    ) catch {
+      ZlibError(_, msg) => @error.fail("compress: zlib inflate failed: \{msg}")
+    }
+    pos = pos + dec.last_consumed()
+    let produced = dec.last_produced()
+    if out.length() + produced > max_out {
+      @error.fail(
+        "compress: decompressed output exceeds the \{max_out}-octet limit",
+      )
+    }
+    for i in 0..<produced {
+      out.push(chunk[i])
+    }
+    match status {
+      Done => return Bytes::from_array(out)
+      NeedMoreInput => @error.fail("compress: truncated zlib stream")
+      NeedMoreOutput => continue
+    }
+  }
+}

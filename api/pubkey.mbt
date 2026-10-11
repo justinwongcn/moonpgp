@@ -81,13 +81,17 @@ pub fn encrypt_to_recipients(
   plaintext : BytesView,
   recipients : Array[PublicKey],
   file_name? : String,
+  compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let literal_wire = @packet.serialize_packet(
     @packet.Literal,
     literal.to_body().exact_view(),
   )
-  seal_to_recipients(literal_wire, recipients)
+  seal_to_recipients(
+    maybe_compress_inner(literal_wire, compress?).exact_view(),
+    recipients,
+  )
 }
 
 ///|
@@ -123,8 +127,19 @@ fn seal_to_recipients(
   }
   let session_key = @primitives.random_bytes(sym_algo.key_size())
   let w = @packet.Writer::new()
+  // Lifecycle gate (M1): refuse to spend a session key on a recipient
+  // whose key is revoked or no longer encryption-capable. The clock is
+  // real on native; on the non-native targets it reads 0, which disables
+  // the time-dependent part of the checks (documented degradation).
+  let now = @primitives.unix_now()
   for recipient in recipients {
-    let enc_key = match recipient.encryption_key() {
+    guard !recipient.is_revoked(now) else {
+      @error.fail("api: recipient key is revoked")
+    }
+    guard recipient.can_encrypt(now) else {
+      @error.fail("api: recipient key is expired or cannot encrypt")
+    }
+    let enc_key = match recipient.encryption_packet_at(now) {
       Some(k) => k
       None => @error.fail("api: recipient key cannot encrypt")
     }
@@ -217,13 +232,32 @@ fn checksum_bytes(sum : Int) -> Bytes {
 pub fn decrypt_binary_with_private_key(
   data : BytesView,
   key : PrivateKey,
+  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let packets = @packet.parse_packets(data)
   let inner = match decrypt_inner_with_key(packets, key) {
     Some(b) => b
     None => @error.fail("api: message is not encrypted to this key")
   }
-  extract_literal(inner)
+  extract_literal(inner, max_decompressed)
+}
+
+///|
+/// Does this PKESK address the given (unlocked) secret key? v6 by
+/// fingerprint, v3 by key id. Shared by the decrypt pipeline and the
+/// session-key recovery flow.
+fn pkesk_addresses(
+  pkesk : @packet.PkeskPacket,
+  sk : @packet.SecretKeyPacket,
+) -> Bool {
+  if pkesk.version() == 6 {
+    // §5.1.2: a v6 PKESK identifies the recipient by fingerprint.
+    let fp = sk.public.fingerprint() catch { _ => Bytes::new(0) }
+    pkesk.fingerprint().length() > 0 && fp.equal(pkesk.fingerprint())
+  } else {
+    let id = sk.public.key_id() catch { _ => Bytes::new(0) }
+    id.equal(pkesk.key_id())
+  }
 }
 
 ///|
@@ -246,15 +280,7 @@ fn decrypt_inner_with_key(
     if p.tag() == @packet.Pkesk {
       let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
       for sk in candidates {
-        let matches = if pkesk.version() == 6 {
-          // §5.1.2: a v6 PKESK identifies the recipient by fingerprint.
-          let fp = sk.public.fingerprint() catch { _ => Bytes::new(0) }
-          pkesk.fingerprint().length() > 0 && fp.equal(pkesk.fingerprint())
-        } else {
-          let id = sk.public.key_id() catch { _ => Bytes::new(0) }
-          id.equal(pkesk.key_id())
-        }
-        if matches {
+        if pkesk_addresses(pkesk, sk) {
           let (algo, session) = unwrap_pkesk(pkesk, sk)
           return Some(
             unwrap_seipd_inner(packets, algo, session, pkesk.version()),
@@ -347,9 +373,14 @@ fn unwrap_seipd_inner(
 pub fn decrypt_with_private_key(
   message : String,
   key : PrivateKey,
+  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let armored = @armor.decode(message)
-  decrypt_binary_with_private_key(@armor.ArmorBlock::data(armored), key)
+  decrypt_binary_with_private_key(
+    @armor.ArmorBlock::data(armored),
+    key,
+    max_decompressed~,
+  )
 }
 
 ///|

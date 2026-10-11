@@ -499,6 +499,39 @@ pub fn SignaturePacket::key_flags(self : SignaturePacket) -> Bytes? {
 }
 
 ///|
+/// 4-octet big-endian seconds value of a lifetime subpacket body, or 0
+/// when absent/malformed (0 = "never expires", so callers need not
+/// distinguish the two).
+fn lifetime_secs(subs : Array[SigSubpacket], sub_type : Int) -> Int {
+  match find_subpacket(subs, sub_type) {
+    Some(b) =>
+      if b.length() == 4 {
+        (b[0].to_int() << 24) |
+        (b[1].to_int() << 16) |
+        (b[2].to_int() << 8) |
+        b[3].to_int()
+      } else {
+        0
+      }
+    None => 0
+  }
+}
+
+///|
+/// The Key Expiration Time subpacket (RFC 9580 §5.2.3.6): seconds after
+/// the associated key's creation time; 0 = the key never expires.
+pub fn SignaturePacket::key_expiration_time(self : SignaturePacket) -> Int {
+  lifetime_secs(self.hashed_subpackets, SIGSUB_KEY_EXPIRATION_TIME)
+}
+
+///|
+/// The Signature Expiration Time subpacket (RFC 9580 §5.2.3.10): seconds
+/// after the signature's creation time; 0 = the signature never expires.
+pub fn SignaturePacket::sig_expiration_time(self : SignaturePacket) -> Int {
+  lifetime_secs(self.hashed_subpackets, SIGSUB_SIG_EXPIRATION_TIME)
+}
+
+///|
 /// The Features flags octet (RFC 9580 §5.2.3.32), when present.
 pub fn SignaturePacket::features(self : SignaturePacket) -> Bytes? {
   find_subpacket(self.hashed_subpackets, SIGSUB_FEATURES)

@@ -50,7 +50,10 @@ fn unlock_secret_key(
   guard !key.dummy else {
     @error.fail("api: secret material is a GnuPG dummy (moved to a smartcard)")
   }
-  guard key.cipher_algo == 7 || key.cipher_algo == 8 || key.cipher_algo == 9 else {
+  // The read side accepts the legacy protection ciphers too (RFC 4880
+  // §9.2 MUST 3DES; CAST5 was GnuPG's pre-AES default) — generation
+  // still only ever writes AES (see `lock_secret_key`).
+  guard @primitives.cipher_algo_of_number(key.cipher_algo) is Some(_) else {
     @error.fail("api: unsupported protection cipher \{key.cipher_algo}")
   }
   let algo = @error.require(
@@ -282,8 +285,7 @@ pub fn PrivateKey::unlock(
       0xC5,
       argon2_max_memory_kib,
     ),
-    user_id: self.user_id,
-    self_signature: self.self_signature,
+    user_ids: self.user_ids,
     direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) =>
@@ -291,6 +293,8 @@ pub fn PrivateKey::unlock(
       None => None
     },
     subkey_binding: self.subkey_binding,
+    revocations: self.revocations,
+    subkey_revocation: self.subkey_revocation,
   }
 }
 
@@ -303,14 +307,15 @@ pub fn PrivateKey::lock(
 ) -> PrivateKey raise {
   {
     primary: lock_secret_key(self.primary, passphrase),
-    user_id: self.user_id,
-    self_signature: self.self_signature,
+    user_ids: self.user_ids,
     direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) => Some(lock_secret_key(sk, passphrase))
       None => None
     },
     subkey_binding: self.subkey_binding,
+    revocations: self.revocations,
+    subkey_revocation: self.subkey_revocation,
   }
 }
 
@@ -336,8 +341,7 @@ pub fn PrivateKey::lock_argon2(
       parallelism,
       memory_exp,
     ),
-    user_id: self.user_id,
-    self_signature: self.self_signature,
+    user_ids: self.user_ids,
     direct_signature: self.direct_signature,
     encryption_subkey: match self.encryption_subkey {
       Some(sk) =>
@@ -349,6 +353,8 @@ pub fn PrivateKey::lock_argon2(
       None => None
     },
     subkey_binding: self.subkey_binding,
+    revocations: self.revocations,
+    subkey_revocation: self.subkey_revocation,
   }
 }
 

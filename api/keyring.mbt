@@ -48,17 +48,72 @@ fn all_public_packets(key : PublicKey) -> Array[@packet.PublicKeyPacket] {
 }
 
 ///|
-/// Find an encryption-capable public key by 8-octet key id. Errors from
-/// key-id computation propagate (F15): the keys were parsed on the way in,
-/// so a failure here is an invariant violation, not a lookup miss.
+/// True when the packet is an encryption-capable component of `key` that
+/// is still usable at `now` (key/subkey not revoked, flags permit —
+/// absent flags count as capable —, nothing expired).
+fn key_packet_encryption_usable_at(
+  key : PublicKey,
+  packet : @packet.PublicKeyPacket,
+  now : Int64,
+) -> Bool raise {
+  if key.is_revoked(now) {
+    return false
+  }
+  match key.encryption_subkey {
+    Some(sk) =>
+      if sk.key_id().equal(packet.key_id()) {
+        return !subkey_revoked_at(key.subkey_revocation, key.primary, sk, now) &&
+          component_usable(sk, key.subkey_binding, FLAG_ENCRYPT, now)
+      }
+    None => ()
+  }
+  key.primary.algo().is_rsa() &&
+  component_usable(key.primary, Some(key.self_signature()), FLAG_ENCRYPT, now)
+}
+
+///|
+/// True when the packet is a component of `key` that may verify at `now`
+/// (not revoked, sign/certify flags permit, nothing expired).
+fn key_packet_verify_usable_at(
+  key : PublicKey,
+  packet : @packet.PublicKeyPacket,
+  now : Int64,
+) -> Bool raise {
+  if key.is_revoked(now) {
+    return false
+  }
+  if packet.key_id().equal(key.primary.key_id()) {
+    return component_usable(
+      key.primary,
+      Some(key.self_signature()),
+      FLAG_SIGN_OR_CERTIFY,
+      now,
+    )
+  }
+  match key.encryption_subkey {
+    Some(sk) =>
+      component_usable(sk, key.subkey_binding, FLAG_SIGN_OR_CERTIFY, now)
+    None => false
+  }
+}
+
+///|
+/// Find an encryption-capable public key packet by 8-octet key id that is
+/// still usable at `now` (lifecycle-checked: revocation, key flags and
+/// expiry — a key without key flags counts as capable; `now = 0` skips
+/// the time checks). All public-key algorithms participate; errors from
+/// key-id computation propagate (F15): the keys were parsed on the way
+/// in, so a failure here is an invariant violation, not a lookup miss.
 pub fn KeyRing::find_encryption_key(
   self : KeyRing,
   key_id : BytesView,
+  now? : Int64 = 0L,
 ) -> @packet.PublicKeyPacket? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {
       let id = p.key_id()
-      if id.equal(key_id.to_owned()) && p.algo().is_rsa() {
+      if id.equal(key_id.to_owned()) &&
+        key_packet_encryption_usable_at(key, p, now) {
         return Some(p)
       }
     }
@@ -68,6 +123,9 @@ pub fn KeyRing::find_encryption_key(
 
 ///|
 /// Find the unlocked private key packet matching a PKESK key id.
+/// Deliberately NOT lifecycle-gated: decrypting mail that arrived before
+/// a key expired must keep working (mirrors gopenpgp, whose decryption
+/// path does not check expiry either).
 pub fn KeyRing::find_decryption_key(
   self : KeyRing,
   key_id : BytesView,
@@ -89,16 +147,17 @@ pub fn KeyRing::find_decryption_key(
 }
 
 ///|
-/// Find a public key that can verify a signature from `key_id` (returns
-/// the owning transferable key).
+/// Find a transferable key that can verify a signature from `key_id` and
+/// is still usable at `now` (revocation, sign/certify flags, expiry).
 pub fn KeyRing::find_verification_key(
   self : KeyRing,
   key_id : BytesView,
+  now? : Int64 = 0L,
 ) -> PublicKey? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {
       let id = p.key_id()
-      if id.equal(key_id.to_owned()) {
+      if id.equal(key_id.to_owned()) && key_packet_verify_usable_at(key, p, now) {
         return Some(key)
       }
     }

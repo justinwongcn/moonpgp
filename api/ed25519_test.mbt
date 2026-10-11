@@ -6,10 +6,10 @@ test "ed25519 key generation with verifiable self-signature" {
     @packet.EdDsaLegacy,
   )
   let ok = @api.verify_key_signature(
-    key.self_signature,
+    key.self_signature(),
     key.primary.public,
     key.primary.public,
-    user_id=key.user_id,
+    user_id=key.user_id(),
   )
   assert_true(ok)
   // RSA encryption subkey binding verifies against the Ed25519 primary.
@@ -32,7 +32,7 @@ test "ed25519 key armor roundtrip" {
   assert_eq(@packet.PublicKeyPacket::algo(re.primary), @packet.EdDsaLegacy)
   // Signature still verifies after the roundtrip.
   let ok = @api.verify_key_signature(
-    re.self_signature,
+    re.self_signature(),
     re.primary,
     re.primary,
     user_id=re.user_id(),

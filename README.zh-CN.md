@@ -42,7 +42,7 @@ moon run cmd/main -- help
 ```bash
 moon check --target all --deny-warn
 moon build --target all
-moon test --target native      # 347 个测试
+moon test --target native      # 385 个测试
 moon fmt --check
 ```
 
@@ -52,14 +52,17 @@ moon fmt --check
 |---|---|
 | ASCII Armor | CRC-24 校验、多块解析、CRLF 容错 |
 | 包格式引擎 | RFC 9580 包头（新旧格式、partial length）、PKESK v3+v6、SKESK v4/v5/v6、PublicKey/SecretKey/SecretSubkey（v4+v6）、UserID、Signature v4+v6（子包解析）、OnePassSig v3+v6、Literal、Padding、Compressed、SEIPD v1+MDC 与 v2 |
-| 对称加密 | AES-128/192/256、OpenPGP-CFB（resync 与 no-resync 两种变体）、MDC 完整性，以及 **v2 SEIPD 分块 AEAD 层**（salt + HKDF 消息密钥/IV、`0xD2` 头、分块 AD、末块长度绑定 tag） |
+| 对称加密 | AES-128/192/256，另含**解密侧 CAST5 与 3DES**（RFC 4880 MUST 3DES；GnuPG 前 AES 时代默认 CAST5——覆盖遗留报文与口令保护钥，只解不发：生成侧恒用 AES）、OpenPGP-CFB（resync 与 no-resync 两种变体）、MDC 完整性，以及 **v2 SEIPD 分块 AEAD 层**（salt + HKDF 消息密钥/IV、`0xD2` 头、分块 AD、末块长度绑定 tag） |
+| 密钥生命周期 | 导入即验证每一条 User ID 认证、子钥绑定与（v6）直签的密码学有效性；`is_expired` / `is_revoked` / `can_encrypt` / `can_verify`（对齐 gopenpgp，`now = 0` 关闭时间检查）；吊销签名解析、验证并在选钥时执行；能力感知的 `KeyRing` 查找（key flags、过期、吊销——不再仅限 RSA） |
+| 会话密钥 | `SessionKey` 类型 + `generate_session_key`；裸 SEIPD 的 `encrypt_to_session_key` / `decrypt_to_session_key`（带外持钥，gopenpgp raw-session-key 后端）；`recover_session_key_with_password` / `recover_session_key_with_key`（`RetrieveSessionKey` 流程） |
+| 压缩 | 全部加密入口与 builder（`compress()`）支持可选 ZIP/ZLIB 压缩输出（经 GnuPG 实测）；解压负载上限（默认 512 MiB，`max_decompressed` 覆盖），以分配受界的流式解压执行 |
 | S2K | Simple / Salted / Iterated+Salted（SHA-256/SHA-1/RIPEMD-160/MD5）与 **Argon2（type 4，RFC 9580 §3.7.1.4）** |
 | Argon2 原语 | `primitives` 自实现 **BLAKE2b**（RFC 7693）、**Argon2id**（RFC 9106，v=0x13）与 **HKDF-SHA256**（RFC 5869）；解析不可信报文时默认 256 MiB 内存策略，超限在分配前拒绝 |
 | RSA | PKCS#1 v1.5 加解密、签名、验证；密钥生成（Miller-Rabin、CRT、扩展欧几里得模逆） |
 | Ed25519 | EdDSA legacy（算法 22）签名/验证、密钥生成（自实现 @bigint 算术，`pki/ed25519.mbt`） |
 | ECDH / X25519 | **X25519 v6（算法 25）**原生密钥封装/解封：HKDF-SHA256（`info = "OpenPGP X25519"`）+ AES-128 Key Wrap，v6 PKESK 按指纹寻址；Curve25519Legacy（算法 18）X25519 + SHA-256 KDF（§11.4）+ AES Key Wrap（RFC 3394）与 PKESK v3 临时点格式 |
 | AEAD 模式 | OCB（RFC 7253，MTI）、EAX、GCM（RFC 9580 §5.13.3–5.13.5），三种模式均可用于 v2 SEIPD、v5/v6 SKESK 与 usage-253 私钥 |
-| 密钥管理 | 传输型密钥组装/解析、自签名与子钥绑定签名的创建与验证、口令锁定/解锁（usage 254 CFB，以及 **usage 253 AEAD + HKDF**，支持 Argon2id 或 iterated S2K）、armor 导入导出、keyring |
+| 密钥管理 | 传输型密钥组装/解析，**多 User ID 认证**（按线上顺序导入并回写，逐条验证）、自签名与子钥绑定签名的创建与验证、口令锁定/解锁（usage 254 CFB，以及 **usage 253 AEAD + HKDF**，支持 Argon2id 或 iterated S2K）、armor 导入导出、keyring |
 | 签名/验证 | inline（v4 密钥用 OnePassSig v3，v6 密钥用携带相同 hash salt 与 32 字节指纹的 v6 OPS）、detached、cleartext（§7 规范化）、文本模式 CRLF 规范化 |
 | 压缩 | Compressed 包：ZIP（raw DEFLATE）/ZLIB/无压缩，解压端完整支持动态哈夫曼 |
 | MIME | PGP/MIME（RFC 3156）：multipart/signed 构建+验证、multipart/encrypted 解析、RFC 5322 头解析 |
@@ -100,7 +103,7 @@ moon fmt --check
 ./scripts/interop_check.sh
 ```
 
-自动化测试：`moon test --target native`（347 个测试，含上述全部向量；两个 RFC 9580
+自动化测试：`moon test --target native`（385 个测试，含上述全部向量；两个 RFC 9580
 Argon2 夹具因每次派生需 2 GiB 而默认 `#skip`，用 `--include-skipped --filter 'slow:*'` 运行）。
 `moon test --target wasm` 与 `--target js` 各运行 339 个测试。wasm-gc 无平台熵源：
 不含熵的测试仍通过，但 100 个需要生成密钥材料（keygen、随机 IV/salt、Argon2）的用例

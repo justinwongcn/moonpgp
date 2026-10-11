@@ -23,7 +23,7 @@ echo "== 3/5 moon test (wasm) =="
 moon test --target wasm
 
 echo "== 4/5 slow RFC 9580 A.5/A.12 Argon2 vectors (2 GiB each) =="
-moon test src/api --target native --include-skipped --filter "slow:*"
+moon test api --target native --include-skipped --filter "slow:*"
 
 echo "== 5/5 interop + e2e =="
 bash scripts/interop_check.sh

@@ -9,6 +9,44 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — gopenpgp v3 gap closure (2026-10-11, plan
+[`docs/plan-gap-closure-gopenpgp.md`](../docs/plan-gap-closure-gopenpgp.md))
+
+- **Key lifecycle (M1)**: import-time cryptographic validation of every
+  User-ID certification, subkey binding and (v6) Direct Key signature;
+  `is_expired` / `is_revoked` / `can_encrypt` / `can_verify` on both key
+  types (gopenpgp-aligned, `now = 0` disables time checks on the
+  clockless targets); revocation signatures (0x20/0x28) parsed, verified
+  lazily, and enforced at key selection; `KeyRing::find_encryption_key` /
+  `find_verification_key` now take an optional `now`, consult key flags
+  and cover all public-key algorithms (they were RSA-only).
+- **Legacy symmetric ciphers (M2)**: self-implemented CAST5 (RFC 2144,
+  KATs from Appendix B + OpenSSL cross-checks) and 3DES (FIPS 46-3,
+  OpenSSL `des-ede3-ecb` cross-checks, EDE-degeneracy test), wired into
+  the read side only: SEIPD v1 payloads, S2K derivation, usage-254/255
+  secret-key unlocking, and GnuPG `--allow-old-cipher-algos` messages in
+  both algorithms. Generation still emits AES only. Also fixed a latent
+  bug the new fixtures exposed: the SEIPD v1 quick-check and inner-slice
+  offsets were hardcoded to 16-byte blocks, so no 8-byte-block cipher
+  (CAST5/3DES) could ever decrypt.
+- **Session keys (M3)**: `SessionKey` type with validated construction,
+  `generate_session_key`, bare-SEIPD `encrypt_to_session_key` /
+  `decrypt_to_session_key` (out-of-band key), and
+  `recover_session_key_with_password` / `recover_session_key_with_key`
+  (gopenpgp `RetrieveSessionKey` analogs).
+- **Compression (M4)**: optional ZIP/ZLIB compression on every
+  encryption entry point and the builder (`EncryptionBuilder::compress`),
+  output byte-verified by GnuPG; `DEFAULT_MAX_DECOMPRESSED_BYTES`
+  (512 MiB) ceiling with `max_decompressed` overrides on the decrypt
+  entry points and `DecryptionBuilder::max_decompressed`, enforced by
+  allocation-bounded streaming decompression (flate limited inflate /
+  chunked zlib decoder).
+- **Multiple User IDs (M5)**: transferable keys carry every certified
+  User ID (`user_ids : Array[UserIdBinding]`, wire order preserved,
+  last certification per User ID wins); `user_id()` / `self_signature()`
+  accessors keep the previous single-uid ergonomics; to_bytes re-emits
+  all bindings. A GnuPG `--quick-add-uid` fixture guards the import.
+
 ### Changed (breaking)
 
 - **Module renamed: `justinwongcn/openpgp` → `justinwongcn/moonpgp`**, and the

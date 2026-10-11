@@ -3,7 +3,7 @@
 # AEAD shapes GnuPG 2.4 produces under --force-aead.
 #   direction A: moonpgp --aead message  -> gpg --decrypt  (byte-identical)
 #   direction B: gpg --force-aead        -> moonpgp decpass (byte-identical)
-# The RFC's own A.4 sample is covered by src/api/password_test.mbt; this
+# The RFC's own A.4 sample is covered by api/password_test.mbt; this
 # gate exercises the live gpg implementation on both sides.
 # Run from the openpgp/ project root: bash scripts/interop_aead_gpg.sh
 set -euo pipefail

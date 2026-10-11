@@ -38,6 +38,12 @@ pub fn new_aes(BytesView) -> &BlockCipher raise
 
 pub fn new_block_cipher(CipherAlgo, BytesView) -> &BlockCipher raise
 
+pub fn new_cast5(BytesView) -> &BlockCipher raise
+
+pub fn new_des(BytesView) -> &BlockCipher raise
+
+pub fn new_des_ede3(BytesView) -> &BlockCipher raise
+
 pub fn pad_left(BytesView, Int) -> Bytes
 
 pub fn pad_right(BytesView, Int) -> Bytes
@@ -58,6 +64,8 @@ pub fn xor_bytes(BytesView, BytesView) -> Bytes raise
 
 // Types and methods
 pub(all) enum CipherAlgo {
+  Tripledes
+  Cast5
   Aes128
   Aes192
   Aes256

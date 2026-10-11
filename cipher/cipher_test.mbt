@@ -101,7 +101,7 @@ test "seipd v1 wrong key fails quick check" {
 test "resync cfb roundtrip" {
   let key = @primitives.random_bytes(32)
   let bc = @primitives.new_block_cipher(@primitives.Aes256, key.exact_view())
-  let prefix = @cipher.random_prefix()
+  let prefix = @cipher.random_prefix(16)
   let data = @primitives.random_bytes(64)
   let ct = @cipher.openpgp_cfb_encrypt_resync(
     bc,
@@ -118,7 +118,7 @@ test "resync cfb roundtrip" {
 test "resync cfb wrong key fails quick check" {
   let key = @primitives.random_bytes(16)
   let bc = @primitives.new_block_cipher(@primitives.Aes128, key.exact_view())
-  let prefix = @cipher.random_prefix()
+  let prefix = @cipher.random_prefix(16)
   let data = @primitives.utf8_bytes("legacy")
   let ct = @cipher.openpgp_cfb_encrypt_resync(
     bc,

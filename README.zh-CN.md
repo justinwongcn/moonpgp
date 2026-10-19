@@ -19,15 +19,20 @@ v0.10.14+7d59c7ec9`（moonc 需 0.10.14 及以上）。不需要 C 工具链、�
 moon add justinwongcn/moonpgp
 ```
 
-然后在该项目的 `moon.pkg` 中声明需要的包：
+然后在该项目的 `moon.pkg` 中导入根包 facade（以及需要的邮件包）：
 
 ```text
 import {
-  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp",        // 根包 facade：完整高层工作流
   "justinwongcn/moonpgp/mime",   // PGP/MIME（RFC 3156）解析与验证
   "justinwongcn/moonpgp/mail",   // RFC 5322 / MIME 组装
 }
 ```
+
+根包 facade（`@moonpgp.*`）re-export 了完整的 `@api` 公共面——密钥生成、
+加解密、签名/验签、`pgp()` builder、`KeyRing`——以及这些签名里用到的选项
+类型。高级用户也可以直接导入 `justinwongcn/moonpgp/api` 或更低层
+（`packet`、`pki`、`armor` 等）。
 
 **不写代码直接用 CLI** —— 从本仓库克隆后即可运行：
 
@@ -42,7 +47,7 @@ moon run cmd/main -- help
 ```bash
 moon check --target all --deny-warn
 moon build --target all
-moon test --target native      # 385 个测试
+moon test --target native      # 389 个测试
 moon fmt --check
 ```
 
@@ -67,7 +72,7 @@ moon fmt --check
 | 压缩 | Compressed 包：ZIP（raw DEFLATE）/ZLIB/无压缩，解压端完整支持动态哈夫曼 |
 | MIME | PGP/MIME（RFC 3156）：multipart/signed 构建+验证、multipart/encrypted 解析、RFC 5322 头解析 |
 | v6 消息加密 | v6 PKESK + **v2 SEIPD**（面向 v6 X25519 子钥）、v6 SKESK + v2 SEIPD（口令），并遵循接收方 Preferred AEAD Ciphersuites；`generate_ed25519_v6_key` 现在同时生成带 v6 绑定签名的 X25519 加密子钥 |
-| 顶层 API | `pgp().encryption()/decryption()/key_generation()` builder、KeyRing |
+| 顶层 API | 根包 facade——`import "justinwongcn/moonpgp"` 即得 `@moonpgp.*`（全量镜像 `@api` + 其签名用到的选项类型）；`pgp().encryption()/decryption()/key_generation()` builder、KeyRing |
 
 ## 互操作验证（全部实测通过）
 
@@ -103,9 +108,9 @@ moon fmt --check
 ./scripts/interop_check.sh
 ```
 
-自动化测试：`moon test --target native`（385 个测试，含上述全部向量；两个 RFC 9580
+自动化测试：`moon test --target native`（389 个测试，含上述全部向量；两个 RFC 9580
 Argon2 夹具因每次派生需 2 GiB 而默认 `#skip`，用 `--include-skipped --filter 'slow:*'` 运行）。
-`moon test --target wasm` 与 `--target js` 各运行 339 个测试。wasm-gc 无平台熵源：
+`moon test --target wasm` 与 `--target js` 各运行 381 个测试。wasm-gc 无平台熵源：
 不含熵的测试仍通过，但 100 个需要生成密钥材料（keygen、随机 IV/salt、Argon2）的用例
 会以 `platform entropy source unavailable` 失败；完整套件请用 native / wasm / js。
 
@@ -125,24 +130,25 @@ moon run cmd/main -- verify pub.asc 明文.txt sig.asc                        # 
 ## 库用法
 
 ```moonbit nocheck
-// 口令加密/解密
+// import "justinwongcn/moonpgp" —— 根包 facade 全量镜像 @api 公共面；
+// 直接导入 "justinwongcn/moonpgp/api" 时，同样的调用写作 @api.*。
 
 ///|
-let armored = @api.encrypt_with_password(plaintext, "passphrase")
+let armored = @moonpgp.encrypt_with_password(plaintext, "passphrase")
 
 ///|
-let plain = @api.decrypt_with_password(armored, "passphrase")
+let plain = @moonpgp.decrypt_with_password(armored, "passphrase")
 
 // 密钥生成 + 公钥加密/私钥解密
 
 ///|
-let key = @api.generate_key("Alice <alice@example.com>")
+let key = @moonpgp.generate_key("Alice <alice@example.com>")
 
 ///|
-let armored = @api.encrypt_to_recipients(data, [key.to_public()])
+let armored = @moonpgp.encrypt_to_recipients(data, [key.to_public()])
 
 ///|
-let plain = @api.decrypt_with_private_key(armored, key)
+let plain = @moonpgp.decrypt_with_private_key(armored, key)
 
 // Argon2 S2K（RFC 9580 §3.7.1.4，specifier type 4）——RFC 推荐的口令 KDF，
 // 默认参数与 gopenpgp RFC 9580 profile 一致（t=3、p=4、m=2^16 KiB）；
@@ -155,18 +161,18 @@ let locked = key.lock_argon2("口令", memory_exp=16)
 let unlocked = locked.unlock("口令")
 
 ///|
-let armored = @api.encrypt_with_password_argon2(plaintext, "口令")
+let armored = @moonpgp.encrypt_with_password_argon2(plaintext, "口令")
 
 ///|
-let plain = @api.decrypt_with_password(armored, "口令")
+let plain = @moonpgp.decrypt_with_password(armored, "口令")
 
 // gopenpgp 风格 builder
 
 ///|
-let encrypt = @api.pgp().encryption().password("pw").finish()
+let encrypt = @moonpgp.pgp().encryption().password("pw").finish()
 
 ///|
-let decrypt = @api.pgp().decryption().password("pw").finish()
+let decrypt = @moonpgp.pgp().decryption().password("pw").finish()
 ```
 
 ### 邮件演示管线（`example/`,不属于库 API）
@@ -186,11 +192,12 @@ SMTP 提交、再经 IMAP 取回、解密验签,一条命令闭环——`example
 ## 模块布局（可替换性设计）
 
 ```
+error/       # 全模块唯一的 PgpError
 primitives/  # 隔离层：唯一的第三方 crypto 接入点；BlockCipher trait、HashId、熵源断言
 armor/       # CRC-24 + armor（PGP 专属，永不替换）
-s2k/         # S2K（PGP 专属，永不替换）
+s2k/         # S2K 含 Argon2id（PGP 专属，永不替换）
 packet/      # 包格式引擎（PGP 专属，永不替换）
-cipher/      # OpenPGP-CFB 变体 + SEIPD v1/MDC + AES Key Wrap（RFC 3394）
+cipher/      # OpenPGP-CFB 变体 + AEAD 模式（OCB/EAX/GCM）+ SEIPD v1/MDC 与 v2 + AES Key Wrap（RFC 3394）
 pki/         # RSA（keygen/PKCS#1 v1.5）、Ed25519/X25519（RFC 8032/7748 自实现，`curve25519.mbt`）
 compress/    # DEFLATE/ZLIB（当前走 moonbit-community/flate，可替换点）
 mime/        # PGP/MIME（RFC 3156）：解析、验签、收件交付
@@ -200,13 +207,17 @@ interop/     # 与 gopenpgp/GnuPG/openssl 的互通测试
 ```
 
 库包直接位于仓库根目录，因此 import 路径 = 模块名 + 包名
-（`justinwongcn/moonpgp/api`），不经过任何中间目录层。支撑材料放在 `cmd/`
+（`justinwongcn/moonpgp/api`），不经过任何中间目录层。根包（`moonpgp.mbt`）
+是纯 facade：`import "justinwongcn/moonpgp"` 经 `pub using` 把整个 `@api`
+公共面以 `@moonpgp.*` 转发。支撑材料放在 `cmd/`
 （演示 CLI）、`example/`（传输与 mailer/mailreader 演示）与 `testdata/`
 （夹具），属演示与测试基建，不属于发布出去的库 API——见上文"邮件演示管线"。
 
 依赖（版本固定）：`moonbitlang/x@0.5.5`（哈希全家桶/HMAC/AES-ECB 单块原语）、
-`moonbit-community/flate@0.8.4`（DEFLATE）。Ed25519/X25519 按 RFC 8032/7748 基于
-core `@bigint` 自实现（`pki/curve25519.mbt`），公钥路径无第三方依赖。
+`moonbit-community/flate@0.8.4`（DEFLATE）与 `moonbitlang/async@0.22.4`
+（异步运行时 + 示例传输的 TCP/TLS 缝——仅演示层）。Ed25519/X25519 按
+RFC 8032/7748 基于 core `@bigint` 自实现（`pki/curve25519.mbt`），
+公钥路径无第三方依赖。
 替换任何一个 = 改 `primitives`（或对应模块）里的一个 adapter 文件 + 全量向量回归。
 
 第三方依赖与测试向量来源（含 gopenpgp MIT 归属声明）的完整清单见
@@ -260,9 +271,10 @@ core `@bigint` 自实现（`pki/curve25519.mbt`），公钥路径无第三方依
 新增能力（P1）：
 
 ```moonbit nocheck
-// cleartext 签名（RFC 9580 §7）
-let msg = @api.sign_cleartext("文本\n", key)
-let (text, status) = @api.verify_cleartext(msg, key.to_public())
+// cleartext 签名（RFC 9580 §7）——根包 facade 下 @api.* 等价于 @moonpgp.*；
+// @mime/@mail 为独立包
+let msg = @moonpgp.sign_cleartext("文本\n", key)
+let (text, status) = @moonpgp.verify_cleartext(msg, key.to_public())
 
 // PGP/MIME（RFC 3156）
 let mime_msg = @mime.build_pgp_mime_signed("正文\n", key)
@@ -271,5 +283,5 @@ let payload = @mime.extract_pgp_encrypted(mime_msg)   // 取出 PGP MESSAGE
 
 // Ed25519 主钥（EdDSA legacy，算法 22）+ Curve25519Legacy ECDH 加密子钥
 // —— gopenpgp "Default" profile 形态，gpg 实测双向互通
-let key = @api.generate_ed25519_key("Ed <ed@example.com>")
+let key = @moonpgp.generate_ed25519_key("Ed <ed@example.com>")
 ```

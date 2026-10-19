@@ -15,6 +15,7 @@ publish, GitHub release) or upstream contribution.
 | moonbitlang/core | 0.10.14+7d59c7ec9（随 moon 0.1.20260920 工具链捆绑） | Apache-2.0 | 标准库：`Bytes`/`FixedArray`/`@buffer`、**`@bigint`（Ed25519/X25519 域算术底座）**、`@encoding`（base64/hex/utf8）、`@random`（ChaCha8）、`@env`（平台熵） | https://github.com/moonbitlang/core |
 | moonbitlang/x | 0.5.5 | Apache-2.0 | `x/crypto`：SHA 全家桶/MD5/RIPEMD-160/HMAC、**AES-128/192/256 ECB 单块原语**（对称加密路径底座）；`x/fs`：CLI/库传输读文件(FileTransport、netmail) | https://github.com/moonbitlang/x |
 | moonbit-community/flate | 0.8.4 | Apache-2.0 | DEFLATE/ZLIB 压缩与解压（`compress` 包的替换点） | https://github.com/moonbit-community/flate |
+| moonbitlang/async | 0.22.4 | Apache-2.0 | 异步运行时与传输：`async/io`/`async/socket`/`async/tls`（example/netmail 的异步 SMTP/IMAP 与 TLS 提交）、mailer 的 `async fn main`（示例/演示层，非库 API） | https://github.com/moonbitlang/async |
 
 Ed25519/X25519（RFC 8032/7748）为**本项目自实现**（`pki/curve25519.mbt`，基于 core `@bigint`，
 非常数时间——见 README 安全说明），2026-09-30 起不再使用任何第三方公钥算法库；

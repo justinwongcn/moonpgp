@@ -9,6 +9,36 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — root facade package (2026-10-12)
+
+- `import "justinwongcn/moonpgp"` now gives the complete high-level
+  workflow directly (`@moonpgp.*`): the full `@api` surface (11 types, 27
+  functions, `DEFAULT_MAX_DECOMPRESSED_BYTES`) re-exported via `pub using`,
+  plus the option types used in those signatures (`@cipher.AeadMode`,
+  `@compress.CompressedAlgo`, `@primitives.CipherAlgo` / `HashId`).
+  Types keep their owning package, so methods resolve through the usual
+  owner loading. Black-box acceptance tests cover the consumer workflow
+  (password and key roundtrips, `pub(all)` enum pattern matching, builder
+  chains, sign/verify). README / README.zh-CN.md quick-start updated.
+
+### Changed — file splits, zero public-API change (2026-10-12)
+
+- `api/key.mbt` (1227 lines) → `key.mbt` (types + accessors),
+  `key_signing.mbt` (PKI adapters, self-signature machinery,
+  `verify_key_signature`), `key_generate.mbt` (secret-key packet builders
+  + the three `generate_*` entry points), `key_codec.mbt` (serialization
+  + import parsing). All same-package `///|` block moves;
+  `api/pkg.generated.mbti`: zero diff.
+- `example/netmail/imap.mbt` (845 lines) → `imap.mbt` (client state +
+  protocol state machine + session helpers), `imap_syntax.mbt`
+  (logical-line/literal reading, quote/paren/atom scanners),
+  `imap_fetch.mbt` (FETCH summaries + full-message fetch). The 627-line
+  `imap_wbtest.mbt` is untouched; `example/netmail/pkg.generated.mbti`:
+  zero diff.
+- Gates: `moon check --target all --deny-warn` 0 errors / 0 warnings,
+  `moon fmt --check` clean; native 389/389, wasm 381/381, js 381/381
+  (previous baselines 385/377/377 + 4 new root-facade tests per target).
+
 ### Added — gopenpgp v3 gap closure (2026-10-11, plan
 [`docs/plan-gap-closure-gopenpgp.md`](../docs/plan-gap-closure-gopenpgp.md))
 

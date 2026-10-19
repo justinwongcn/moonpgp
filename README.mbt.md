@@ -25,15 +25,22 @@ vendored code: the library is pure MoonBit and depends only on
 moon add justinwongcn/moonpgp
 ```
 
-Then declare the packages you need in that project's `moon.pkg`:
+Then import the root facade (plus any email packages you need) in that
+project's `moon.pkg`:
 
 ```text
 import {
-  "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp",        // root facade: the full high-level workflow
   "justinwongcn/moonpgp/mime",   // PGP/MIME (RFC 3156) parsing/verification
   "justinwongcn/moonpgp/mail",   // RFC 5322 / MIME assembly
 }
 ```
+
+The root facade (`@moonpgp.*`) re-exports the complete `@api` surface — key
+generation, encrypt/decrypt, sign/verify, the `pgp()` builders, `KeyRing` —
+plus the option types used in those signatures. Advanced users can import
+`justinwongcn/moonpgp/api` or lower layers (`packet`, `pki`, `armor`, ...)
+directly instead.
 
 **Use the CLI without writing any code** — run it straight from a clone of
 this repository:
@@ -49,7 +56,7 @@ moon run cmd/main -- help
 ```bash
 moon check --target all --deny-warn
 moon build --target all
-moon test --target native      # 385 tests
+moon test --target native      # 389 tests
 moon fmt --check
 ```
 
@@ -74,7 +81,7 @@ moon fmt --check
 | MIME | PGP/MIME (RFC 3156): multipart/signed construction + verification, multipart/encrypted parsing, RFC 5322 header parsing; email pipeline aligned with gopenpgp v3 `mime/`: Content-Type parameter parsing, Content-Transfer-Encoding decoding (base64/quoted-printable), byte-exact MIME tree parsing, body/attachment collection (gomime semantics), one-shot `decrypt_mime` with callback delivery and gopenpgp signature-status merge (Ok/NotSigned/NoVerifier/Failed) |
 | Email assembly (library) | `mail`: RFC 5322 headers (Date/Message-ID/atext-quoting addresses, RFC 2047 encoded words), multipart/mixed with the RFC 3156 §3 7-bit strategy (ASCII→7bit / non-ASCII→QP / attachments base64), generalized multipart/signed over pre-built entities, one-shot `build_encrypted_mail` — the composing half of PGP/MIME, symmetric with `mime` parsing |
 | v6 message encryption | v6 PKESK + **v2 SEIPD** for v6 X25519 subkeys, v6 SKESK + v2 SEIPD for passphrases, honoring the recipient's Preferred AEAD Ciphersuites; `generate_ed25519_v6_key` now emits the X25519 encryption subkey with a v6 binding signature |
-| Top-level API | `pgp().encryption()/decryption()/key_generation()` builders, KeyRing |
+| Top-level API | root facade — `import "justinwongcn/moonpgp"` gives `@moonpgp.*` (full `@api` mirror plus the option types in its signatures); `pgp().encryption()/decryption()/key_generation()` builders, KeyRing |
 
 ## Interoperability (all verified by real cross-testing)
 
@@ -102,10 +109,10 @@ generated key every run):
 ./scripts/interop_check.sh
 ```
 
-Automated tests: `moon test --target native` (385 tests covering all vectors
+Automated tests: `moon test --target native` (389 tests covering all vectors
 above; two RFC 9580 Argon2 fixtures are `#skip`ped because each derivation
 needs 2 GiB — run them with `--include-skipped --filter 'slow:*'`).
-`moon test --target wasm` and `--target js` run 377 tests. wasm-gc has no
+`moon test --target wasm` and `--target js` run 381 tests. wasm-gc has no
 platform entropy source: its entropy-free subset still passes, but the 100
 tests that generate key material (keygen, random IV/salt, Argon2) fail there
 with `platform entropy source unavailable`; use native, wasm or js for the
@@ -127,32 +134,34 @@ moon run cmd/main -- verify pub.asc plain.txt sig.asc                      # ver
 ## Library usage
 
 ```moonbit nocheck
-// passphrase encrypt/decrypt
+// import "justinwongcn/moonpgp" — the root facade mirrors the full @api
+// surface; importing "justinwongcn/moonpgp/api" directly gives the same
+// calls written as @api.*.
 
 ///|
-let armored = @api.encrypt_with_password(plaintext, "passphrase")
+let armored = @moonpgp.encrypt_with_password(plaintext, "passphrase")
 
 ///|
-let plain = @api.decrypt_with_password(armored, "passphrase")
+let plain = @moonpgp.decrypt_with_password(armored, "passphrase")
 
 // key generation + public-key encrypt / private-key decrypt
 
 ///|
-let key = @api.generate_key("Alice <alice@example.com>")
+let key = @moonpgp.generate_key("Alice <alice@example.com>")
 
 ///|
-let armored = @api.encrypt_to_recipients(data, [key.to_public()])
+let armored = @moonpgp.encrypt_to_recipients(data, [key.to_public()])
 
 ///|
-let plain = @api.decrypt_with_private_key(armored, key)
+let plain = @moonpgp.decrypt_with_private_key(armored, key)
 
 // gopenpgp-style builders
 
 ///|
-let encrypt = @api.pgp().encryption().password("pw").finish()
+let encrypt = @moonpgp.pgp().encryption().password("pw").finish()
 
 ///|
-let decrypt = @api.pgp().decryption().password("pw").finish()
+let decrypt = @moonpgp.pgp().decryption().password("pw").finish()
 ```
 
 ### Email demo pipeline (`example/`, not part of the library API)
@@ -177,11 +186,12 @@ See Security notes.
 ## Module layout (designed for replaceability)
 
 ```
+error/       # the single PgpError raised by every package
 primitives/  # isolation layer: the only third-party crypto entry point; BlockCipher trait, HashId, asserted entropy
 armor/       # CRC-24 + armor (PGP-specific, never replaced)
-s2k/         # S2K (PGP-specific, never replaced)
+s2k/         # S2K incl. Argon2id (PGP-specific, never replaced)
 packet/      # packet format engine (PGP-specific, never replaced)
-cipher/      # OpenPGP-CFB variants + SEIPD v1/MDC + AES Key Wrap (RFC 3394)
+cipher/      # OpenPGP-CFB variants + AEAD modes (OCB/EAX/GCM) + SEIPD v1/MDC and v2 + AES Key Wrap (RFC 3394)
 pki/         # RSA (keygen/PKCS#1 v1.5), Ed25519/X25519 (self-implemented per RFC 8032/7748, `curve25519.mbt`)
 compress/    # DEFLATE/ZLIB (currently moonbit-community/flate, replaceable)
 mime/        # PGP/MIME (RFC 3156), MIME tree parsing/collectors, transfer-encoding decoding
@@ -192,15 +202,19 @@ interop/     # interop tests against gopenpgp/GnuPG/openssl
 
 Every library package sits directly at the repository root, so the import
 path is the module name plus the package name (`justinwongcn/moonpgp/api`),
-with no intermediate directory layer. Support material lives in `cmd/` (the
-demo CLI), `example/` (wire transports and the mailer/mailreader demos) and
-`testdata/` (fixtures) — demo/test infrastructure, not published library
+with no intermediate directory layer. The root package (`moonpgp.mbt`) is a
+pure facade: `import "justinwongcn/moonpgp"` re-exports the entire `@api`
+surface as `@moonpgp.*` via `pub using`. Support material lives in `cmd/`
+(the demo CLI), `example/` (wire transports and the mailer/mailreader demos)
+and `testdata/` (fixtures) — demo/test infrastructure, not published library
 API. See "Email demo pipeline" above.
 
 ## Dependencies (version-pinned)
 
-`moonbitlang/x@0.5.5` (hash suite/HMAC/AES-ECB block primitive) and
-`moonbit-community/flate@0.8.4` (DEFLATE). Ed25519/X25519 are self-implemented
+`moonbitlang/x@0.5.5` (hash suite/HMAC/AES-ECB block primitive),
+`moonbit-community/flate@0.8.4` (DEFLATE) and `moonbitlang/async@0.22.4`
+(async runtime plus the TCP/TLS seam of the example transports — demo layer
+only). Ed25519/X25519 are self-implemented
 per RFC 8032/7748 on core `@bigint` (`pki/curve25519.mbt`) — no third-party
 public-key dependency. Swapping any of these means rewriting one adapter file
 in `primitives` (or the relevant module) plus a full vector regression.
@@ -317,9 +331,10 @@ MIT attribution).
 New capabilities (P1):
 
 ```moonbit nocheck
-// cleartext signing (RFC 9580 §7)
-let msg = @api.sign_cleartext("text\n", key)
-let (text, status) = @api.verify_cleartext(msg, key.to_public())
+// cleartext signing (RFC 9580 §7) — @api.* reads identically as @moonpgp.*
+// under the root facade; @mime/@mail are their own packages
+let msg = @moonpgp.sign_cleartext("text\n", key)
+let (text, status) = @moonpgp.verify_cleartext(msg, key.to_public())
 
 // PGP/MIME (RFC 3156)
 let mime_msg = @mime.build_pgp_mime_signed("body\n", key)
@@ -329,15 +344,15 @@ let payload = @mime.extract_pgp_encrypted(mime_msg)   // extract the PGP MESSAGE
 // Ed25519 primary key (EdDSA legacy, algorithm 22) + Curve25519Legacy ECDH
 // encryption subkey — the gopenpgp "Default" profile shape, verified live
 // against gpg in both directions
-let key = @api.generate_ed25519_key("Ed <ed@example.com>")
+let key = @moonpgp.generate_ed25519_key("Ed <ed@example.com>")
 
 // Argon2 S2K (RFC 9580 §3.7.1.4, specifier type 4) — the RFC's recommended
 // passphrase KDF, in the gopenpgp RFC 9580 profile's default shape
 // (t=3, p=4, m=2^16 KiB); unlock() handles usage 253 and 254 alike.
 let locked = key.lock_argon2("passphrase", memory_exp=16)
 let unlocked = locked.unlock("passphrase")
-let msg = @api.encrypt_with_password_argon2(plaintext, "passphrase")
-let back = @api.decrypt_with_password(msg, "passphrase")
+let msg = @moonpgp.encrypt_with_password_argon2(plaintext, "passphrase")
+let back = @moonpgp.decrypt_with_password(msg, "passphrase")
 
 // Email (MIME) support aligned with gopenpgp v3's mime/ domain:
 // decrypt an armored PGP mail, walk the MIME tree, verify a root

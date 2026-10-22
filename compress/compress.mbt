@@ -47,12 +47,12 @@ pub fn zip_decompress(data : BytesView) -> Bytes raise {
 ///|
 /// ZLIB (RFC 1950) wrapper — algorithm 2 of the Compressed packet.
 pub fn zlib_compress(data : BytesView) -> Bytes {
-  @zlib.zlib_compress(data.to_owned())
+  @zlib.compress(data)
 }
 
 ///|
 pub fn zlib_decompress(data : BytesView) -> Bytes raise {
-  @zlib.zlib_decompress(data.to_owned()) catch {
+  @zlib.decompress(data) catch {
     _ => @error.fail("compress: zlib inflate failed")
   }
 }
@@ -68,7 +68,7 @@ pub extend CompressedAlgo with Eq::{not_equal, equal}
 /// limited inflater stops (raising) once the cap is exceeded, so the
 /// bomb never materializes.
 pub fn zip_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise {
-  @flate.inflate_all_limited(data.to_owned(), max_output=max_out) catch {
+  @flate.inflate_all(data, max_output=max_out) catch {
     _ => @error.fail("compress: inflate failed (limit \{max_out} octets)")
   }
 }

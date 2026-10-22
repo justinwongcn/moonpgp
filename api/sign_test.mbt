@@ -135,3 +135,22 @@ test "builder: key generation" {
   assert_eq(key.user_id(), "B <b@example.com>")
   assert_eq(key.fingerprint().length(), 20)
 }
+
+///|
+test "detached signature with a fixed creation time is reproducible" {
+  // RSA PKCS#1 v1.5 and Ed25519 are deterministic, so the same key, data and
+  // time give the same signature (needed for reproducible builds).
+  let data = @primitives.utf8_bytes("document body\n")
+  for
+    key in [
+      @api.generate_key("Signer <s@example.com>", bits=1024),
+      @api.generate_ed25519_key("Signer <s@example.com>"),
+    ] {
+    let a = @api.sign_detached(data, key, created=1700000000)
+    let b = @api.sign_detached(data, key, created=1700000000)
+    assert_eq(a, b)
+    assert_eq(@api.verify_detached(data, a, key.to_public()), @api.Ok)
+    let later = @api.sign_detached(data, key, created=1700000001)
+    assert_true(a != later)
+  }
+}

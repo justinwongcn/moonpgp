@@ -37,6 +37,6 @@ description = "Pure-MoonBit OpenPGP implementation (RFC 4880/9580): email encryp
 
 import {
   "moonbitlang/x@0.5.5",
-  "moonbit-community/flate@0.8.4",
+  "moonbit-community/flate@0.9.0",
   "moonbitlang/async@0.22.4",
 }

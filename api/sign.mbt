@@ -84,8 +84,15 @@ fn make_document_signature(
   key : PrivateKey,
   data : BytesView,
   sig_type : @packet.SigType,
+  created? : Int32,
 ) -> @packet.SignaturePacket raise {
-  make_document_signature_with(key, data, sig_type, @primitives.Sha256)
+  make_document_signature_with(
+    key,
+    data,
+    sig_type,
+    @primitives.Sha256,
+    created?,
+  )
 }
 
 ///|
@@ -104,8 +111,12 @@ fn make_document_signature_with(
   data : BytesView,
   sig_type : @packet.SigType,
   hash : @primitives.HashId,
+  created? : Int32,
 ) -> @packet.SignaturePacket raise {
-  let now = @primitives.unix_now().to_int()
+  let now = match created {
+    Some(t) => t
+    None => @primitives.unix_now().to_int()
+  }
   let v6 = key.primary.public.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
@@ -282,13 +293,19 @@ fn finish_inline_verify(
 
 ///|
 /// Create a detached ASCII-armored signature over `data`.
+///
+/// `created` is the signature creation time in seconds since 1970; without it
+/// the current time is used. Passing the time makes the signature
+/// reproducible for RSA PKCS#1 v1.5 and Ed25519 keys, which sign
+/// deterministically (for example for reproducible builds).
 pub fn sign_detached(
   data : BytesView,
   key : PrivateKey,
   text_mode? : Bool,
+  created? : Int32,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
-  let sig = make_document_signature(key, data, sig_type)
+  let sig = make_document_signature(key, data, sig_type, created?)
   @armor.Signature.encode(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )

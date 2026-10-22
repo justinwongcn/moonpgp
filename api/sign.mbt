@@ -84,9 +84,15 @@ fn make_document_signature(
   key : PrivateKey,
   data : BytesView,
   sig_type : @packet.SigType,
-  created? : Int,
+  created? : Int32,
 ) -> @packet.SignaturePacket raise {
-  make_document_signature_with(key, data, sig_type, @primitives.Sha256, created?)
+  make_document_signature_with(
+    key,
+    data,
+    sig_type,
+    @primitives.Sha256,
+    created?,
+  )
 }
 
 ///|
@@ -105,7 +111,7 @@ fn make_document_signature_with(
   data : BytesView,
   sig_type : @packet.SigType,
   hash : @primitives.HashId,
-  created? : Int,
+  created? : Int32,
 ) -> @packet.SignaturePacket raise {
   let now = match created {
     Some(t) => t
@@ -296,7 +302,7 @@ pub fn sign_detached(
   data : BytesView,
   key : PrivateKey,
   text_mode? : Bool,
-  created? : Int,
+  created? : Int32,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(key, data, sig_type, created?)

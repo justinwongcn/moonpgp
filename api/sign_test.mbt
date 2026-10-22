@@ -141,7 +141,8 @@ test "detached signature with a fixed creation time is reproducible" {
   // RSA PKCS#1 v1.5 and Ed25519 are deterministic, so the same key, data and
   // time give the same signature (needed for reproducible builds).
   let data = @primitives.utf8_bytes("document body\n")
-  for key in [
+  for
+    key in [
       @api.generate_key("Signer <s@example.com>", bits=1024),
       @api.generate_ed25519_key("Signer <s@example.com>"),
     ] {

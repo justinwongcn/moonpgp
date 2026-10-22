@@ -4,7 +4,7 @@
 /// the Public Key packet fields, starting with the version.
 fn secret_key_associated_data(
   key : @packet.SecretKeyPacket,
-  tag : Int,
+  tag : Int32,
 ) -> Bytes {
   @primitives.concat2(Bytes::from_array([tag.to_byte()]), key.public.to_body())
 }
@@ -12,7 +12,7 @@ fn secret_key_associated_data(
 ///|
 /// HKDF `info` for a usage-253 secret key packet (RFC 9580 §5.5.3): packet
 /// tag byte, packet version, cipher algorithm, and AEAD mode.
-fn secret_key_hkdf_info(key : @packet.SecretKeyPacket, tag : Int) -> Bytes {
+fn secret_key_hkdf_info(key : @packet.SecretKeyPacket, tag : Int32) -> Bytes {
   Bytes::from_array([
     tag.to_byte(),
     key.public.version().to_byte(),
@@ -43,8 +43,8 @@ fn secret_key_aead_mode(
 fn unlock_secret_key(
   key : @packet.SecretKeyPacket,
   passphrase : String,
-  tag : Int,
-  argon2_max_memory_kib : Int,
+  tag : Int32,
+  argon2_max_memory_kib : Int32,
 ) -> @packet.SecretKeyPacket raise {
   guard key.s2k_usage != 0 else { key }
   guard !key.dummy else {
@@ -142,7 +142,7 @@ fn unlock_secret_key(
     _ => @error.fail("api: secret key decryption failed")
   }
   // Split off the trailing check: 20-byte SHA-1 (usage 254) or 2-byte sum.
-  let check_len : Int = if key.s2k_usage == 254 { 20 } else { 2 }
+  let check_len : Int32 = if key.s2k_usage == 254 { 20 } else { 2 }
   guard plain.length() > check_len else {
     @error.fail("api: decrypted secret material too short")
   }
@@ -218,10 +218,10 @@ fn lock_secret_key(
 fn lock_secret_key_argon2(
   key : @packet.SecretKeyPacket,
   passphrase : String,
-  tag : Int,
-  passes : Int,
-  parallelism : Int,
-  memory_exp : Int,
+  tag : Int32,
+  passes : Int32,
+  parallelism : Int32,
+  memory_exp : Int32,
 ) -> @packet.SecretKeyPacket raise {
   guard key.s2k_usage == 0 else { @error.fail("api: key is already locked") }
   let salt = @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE)
@@ -276,7 +276,7 @@ fn lock_secret_key_argon2(
 pub fn PrivateKey::unlock(
   self : PrivateKey,
   passphrase : String,
-  argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> PrivateKey raise {
   {
     primary: unlock_secret_key(
@@ -328,9 +328,9 @@ pub fn PrivateKey::lock(
 pub fn PrivateKey::lock_argon2(
   self : PrivateKey,
   passphrase : String,
-  passes? : Int = 3,
-  parallelism? : Int = 4,
-  memory_exp? : Int = 16,
+  passes~ : Int32 = 3,
+  parallelism~ : Int32 = 4,
+  memory_exp~ : Int32 = 16,
 ) -> PrivateKey raise {
   {
     primary: lock_secret_key_argon2(

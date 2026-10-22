@@ -20,14 +20,14 @@
 #cfg(target="native")
 #warnings("-alert_internal")
 priv struct FdSock {
-  fd : Int
+  fd : Int32
   rb : @io.ReaderBuffer
 }
 
 ///|
 #cfg(target="native")
 #warnings("-alert_internal")
-fn FdSock::make(fd : Int) -> FdSock {
+fn FdSock::make(fd : Int32) -> FdSock {
   { fd, rb: @io.ReaderBuffer::new(), }
 }
 
@@ -39,7 +39,7 @@ impl @io.Reader for FdSock with fn _get_internal_buffer(self) {
 
 ///|
 #cfg(target="native")
-impl @io.Reader for FdSock with fn _direct_read(self, buf, offset~, max_len~) -> Int {
+impl @io.Reader for FdSock with fn _direct_read(self, buf, offset~, max_len~) -> Int32 {
   // recv writes at the base pointer only, so read into scratch and
   // blit when the caller asks for a non-zero offset (the async TLS
   // Transport appends into its wire buffer this way).
@@ -59,7 +59,7 @@ impl @io.Reader for FdSock with fn _direct_read(self, buf, offset~, max_len~) ->
 
 ///|
 #cfg(target="native")
-impl @io.Writer for FdSock with fn write_once(self, data, offset~, len~) -> Int {
+impl @io.Writer for FdSock with fn write_once(self, data, offset~, len~) -> Int32 {
   // The caller may hand us a view with offset > 0 into a larger
   // buffer, so ALWAYS slice off the front before sending; partial-write
   // retries copy the unsent tail (see NativeSock).

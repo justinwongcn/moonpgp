@@ -1,7 +1,7 @@
 ///|
 fn build_eddsa_secret_key_packet(
   seed : Bytes,
-  creation : Int,
+  creation : Int32,
 ) -> @packet.SecretKeyPacket raise {
   let ed = @pki.ed25519_public_of_seed(seed.exact_view())
   // Public params: length-prefixed OID, MPI of the point (0x40 || key).
@@ -38,7 +38,7 @@ fn build_eddsa_secret_key_packet(
 /// trailing checksum.
 fn build_ed25519_v6_secret_key_packet(
   seed : Bytes,
-  creation : Int,
+  creation : Int32,
 ) -> @packet.SecretKeyPacket raise {
   guard seed.length() == 32 else {
     @error.fail("api: Ed25519 seed must be 32 octets")
@@ -66,7 +66,7 @@ fn build_ed25519_v6_secret_key_packet(
 ///|
 fn build_rsa_secret_key_packet(
   key : @pki.RsaPrivateKey,
-  creation : Int,
+  creation : Int32,
 ) -> @packet.SecretKeyPacket {
   // Public part: MPI(n), MPI(e).
   let params : Array[Bytes] = [
@@ -104,7 +104,7 @@ fn build_rsa_secret_key_packet(
 ///|
 /// Generate a fresh transferable key: RSA primary (certify+sign) with a
 /// User ID self-certification plus an RSA encryption subkey.
-pub fn generate_key(user_id : String, bits? : Int = 3072) -> PrivateKey raise {
+pub fn generate_key(user_id : String, bits~ : Int32 = 3072) -> PrivateKey raise {
   // Int truncation of the Int64 wall clock is wire-safe (Writer::u32 emits
   // the two's-complement low 32 bits, which is the correct u32 epoch past
   // 2038) but stays negative in memory; only date FORMATTING from this
@@ -167,7 +167,7 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
 /// material the 32-octet native secret key, both raw (v6 native
 /// algorithms carry no MPI prefix and no checksum).
 fn build_v6_x25519_secret_key_packet(
-  creation : Int,
+  creation : Int32,
 ) -> @packet.SecretKeyPacket raise {
   let x = @pki.x25519_generate()
   let pub_packet : @packet.PublicKeyPacket = {

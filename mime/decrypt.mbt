@@ -12,7 +12,7 @@ pub(open) trait MimeCallbacks {
 ///|
 /// Severity ranking for merging signature statuses (gopenpgp
 /// prioritizeSignatureErrors: FAILED > NO_VERIFIER > NOT_SIGNED > OK).
-fn severity(status : @api.VerifyStatus) -> Int {
+fn severity(status : @api.VerifyStatus) -> Int32 {
   match status {
     @api.NotSigned => 1
     @api.NoVerifier => 2
@@ -24,7 +24,7 @@ fn severity(status : @api.VerifyStatus) -> Int {
 ///|
 /// Result ranking across candidate verifiers: a verified signature beats
 /// any failure; among failures the severity order applies.
-fn rank(status : @api.VerifyStatus) -> Int {
+fn rank(status : @api.VerifyStatus) -> Int32 {
   match status {
     @api.Ok => 4
     other => severity(other)

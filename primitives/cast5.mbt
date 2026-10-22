@@ -10,33 +10,33 @@
 /// helpers keep the add/sub/xor/rotate forms of the RFC literal.
 
 ///|
-fn cast5_rotl(x : UInt, n : Int) -> UInt {
+fn cast5_rotl(x : UInt32, n : Int32) -> UInt32 {
   (x << n) | (x >> (32 - n))
 }
 
 ///|
-fn cast5_add(a : UInt, b : UInt) -> UInt {
+fn cast5_add(a : UInt32, b : UInt32) -> UInt32 {
   (a.to_uint64() + b.to_uint64()).to_uint()
 }
 
 ///|
-fn cast5_sub(a : UInt, b : UInt) -> UInt {
+fn cast5_sub(a : UInt32, b : UInt32) -> UInt32 {
   (a.to_uint64() - b.to_uint64()).to_uint()
 }
 
 ///|
 /// Overall byte n of a little array of 32-bit words: byte 0 is the most
 /// significant byte of word 0 (RFC notation x0..xF, z0..zF).
-fn cast5_byte(words : Array[UInt], n : Int) -> Int {
+fn cast5_byte(words : Array[UInt32], n : Int32) -> Int32 {
   ((words[n / 4] >> (24 - 8 * (n % 4))) & 0xFFU).reinterpret_as_int()
 }
 
 ///|
 priv struct Cast5State {
   /// 16 masking subkeys Km (one per round).
-  km : Array[UInt]
+  km : Array[UInt32]
   /// 16 rotation subkeys Kr (5 bits used per round).
-  kr : Array[UInt]
+  kr : Array[UInt32]
 }
 
 ///|
@@ -45,17 +45,17 @@ priv struct Cast5State {
 /// patterns each, selected by the round parity.
 fn cast5_schedule(key : BytesView) -> Cast5State raise {
   guard key.length() == 16 else { @error.fail("cast5: key must be 16 octets") }
-  let mut x : Array[UInt] = Array::makei(4, i => {
+  let mut x : Array[UInt32] = Array::makei(4, i => {
     (key[4 * i].to_int().reinterpret_as_uint() << 24) |
     (key[4 * i + 1].to_int().reinterpret_as_uint() << 16) |
     (key[4 * i + 2].to_int().reinterpret_as_uint() << 8) |
     key[4 * i + 3].to_int().reinterpret_as_uint()
   })
-  let km : Array[UInt] = []
-  let kr : Array[UInt] = []
+  let km : Array[UInt32] = []
+  let kr : Array[UInt32] = []
   for round in 0..<4 {
     // z0z1z2z3 .. zCzDzEzF from x — identical equations on every pass.
-    let z : Array[UInt] = Array::make(4, 0U)
+    let z : Array[UInt32] = Array::make(4, 0U)
     z[0] = x[0] ^
       cast5_s5[cast5_byte(x, 13)] ^
       cast5_s6[cast5_byte(x, 15)] ^
@@ -142,7 +142,7 @@ fn cast5_schedule(key : BytesView) -> Cast5State raise {
       )
     }
     // x0x1x2x3 .. xCxDxExF from z — identical equations on every pass.
-    let nx : Array[UInt] = Array::make(4, 0U)
+    let nx : Array[UInt32] = Array::make(4, 0U)
     nx[0] = z[2] ^
       cast5_s5[cast5_byte(z, 5)] ^
       cast5_s6[cast5_byte(z, 7)] ^
@@ -240,10 +240,10 @@ fn cast5_schedule(key : BytesView) -> Cast5State raise {
 ///|
 /// The three round functions (RFC 2144 §2.2). Ia..Id are the bytes of I,
 /// most significant first.
-fn cast5_f(state : Cast5State, round : Int, d : UInt) -> UInt {
+fn cast5_f(state : Cast5State, round : Int32, d : UInt32) -> UInt32 {
   let km = state.km[round]
   let kr = state.kr[round].reinterpret_as_int()
-  let i : UInt = match round % 3 {
+  let i : UInt32 = match round % 3 {
     0 => cast5_rotl(cast5_add(km, d), kr)
     1 => cast5_rotl(km ^ d, kr)
     _ => cast5_rotl(cast5_sub(km, d), kr)
@@ -281,11 +281,11 @@ fn Cast5State::crypt(
   if src.length() != 8 {
     abort("cast5: block must be 8 octets")
   }
-  let mut l : UInt = (src[0].to_int().reinterpret_as_uint() << 24) |
+  let mut l : UInt32 = (src[0].to_int().reinterpret_as_uint() << 24) |
     (src[1].to_int().reinterpret_as_uint() << 16) |
     (src[2].to_int().reinterpret_as_uint() << 8) |
     src[3].to_int().reinterpret_as_uint()
-  let mut r : UInt = (src[4].to_int().reinterpret_as_uint() << 24) |
+  let mut r : UInt32 = (src[4].to_int().reinterpret_as_uint() << 24) |
     (src[5].to_int().reinterpret_as_uint() << 16) |
     (src[6].to_int().reinterpret_as_uint() << 8) |
     src[7].to_int().reinterpret_as_uint()
@@ -314,7 +314,7 @@ fn Cast5State::crypt(
 }
 
 ///|
-impl BlockCipher for Cast5State with fn block_size(_self) -> Int {
+impl BlockCipher for Cast5State with fn block_size(_self) -> Int32 {
   8
 }
 

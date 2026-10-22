@@ -17,8 +17,8 @@
 priv struct AsyncSock[R] {
   rw : R
   buf : FixedArray[Byte]
-  mut rstart : Int
-  mut rend : Int
+  mut rstart : Int32
+  mut rend : Int32
   close_fn : () -> Unit
   mut closed : Bool
 }

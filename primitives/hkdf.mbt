@@ -38,7 +38,7 @@ pub fn hkdf_sha256(
   ikm : BytesView,
   salt : BytesView,
   info : BytesView,
-  out_len : Int,
+  out_len : Int32,
 ) -> Bytes raise {
   guard out_len >= 0 && out_len <= 255 * 32 else {
     @error.fail("hkdf: output length must be 0..8160 octets")

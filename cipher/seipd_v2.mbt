@@ -21,7 +21,7 @@
 pub fn seipd_v2_kdf(
   session_key : BytesView,
   salt : BytesView,
-  key_len : Int,
+  key_len : Int32,
   mode : AeadMode,
   header5 : BytesView,
 ) -> (Bytes, Bytes) raise {
@@ -79,7 +79,7 @@ pub fn seipd_v2_seal(
   mode : AeadMode,
   header5 : BytesView,
   iv : BytesView,
-  chunk_octet : Int,
+  chunk_octet : Int32,
   plain : BytesView,
 ) -> Bytes raise {
   guard header5.length() == 5 else {
@@ -133,7 +133,7 @@ pub fn seipd_v2_open(
   mode : AeadMode,
   header5 : BytesView,
   iv : BytesView,
-  chunk_octet : Int,
+  chunk_octet : Int32,
   cipher : BytesView,
 ) -> Bytes raise {
   guard header5.length() == 5 else {

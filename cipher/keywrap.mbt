@@ -7,7 +7,7 @@
 let kw_iv : Array[Byte] = [0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6]
 
 ///|
-fn block_cipher_for_key_size(key_len : Int) -> @primitives.CipherAlgo raise {
+fn block_cipher_for_key_size(key_len : Int32) -> @primitives.CipherAlgo raise {
   match key_len {
     16 => @primitives.Aes128
     24 => @primitives.Aes192

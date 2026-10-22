@@ -12,7 +12,7 @@ pub fn curve25519_oid() -> Bytes
 
 pub fn ecdh_anonymous_sender() -> Bytes
 
-pub fn ecdh_kdf_sha256(BytesView, BytesView, Int) -> Bytes raise
+pub fn ecdh_kdf_sha256(BytesView, BytesView, Int32) -> Bytes raise
 
 pub fn ed25519_generate() -> Ed25519SecretKey raise
 
@@ -22,17 +22,17 @@ pub fn ed25519_public_key(BytesView) -> Ed25519PublicKeyValue raise
 
 pub fn ed25519_public_of_seed(BytesView) -> Ed25519SecretKey raise
 
-pub fn generate_rsa_key(bits~ : Int) -> RsaPrivateKey raise
+pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise
 
-pub fn i2osp(@bigint.BigInt, Int) -> Bytes
+pub fn i2osp(@bigint.BigInt, Int32) -> Bytes
 
-pub fn is_probable_prime(@bigint.BigInt, rounds~ : Int) -> Bool raise
+pub fn is_probable_prime(@bigint.BigInt, rounds~ : Int32) -> Bool raise
 
 pub fn mod_inverse(@bigint.BigInt, @bigint.BigInt) -> @bigint.BigInt raise
 
 pub fn os2ip(BytesView) -> @bigint.BigInt
 
-pub fn random_prime(Int, coprime~ : @bigint.BigInt, rounds~ : Int) -> @bigint.BigInt raise
+pub fn random_prime(Int32, coprime~ : @bigint.BigInt, rounds~ : Int32) -> @bigint.BigInt raise
 
 pub fn x25519_generate() -> X25519SecretKey raise
 
@@ -74,7 +74,7 @@ pub(all) struct RsaPublicKey {
   n : @bigint.BigInt
   e : @bigint.BigInt
 } derive(@debug.Debug)
-pub fn RsaPublicKey::octet_length(Self) -> Int
+pub fn RsaPublicKey::octet_length(Self) -> Int32
 pub fn RsaPublicKey::pkcs1_v15_encrypt(Self, BytesView) -> Bytes raise
 pub fn RsaPublicKey::pkcs1_v15_verify(Self, @primitives.HashId, BytesView, BytesView) -> Bool raise
 pub fn RsaPublicKey::raw_encrypt(Self, @bigint.BigInt) -> @bigint.BigInt

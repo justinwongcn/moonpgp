@@ -10,7 +10,7 @@
 #cfg(target="native")
 fn script_buffer(chunks : Array[Bytes]) -> LineBuffer {
   let mut pos = 0
-  let fill = fn(buf : FixedArray[Byte]) -> Int {
+  let fill = fn(buf : FixedArray[Byte]) -> Int32 {
     guard pos < chunks.length() else { return 0 }
     let c = chunks[pos]
     pos = pos + 1

@@ -6,19 +6,19 @@ import {
 }
 
 // Values
-pub const ARGON2_MAX_MEMORY_KIB : Int = 2097152
+pub const ARGON2_MAX_MEMORY_KIB : Int32 = 2097152
 
-pub const BLOCK_SIZE : Int = 16
+pub const BLOCK_SIZE : Int32 = 16
 
-pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int = 262144
+pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int32 = 262144
 
-pub fn argon2id(BytesView, BytesView, Int, Int, Int, Int, max_memory_kib? : Int) -> Bytes raise
+pub fn argon2id(BytesView, BytesView, Int32, Int32, Int32, Int32, max_memory_kib? : Int32) -> Bytes raise
 
-pub fn argon2id_with_secret_ad(BytesView, BytesView, BytesView, BytesView, Int, Int, Int, Int, max_memory_kib? : Int) -> Bytes raise
+pub fn argon2id_with_secret_ad(BytesView, BytesView, BytesView, BytesView, Int32, Int32, Int32, Int32, max_memory_kib? : Int32) -> Bytes raise
 
-pub fn blake2b(BytesView, Int) -> Bytes raise
+pub fn blake2b(BytesView, Int32) -> Bytes raise
 
-pub fn cipher_algo_of_number(Int) -> CipherAlgo?
+pub fn cipher_algo_of_number(Int32) -> CipherAlgo?
 
 pub fn concat2(BytesView, BytesView) -> Bytes
 
@@ -30,9 +30,9 @@ pub fn ct_equal(BytesView, BytesView) -> Bool
 
 pub fn from_hex(String) -> Bytes raise
 
-pub fn hash_id_of_number(Int) -> HashId?
+pub fn hash_id_of_number(Int32) -> HashId?
 
-pub fn hkdf_sha256(BytesView, BytesView, BytesView, Int) -> Bytes raise
+pub fn hkdf_sha256(BytesView, BytesView, BytesView, Int32) -> Bytes raise
 
 pub fn new_aes(BytesView) -> &BlockCipher raise
 
@@ -44,13 +44,13 @@ pub fn new_des(BytesView) -> &BlockCipher raise
 
 pub fn new_des_ede3(BytesView) -> &BlockCipher raise
 
-pub fn pad_left(BytesView, Int) -> Bytes
+pub fn pad_left(BytesView, Int32) -> Bytes
 
-pub fn pad_right(BytesView, Int) -> Bytes
+pub fn pad_right(BytesView, Int32) -> Bytes
 
-pub fn random_below(Int) -> Int raise
+pub fn random_below(Int32) -> Int32 raise
 
-pub fn random_bytes(Int) -> Bytes raise
+pub fn random_bytes(Int32) -> Bytes raise
 
 pub fn to_hex(BytesView) -> String
 
@@ -71,9 +71,9 @@ pub(all) enum CipherAlgo {
   Aes256
 } derive(Eq, @debug.Debug)
 pub fn CipherAlgo::equal(Self, Self) -> Bool
-pub fn CipherAlgo::key_size(Self) -> Int
+pub fn CipherAlgo::key_size(Self) -> Int32
 pub fn CipherAlgo::not_equal(Self, Self) -> Bool
-pub fn CipherAlgo::number(Self) -> Int
+pub fn CipherAlgo::number(Self) -> Int32
 pub fn CipherAlgo::to_repr(Self) -> @debug.Repr
 
 pub(all) enum HashId {
@@ -85,21 +85,21 @@ pub(all) enum HashId {
   Sha384
   Sha512
 } derive(Eq, @debug.Debug)
-pub fn HashId::block_size(Self) -> Int
+pub fn HashId::block_size(Self) -> Int32
 pub fn HashId::der_prefix(Self) -> Bytes
 pub fn HashId::digest(Self, BytesView) -> Bytes
-pub fn HashId::digest_size(Self) -> Int
+pub fn HashId::digest_size(Self) -> Int32
 pub fn HashId::equal(Self, Self) -> Bool
 pub fn HashId::hmac(Self, BytesView, BytesView) -> Bytes
 pub fn HashId::not_equal(Self, Self) -> Bool
-pub fn HashId::number(Self) -> Int
+pub fn HashId::number(Self) -> Int32
 pub fn HashId::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
 pub(open) trait BlockCipher {
-  fn block_size(Self) -> Int
+  fn block_size(Self) -> Int32
   fn encrypt_block(Self, BytesView) -> Bytes
   fn decrypt_block(Self, BytesView) -> Bytes
   fn wipe(Self) -> Unit

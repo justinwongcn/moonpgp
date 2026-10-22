@@ -67,7 +67,7 @@ pub fn PrivateKey::to_armored(self : PrivateKey) -> String {
 /// id pairs, most preferred first (RFC 9580 §5.2.3.15). Reads the
 /// self-signature first, then the Direct Key signature of a v6 key, and
 /// returns an empty list when the key advertises none.
-pub fn PublicKey::preferred_aead(self : PublicKey) -> Array[(Int, Int)] {
+pub fn PublicKey::preferred_aead(self : PublicKey) -> Array[(Int32, Int32)] {
   match self.self_signature().preferred_aead() {
     Some(list) => if !list.is_empty() { return list }
     None => ()

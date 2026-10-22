@@ -2,7 +2,7 @@
 /// Big-endian byte reader over a `BytesView`, used by every packet parser.
 pub struct Reader {
   priv buf : BytesView
-  priv mut pos : Int
+  priv mut pos : Int32
 } derive(Debug)
 
 ///|
@@ -11,12 +11,12 @@ pub fn Reader::new(buf : BytesView) -> Reader {
 }
 
 ///|
-pub fn Reader::remaining(self : Reader) -> Int {
+pub fn Reader::remaining(self : Reader) -> Int32 {
   self.buf.length() - self.pos
 }
 
 ///|
-pub fn Reader::position(self : Reader) -> Int {
+pub fn Reader::position(self : Reader) -> Int32 {
   self.pos
 }
 
@@ -26,7 +26,7 @@ pub fn Reader::view(self : Reader) -> BytesView {
 }
 
 ///|
-pub fn Reader::read_u8(self : Reader) -> Int raise {
+pub fn Reader::read_u8(self : Reader) -> Int32 raise {
   guard self.remaining() >= 1 else {
     @error.fail("packet: unexpected end of data (u8)")
   }
@@ -36,7 +36,7 @@ pub fn Reader::read_u8(self : Reader) -> Int raise {
 }
 
 ///|
-pub fn Reader::read_u16(self : Reader) -> Int raise {
+pub fn Reader::read_u16(self : Reader) -> Int32 raise {
   guard self.remaining() >= 2 else {
     @error.fail("packet: unexpected end of data (u16)")
   }
@@ -51,7 +51,7 @@ pub fn Reader::read_u16(self : Reader) -> Int raise {
 /// `n >= 0` checks in `read_bytes` (with a misleading "want -N" message);
 /// timestamp paths carry the correct two's-complement wire value, which
 /// `Writer::u32` reproduces byte-exactly on re-serialization.
-pub fn Reader::read_u32(self : Reader) -> Int raise {
+pub fn Reader::read_u32(self : Reader) -> Int32 raise {
   guard self.remaining() >= 4 else {
     @error.fail("packet: unexpected end of data (u32)")
   }
@@ -64,7 +64,7 @@ pub fn Reader::read_u32(self : Reader) -> Int raise {
 }
 
 ///|
-pub fn Reader::read_bytes(self : Reader, n : Int) -> Bytes raise {
+pub fn Reader::read_bytes(self : Reader, n : Int32) -> Bytes raise {
   guard n >= 0 && self.remaining() >= n else {
     @error.fail("packet: unexpected end of data (bytes, want \{n})")
   }
@@ -100,23 +100,23 @@ pub fn Writer::new() -> Writer {
 }
 
 ///|
-pub fn Writer::length(self : Writer) -> Int {
+pub fn Writer::length(self : Writer) -> Int32 {
   self.out.length()
 }
 
 ///|
-pub fn Writer::u8(self : Writer, v : Int) -> Unit {
+pub fn Writer::u8(self : Writer, v : Int32) -> Unit {
   self.out.write_byte(v.to_byte())
 }
 
 ///|
-pub fn Writer::u16(self : Writer, v : Int) -> Unit {
+pub fn Writer::u16(self : Writer, v : Int32) -> Unit {
   self.out.write_byte((v >> 8).to_byte())
   self.out.write_byte(v.to_byte())
 }
 
 ///|
-pub fn Writer::u32(self : Writer, v : Int) -> Unit {
+pub fn Writer::u32(self : Writer, v : Int32) -> Unit {
   self.out.write_byte((v >> 24).to_byte())
   self.out.write_byte((v >> 16).to_byte())
   self.out.write_byte((v >> 8).to_byte())

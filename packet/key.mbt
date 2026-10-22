@@ -10,11 +10,11 @@ pub(all) enum PubKeyAlgo {
   EdDsaLegacy
   X25519
   Ed25519
-  Unknown(Int)
+  Unknown(Int32)
 } derive(Eq, Debug)
 
 ///|
-pub fn PubKeyAlgo::number(self : PubKeyAlgo) -> Int {
+pub fn PubKeyAlgo::number(self : PubKeyAlgo) -> Int32 {
   match self {
     RsaEncryptOrSign => 1
     RsaEncryptOnly => 2
@@ -30,7 +30,7 @@ pub fn PubKeyAlgo::number(self : PubKeyAlgo) -> Int {
 }
 
 ///|
-pub fn pub_key_algo_of_number(n : Int) -> PubKeyAlgo {
+pub fn pub_key_algo_of_number(n : Int32) -> PubKeyAlgo {
   match n {
     1 => RsaEncryptOrSign
     2 => RsaEncryptOnly
@@ -56,9 +56,9 @@ pub fn PubKeyAlgo::is_rsa(self : PubKeyAlgo) -> Bool {
 ///|
 /// A version 4 (or 5) public key packet body (RFC 9580 §5.5.2).
 pub(all) struct PublicKeyPacket {
-  version : Int
+  version : Int32
   /// Seconds since the Unix epoch.
-  creation_time : Int
+  creation_time : Int32
   algo : PubKeyAlgo
   /// Algorithm-specific public parameters in wire order (MPI bodies for
   /// RSA: n then e).
@@ -66,12 +66,12 @@ pub(all) struct PublicKeyPacket {
 } derive(Debug)
 
 ///|
-pub fn PublicKeyPacket::version(self : PublicKeyPacket) -> Int {
+pub fn PublicKeyPacket::version(self : PublicKeyPacket) -> Int32 {
   self.version
 }
 
 ///|
-pub fn PublicKeyPacket::creation_time(self : PublicKeyPacket) -> Int {
+pub fn PublicKeyPacket::creation_time(self : PublicKeyPacket) -> Int32 {
   self.creation_time
 }
 
@@ -90,7 +90,9 @@ pub fn PublicKeyPacket::params(self : PublicKeyPacket) -> Array[Bytes] {
 /// a public key body (F13: the single source of the field walk, shared by
 /// `PublicKeyPacket::parse` and `public_part_length` so the two cannot
 /// drift apart when an algorithm is added or changed).
-fn read_public_fields(r : Reader) -> (Int, Int, PubKeyAlgo, Array[Bytes]) raise {
+fn read_public_fields(
+  r : Reader,
+) -> (Int32, Int32, PubKeyAlgo, Array[Bytes]) raise {
   let version = r.read_u8()
   guard version == 4 || version == 5 || version == 6 else {
     @error.fail("packet: unsupported public key version \{version}")
@@ -255,11 +257,11 @@ pub(all) struct SecretKeyPacket {
   /// S2K usage: 0 = plaintext secret, 253 = AEAD + HKDF key separation,
   /// 254 = CFB + SHA-1 check, 255 = CFB + 2-octet checksum, other = legacy
   /// cipher id + checksum.
-  s2k_usage : Int
+  s2k_usage : Int32
   /// Cipher algorithm id when the secret material is encrypted (0 otherwise).
-  cipher_algo : Int
+  cipher_algo : Int32
   /// AEAD algorithm id for usage 253 (0 otherwise).
-  aead_algo : Int
+  aead_algo : Int32
   /// S2K specifier bytes when encrypted.
   s2k_spec : Bytes
   /// IV (or AEAD nonce) bytes when encrypted.
@@ -321,7 +323,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     // The 1-octet count covers every field that follows it, so it must be
     // compared against the octets actually consumed (a "enough bytes left"
     // guard alone would accept a wrong count and split the fields by luck).
-    let mut declared_params : Int? = None
+    let mut declared_params : Int32? = None
     let mut params_start = 0
     if v6 {
       let params_len = r.read_u8()
@@ -358,7 +360,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     guard !(v6 && usage == 255) else {
       @error.fail("packet: a v6 secret key must not use S2K usage 255")
     }
-    let mut declared_params : Int? = None
+    let mut declared_params : Int32? = None
     let mut params_start = 0
     if v6 {
       let params_len = r.read_u8()
@@ -448,14 +450,14 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
 
 ///|
 /// True when at least `n` bytes remain in the reader.
-fn rest_after(r : Reader, n : Int) -> Bool {
+fn rest_after(r : Reader, n : Int32) -> Bool {
   r.view().length() >= n
 }
 
 ///|
 /// The length of the public-key part at the front of a secret key body:
 /// walk it with the shared field reader (no trailing-data requirement).
-fn public_part_length(body : BytesView) -> Int raise {
+fn public_part_length(body : BytesView) -> Int32 raise {
   let r = Reader::new(body)
   let _fields = read_public_fields(r)
   r.position()
@@ -465,7 +467,7 @@ fn public_part_length(body : BytesView) -> Int raise {
 /// Block size of a symmetric algorithm id (only what v4 key protection
 /// needs). Returns 16 for unknown ids of the AES family and 8 for legacy
 /// 64-bit ciphers.
-fn cipher_block_size(algo : Int) -> Int raise {
+fn cipher_block_size(algo : Int32) -> Int32 raise {
   match algo {
     1 => 8
     2 | 3 | 4 => 8
@@ -478,7 +480,7 @@ fn cipher_block_size(algo : Int) -> Int raise {
 /// The cumulative octet count of the v6 S2K parameter fields that follow
 /// the count octet itself (RFC 9580 §5.5.3): cipher, optional AEAD mode,
 /// the optional S2K-spec length octet, the specifier, and the IV.
-fn v6_params_length(key : SecretKeyPacket) -> Int {
+fn v6_params_length(key : SecretKeyPacket) -> Int32 {
   let mut n = 1 // symmetric cipher octet
   if key.s2k_usage == 253 {
     n = n + 1 // AEAD mode octet

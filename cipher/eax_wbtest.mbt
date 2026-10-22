@@ -7,7 +7,7 @@ test "cmac-aes128 RFC 4493 vectors" {
   let msg = @primitives.from_hex(
     "6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710",
   )
-  let cases : Array[(Int, String)] = [
+  let cases : Array[(Int32, String)] = [
     (0, "bb1d6929e95937287fa37d129b756746"),
     (16, "070a16b46b4d4144f79bdd9dd04a287c"),
     (40, "dfa66747de9ae63030ca32611497c827"),

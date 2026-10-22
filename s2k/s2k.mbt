@@ -7,26 +7,26 @@ pub(all) enum S2k {
   /// Usage type 1.
   Salted(@primitives.HashId, Bytes)
   /// Usage type 3.
-  Iterated(@primitives.HashId, Bytes, Int)
+  Iterated(@primitives.HashId, Bytes, Int32)
   /// Usage type 4 (RFC 9580 §3.7.1.4): Argon2id. There is no hash-algorithm
   /// octet — the hash is BLAKE2b inside Argon2 — so the fields are the
   /// 16-octet salt, the number of passes `t`, the degree of parallelism
   /// `p`, and the memory exponent `encoded_m` (`m = 2^encoded_m` KiB).
-  Argon2(Bytes, Int, Int, Int)
+  Argon2(Bytes, Int32, Int32, Int32)
 } derive(Eq, Debug)
 
 ///|
 /// Salt length in octets for salted/iterated S2K.
-pub const SALT_SIZE : Int = 8
+pub const SALT_SIZE : Int32 = 8
 
 ///|
 /// Salt length in octets for Argon2 S2K (RFC 9580 §3.7.1.4).
-pub const ARGON2_SALT_SIZE : Int = 16
+pub const ARGON2_SALT_SIZE : Int32 = 16
 
 ///|
 /// Parse an S2K specifier from the front of `view`. Returns the specifier
 /// and the number of bytes consumed.
-pub fn parse(view : BytesView) -> (S2k, Int) raise {
+pub fn parse(view : BytesView) -> (S2k, Int32) raise {
   guard view.length() >= 2 else { @error.fail("s2k: truncated specifier") }
   let usage = view[0].to_int()
   if usage == 4 {
@@ -67,9 +67,9 @@ pub fn parse(view : BytesView) -> (S2k, Int) raise {
 /// must be non-zero, the encoded memory size must be at most 31, and the
 /// decoded memory `2^encoded_m` KiB must be at least `8*p`.
 fn validate_argon2(
-  passes : Int,
-  parallelism : Int,
-  memory_exp : Int,
+  passes : Int32,
+  parallelism : Int32,
+  memory_exp : Int32,
 ) -> Unit raise {
   guard passes != 0 else {
     @error.fail("s2k: Argon2 passes t must be non-zero")
@@ -92,7 +92,7 @@ fn validate_argon2(
 /// largest the wire can express) are clamped to just above the
 /// implementation ceiling so `@primitives.argon2id` rejects them instead of
 /// overflowing `Int`.
-fn argon2_memory_kib(memory_exp : Int) -> Int {
+fn argon2_memory_kib(memory_exp : Int32) -> Int32 {
   if memory_exp >= 31 {
     @primitives.ARGON2_MAX_MEMORY_KIB * 2
   } else {
@@ -156,7 +156,7 @@ pub fn S2k::is_argon2(self : S2k) -> Bool {
 ///|
 /// Decode an encoded count byte into the actual octet count
 /// (RFC 9580 §3.7.1.3).
-pub fn decode_count(count_byte : Int) -> Int {
+pub fn decode_count(count_byte : Int32) -> Int32 {
   (16 + (count_byte & 15)) << ((count_byte >> 4) + 6)
 }
 
@@ -165,7 +165,7 @@ pub fn decode_count(count_byte : Int) -> Int {
 /// (as GnuPG does). When no byte can reach the target, the largest count
 /// (255) is returned: falling back to 0 would silently select the
 /// *minimum* work factor instead of the maximum.
-pub fn encode_count(target : Int) -> Int {
+pub fn encode_count(target : Int32) -> Int32 {
   for c in 0..<=255 {
     if decode_count(c) >= target {
       return c
@@ -182,7 +182,7 @@ pub fn encode_count(target : Int) -> Int {
 fn derive_hash_key(
   hash_id : @primitives.HashId,
   seed : BytesView,
-  key_len : Int,
+  key_len : Int32,
 ) -> Bytes {
   let out : Array[Byte] = Array(capacity=key_len)
   let mut j = 0
@@ -208,8 +208,8 @@ fn derive_hash_key(
 pub fn S2k::derive_key_capped(
   self : S2k,
   passphrase : BytesView,
-  key_len : Int,
-  max_memory_kib : Int,
+  key_len : Int32,
+  max_memory_kib : Int32,
 ) -> Bytes raise {
   match self {
     // Argon2 has no OpenPGP hash octet: the derivation is entirely different
@@ -279,7 +279,7 @@ pub fn S2k::derive_key_capped(
 pub fn S2k::derive_key(
   self : S2k,
   passphrase : BytesView,
-  key_len : Int,
+  key_len : Int32,
 ) -> Bytes raise {
   self.derive_key_capped(passphrase, key_len, @primitives.ARGON2_MAX_MEMORY_KIB)
 }

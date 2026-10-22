@@ -272,7 +272,7 @@ test "v6 usage-253 secret key writes the RFC 9580 parameter counts" {
 /// A v4 SKESK carrying an Argon2 S2K with the given encoded memory exponent
 /// and a bogus wrapped session key. Built by hand (no KDF is run) so a test
 /// can hand the decoder a 2 GiB request while staying cheap itself.
-fn argon2_skesk_with_memory(memory_exp : Int) -> Bytes {
+fn argon2_skesk_with_memory(memory_exp : Int32) -> Bytes {
   let body = @packet.Writer::new()
   body.u8(4) // SKESK v4
   body.u8(@primitives.Aes256.number())

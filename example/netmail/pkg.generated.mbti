@@ -8,23 +8,23 @@ import {
 // Values
 pub fn bytes_lossy(Bytes) -> String
 
-pub fn close_fd_raw(Int) -> Unit
+pub fn close_fd_raw(Int32) -> Unit
 
-pub fn connect_imap(String, Int, Bool) -> ImapClient raise
+pub fn connect_imap(String, Int32, Bool) -> ImapClient raise
 
-pub fn connect_sock(String, Int) -> &Sock raise
+pub fn connect_sock(String, Int32) -> &Sock raise
 
-pub fn connect_socket(String, Int) -> &Socket raise
+pub fn connect_socket(String, Int32) -> &Socket raise
 
 pub fn is_local_host(String) -> Bool
 
-pub fn parse_int(String) -> Int?
+pub fn parse_int(String) -> Int32?
 
 pub async fn smtp_send(&Sock, String, String, Array[String], String, (String, String)?) -> Unit
 
 pub fn status_names(Array[@api.VerifyStatus]) -> String
 
-pub fn with_imap_session(String, Int, Bool, String, String, String, (ImapClient) -> Unit raise) -> Unit raise
+pub fn with_imap_session(String, Int32, Bool, String, String, String, (ImapClient) -> Unit raise) -> Unit raise
 
 // Errors
 
@@ -36,11 +36,11 @@ pub fn FileTransport::send(Self, String, String, Array[String]) -> Unit raise
 
 pub(all) struct ImapClient {
   sock : &Socket
-  mut tag_n : Int
+  mut tag_n : Int32
   state : MailboxState
 }
-pub fn ImapClient::imap_fetch_message(Self, Int) -> Bytes raise
-pub fn ImapClient::imap_fetch_recent(Self, Int) -> Array[MailSummary] raise
+pub fn ImapClient::imap_fetch_message(Self, Int32) -> Bytes raise
+pub fn ImapClient::imap_fetch_recent(Self, Int32) -> Array[MailSummary] raise
 pub fn ImapClient::imap_id(Self) -> Unit raise
 pub fn ImapClient::imap_login(Self, String, String) -> Unit raise
 pub fn ImapClient::imap_logout(Self) -> Unit
@@ -48,17 +48,17 @@ pub fn ImapClient::imap_select(Self, String) -> Unit raise
 pub fn ImapClient::read_greeting(Self) -> Unit raise
 
 pub(all) struct MailSummary {
-  seq : Int
-  uid : Int
+  seq : Int32
+  uid : Int32
   flags : String
   internaldate : String
-  size : Int
+  size : Int32
   headers : Bytes
 }
 
 pub(all) struct MailboxState {
-  mut exists : Int
-  mut uidvalidity : Int
+  mut exists : Int32
+  mut uidvalidity : Int32
 }
 
 pub(all) enum SmtpTlsMode {
@@ -68,7 +68,7 @@ pub(all) enum SmtpTlsMode {
 
 pub(all) struct SmtpTransport {
   host : String
-  port : Int
+  port : Int32
   ehlo_domain : String
   user : String?
   password : String?
@@ -83,7 +83,7 @@ pub(all) enum SmtpTrust {
 
 pub(all) struct TlsTransport {
   host : String
-  port : Int
+  port : Int32
   mode : SmtpTlsMode
   trust : SmtpTrust
   ehlo_domain : String
@@ -105,6 +105,6 @@ pub(open) trait Socket {
   fn write_all(Self, Bytes) -> Unit raise
   fn read_line(Self) -> String raise
   fn read_raw_line(Self) -> Bytes raise
-  fn read_exact(Self, Int) -> Bytes raise
+  fn read_exact(Self, Int32) -> Bytes raise
   fn close(Self) -> Unit
 }

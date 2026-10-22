@@ -87,12 +87,12 @@ impl @mime.MimeCallbacks for FetchRecorder with fn on_error(self, message) {
 ///|
 struct Config {
   mut host : String
-  mut port : Int
+  mut port : Int32
   mut user : String?
   mut pass_env : String?
   mut folder : String
-  mut last_n : Int
-  mut fetch_uid : Int?
+  mut last_n : Int32
+  mut fetch_uid : Int32?
   mut out_dir : String
   keys : Array[String]
   certs : Array[String]
@@ -181,7 +181,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
 }
 
 ///|
-fn parse_port(s : String) -> Int raise {
+fn parse_port(s : String) -> Int32 raise {
   let v = match @netmail.parse_int(s) {
     Some(v) => v
     None => @error.fail("mailreader: bad number '\{s}'")
@@ -192,7 +192,7 @@ fn parse_port(s : String) -> Int raise {
 
 ///|
 /// Row limit for --last (not a port: separate bound, separate message).
-fn parse_count(s : String) -> Int raise {
+fn parse_count(s : String) -> Int32 raise {
   let v = match @netmail.parse_int(s) {
     Some(v) => v
     None => @error.fail("mailreader: bad number '\{s}'")
@@ -324,7 +324,7 @@ fn fetch_and_decrypt(
   cfg : Config,
   user : String,
   password : String,
-  uid : Int,
+  uid : Int32,
 ) -> Unit raise {
   guard !cfg.keys.is_empty() else {
     @error.fail("mailreader: --fetch needs at least one --keys PATH")

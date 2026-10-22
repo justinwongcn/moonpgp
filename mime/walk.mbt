@@ -1,5 +1,5 @@
 ///|
-let max_mime_depth : Int = 20
+let max_mime_depth : Int32 = 20
 
 ///|
 /// One node of the MIME tree. `raw` holds the exact transmitted bytes of
@@ -36,7 +36,7 @@ pub fn parse_mime_tree(data : Bytes) -> MimePart raise {
 }
 
 ///|
-fn parse_part(data : BytesView, depth : Int) -> MimePart raise {
+fn parse_part(data : BytesView, depth : Int32) -> MimePart raise {
   guard depth <= max_mime_depth else { @error.fail("mime: nesting too deep") }
   let (header_end, body_start) = split_headers_body(data)
   let header_text = @utf8.decode_lossy(data[0:header_end])
@@ -91,7 +91,7 @@ fn header_lookup(headers : Array[(String, String)], name : String) -> String? {
 /// Next line in [pos, length): (content_start, content_end, next_pos).
 /// Content excludes the CRLF/LF terminator; next_pos points past it
 /// (== length at EOF). A lone CR at EOF stays in the content.
-fn next_line(data : BytesView, pos : Int) -> (Int, Int, Int)? {
+fn next_line(data : BytesView, pos : Int32) -> (Int32, Int32, Int32)? {
   let n = data.length()
   if pos >= n {
     return None
@@ -114,7 +114,7 @@ fn next_line(data : BytesView, pos : Int) -> (Int, Int, Int)? {
 /// Split a part span into (header_block_end, body_start): the header
 /// block runs to before the first empty line, body starts past its
 /// terminator. Header-only parts get (length, length).
-fn split_headers_body(data : BytesView) -> (Int, Int) {
+fn split_headers_body(data : BytesView) -> (Int32, Int32) {
   let n = data.length()
   let mut pos = 0
   let mut done = false
@@ -181,8 +181,8 @@ fn parse_header_block(text : String) -> Array[(String, String)] {
 ///|
 fn starts_with_at(
   data : BytesView,
-  start : Int,
-  end : Int,
+  start : Int32,
+  end : Int32,
   prefix : BytesView,
 ) -> Bool {
   let plen = prefix.length()
@@ -198,7 +198,7 @@ fn starts_with_at(
 }
 
 ///|
-fn rest_is_padding(data : BytesView, start : Int, end : Int) -> Bool {
+fn rest_is_padding(data : BytesView, start : Int32, end : Int32) -> Bool {
   for k in start..<end {
     let b = data[k].to_int()
     if b != 32 && b != 9 {
@@ -211,8 +211,8 @@ fn rest_is_padding(data : BytesView, start : Int, end : Int) -> Bool {
 ///|
 fn line_is_delim(
   body : BytesView,
-  cs : Int,
-  ce : Int,
+  cs : Int32,
+  ce : Int32,
   dash : BytesView,
 ) -> Bool {
   starts_with_at(body, cs, ce, dash) &&
@@ -222,8 +222,8 @@ fn line_is_delim(
 ///|
 fn line_is_close(
   body : BytesView,
-  cs : Int,
-  ce : Int,
+  cs : Int32,
+  ce : Int32,
   dash : BytesView,
 ) -> Bool {
   let dl = dash.length()
@@ -242,8 +242,8 @@ fn line_is_close(
 /// terminator that belongs to the boundary (RFC 2046 §5.1.1).
 fn child_span(
   body : BytesView,
-  start : Int,
-  boundary_line_start : Int,
+  start : Int32,
+  boundary_line_start : Int32,
 ) -> BytesView {
   let mut end = boundary_line_start
   if end > start && body[end - 1] == b'\n' {
@@ -268,7 +268,7 @@ fn split_multipart_bytes(
   let n = body.length()
   let parts : Array[BytesView] = []
   let mut pos = 0
-  let mut child_start : Int? = None
+  let mut child_start : Int32? = None
   let mut finished = false
   while !finished {
     match next_line(body, pos) {

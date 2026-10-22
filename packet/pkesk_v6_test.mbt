@@ -10,7 +10,11 @@
 /// A v6 PKESK body: version | size | [key-version | fingerprint] | pubalgo |
 /// MPI. RSA is used for the payload because an MPI is a fixed, trivial
 /// encoding to build by hand.
-fn v6_pkesk_body(size : Int, key_version : Int, fingerprint_len : Int) -> Bytes {
+fn v6_pkesk_body(
+  size : Int32,
+  key_version : Int32,
+  fingerprint_len : Int32,
+) -> Bytes {
   let w = @packet.Writer::new()
   w.u8(6)
   w.u8(size)

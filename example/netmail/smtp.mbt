@@ -38,7 +38,7 @@ fn dot_stuff(message : String) -> String {
 /// continuations until the "NNN " final line, requiring the same code
 /// on every line (RFC 5321 §4.2). String supports direct `s[i]`
 /// indexing (returns the code unit as Int), so no helper is needed.
-fn reply_code(line : String) -> Int raise {
+fn reply_code(line : String) -> Int32 raise {
   guard line.length() >= 3 else { @error.fail("smtp: short reply '\{line}'") }
   let mut code = 0
   for k in 0..<3 {
@@ -52,7 +52,7 @@ fn reply_code(line : String) -> Int raise {
 }
 
 ///|
-async fn read_reply(sock : &Sock) -> (Int, Array[String]) {
+async fn read_reply(sock : &Sock) -> (Int32, Array[String]) {
   let first = sock.read_line()
   let code = reply_code(first)
   let lines : Array[String] = []
@@ -81,9 +81,9 @@ async fn smtp_command(sock : &Sock, line : String) -> Unit {
 ///|
 async fn expect(
   sock : &Sock,
-  want : Int,
+  want : Int32,
   what : String,
-) -> (Int, Array[String]) {
+) -> (Int32, Array[String]) {
   let (code, lines) = read_reply(sock)
   guard code == want else {
     @error.fail("smtp: \{what} failed with \{code}: \{lines[0]}")

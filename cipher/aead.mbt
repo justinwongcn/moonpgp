@@ -26,7 +26,7 @@ pub extend AeadMode with @moonbitlang/core/debug.Debug::{to_repr}
 pub extend AeadMode with Eq::{not_equal, equal}
 
 ///|
-pub fn AeadMode::number(self : AeadMode) -> Int {
+pub fn AeadMode::number(self : AeadMode) -> Int32 {
   match self {
     Eax => 1
     Ocb => 2
@@ -35,7 +35,7 @@ pub fn AeadMode::number(self : AeadMode) -> Int {
 }
 
 ///|
-pub fn aead_mode_of_number(n : Int) -> AeadMode? {
+pub fn aead_mode_of_number(n : Int32) -> AeadMode? {
   match n {
     1 => Some(Eax)
     2 => Some(Ocb)
@@ -46,7 +46,7 @@ pub fn aead_mode_of_number(n : Int) -> AeadMode? {
 
 ///|
 /// IV/nonce length of the mode (RFC 9580 §9.6).
-pub fn AeadMode::iv_length(self : AeadMode) -> Int {
+pub fn AeadMode::iv_length(self : AeadMode) -> Int32 {
   match self {
     Eax => 16
     Ocb => 15
@@ -56,7 +56,7 @@ pub fn AeadMode::iv_length(self : AeadMode) -> Int {
 
 ///|
 /// Tag length — 16 octets for every registered mode.
-pub fn AeadMode::tag_length(_self : AeadMode) -> Int {
+pub fn AeadMode::tag_length(_self : AeadMode) -> Int32 {
   16
 }
 
@@ -64,7 +64,7 @@ pub fn AeadMode::tag_length(_self : AeadMode) -> Int {
 /// Chunk size for the chunk-size octet: 2^(c + 6) octets. Computed as an
 /// Int64 (Int is 32 bits here and the octet can encode up to 2^56);
 /// callers clamp it against the remaining payload.
-pub fn aead_chunk_size(chunk_octet : Int) -> Int64 raise {
+pub fn aead_chunk_size(chunk_octet : Int32) -> Int64 raise {
   guard chunk_octet >= 0 && chunk_octet <= 56 else {
     @error.fail("aead: chunk size octet \{chunk_octet} out of range")
   }
@@ -166,7 +166,7 @@ pub fn aead_seal(
   mode : AeadMode,
   header5 : BytesView,
   iv : BytesView,
-  chunk_octet : Int,
+  chunk_octet : Int32,
   plain : BytesView,
 ) -> Bytes raise {
   guard iv.length() == mode.iv_length() else {
@@ -229,7 +229,7 @@ pub fn aead_open(
   mode : AeadMode,
   header5 : BytesView,
   iv : BytesView,
-  chunk_octet : Int,
+  chunk_octet : Int32,
   cipher : BytesView,
 ) -> Bytes raise {
   guard iv.length() == mode.iv_length() else {

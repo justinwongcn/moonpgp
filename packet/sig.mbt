@@ -16,11 +16,11 @@ pub(all) enum SigType {
   CertificationRevocation
   Timestamp
   ThirdPartyConfirmation
-  Unknown(Int)
+  Unknown(Int32)
 } derive(Eq, Debug)
 
 ///|
-pub fn SigType::number(self : SigType) -> Int {
+pub fn SigType::number(self : SigType) -> Int32 {
   match self {
     BinaryDocument => 0
     CanonicalTextDocument => 1
@@ -42,7 +42,7 @@ pub fn SigType::number(self : SigType) -> Int {
 }
 
 ///|
-pub fn sig_type_of_number(n : Int) -> SigType {
+pub fn sig_type_of_number(n : Int32) -> SigType {
   match n {
     0 => BinaryDocument
     1 => CanonicalTextDocument
@@ -65,94 +65,94 @@ pub fn sig_type_of_number(n : Int) -> SigType {
 
 ///|
 /// Signature subpacket type IDs (subset, RFC 9580 §5.2.3.1).
-pub const SIGSUB_CREATION_TIME : Int = 2
+pub const SIGSUB_CREATION_TIME : Int32 = 2
 
 ///|
-pub const SIGSUB_SIG_EXPIRATION_TIME : Int = 3
+pub const SIGSUB_SIG_EXPIRATION_TIME : Int32 = 3
 
 ///|
-pub const SIGSUB_EXPORTABLE_CERTIFICATION : Int = 4
+pub const SIGSUB_EXPORTABLE_CERTIFICATION : Int32 = 4
 
 ///|
-pub const SIGSUB_PREFERRED_SYM_ALGOS : Int = 11
+pub const SIGSUB_PREFERRED_SYM_ALGOS : Int32 = 11
 
 ///|
-pub const SIGSUB_PREFERRED_HASH_ALGOS : Int = 21
+pub const SIGSUB_PREFERRED_HASH_ALGOS : Int32 = 21
 
 ///|
-pub const SIGSUB_PREFERRED_COMP_ALGOS : Int = 22
+pub const SIGSUB_PREFERRED_COMP_ALGOS : Int32 = 22
 
 ///|
-pub const SIGSUB_ISSUER_KEY_ID : Int = 16
+pub const SIGSUB_ISSUER_KEY_ID : Int32 = 16
 
 ///|
-pub const SIGSUB_TRUST_SIGNATURE : Int = 5
+pub const SIGSUB_TRUST_SIGNATURE : Int32 = 5
 
 ///|
-pub const SIGSUB_REGULAR_EXPRESSION : Int = 6
+pub const SIGSUB_REGULAR_EXPRESSION : Int32 = 6
 
 ///|
-pub const SIGSUB_REVOCABLE : Int = 7
+pub const SIGSUB_REVOCABLE : Int32 = 7
 
 ///|
-pub const SIGSUB_KEY_EXPIRATION_TIME : Int = 9
+pub const SIGSUB_KEY_EXPIRATION_TIME : Int32 = 9
 
 ///|
-pub const SIGSUB_NOTATION_DATA : Int = 20
+pub const SIGSUB_NOTATION_DATA : Int32 = 20
 
 ///|
-pub const SIGSUB_KEY_SERVER_PREFERENCES : Int = 23
+pub const SIGSUB_KEY_SERVER_PREFERENCES : Int32 = 23
 
 ///|
-pub const SIGSUB_PREFERRED_KEY_SERVER : Int = 24
+pub const SIGSUB_PREFERRED_KEY_SERVER : Int32 = 24
 
 ///|
-pub const SIGSUB_PRIMARY_USER_ID : Int = 25
+pub const SIGSUB_PRIMARY_USER_ID : Int32 = 25
 
 ///|
-pub const SIGSUB_POLICY_URI : Int = 26
+pub const SIGSUB_POLICY_URI : Int32 = 26
 
 ///|
-pub const SIGSUB_SIGNATURE_TARGET : Int = 31
+pub const SIGSUB_SIGNATURE_TARGET : Int32 = 31
 
 ///|
-pub const SIGSUB_KEY_FLAGS : Int = 27
+pub const SIGSUB_KEY_FLAGS : Int32 = 27
 
 ///|
 /// Preferred AEAD Ciphersuites (RFC 9580 §5.2.3.15). Table 5 of RFC 9580
 /// assigns type 39; type 34 is Reserved, so using it here made the
 /// preference invisible to every other implementation (and hid theirs
 /// from us) while our own round-trip tests stayed green.
-pub const SIGSUB_PREFERRED_AEAD : Int = 39
+pub const SIGSUB_PREFERRED_AEAD : Int32 = 39
 
 ///|
 /// The Features flags octet (RFC 9580 §5.2.3.32): 0x01 = v1 SEIPD,
 /// 0x08 = v2 SEIPD.
-pub const FEATURE_SEIPD_V1 : Int = 0x01
+pub const FEATURE_SEIPD_V1 : Int32 = 0x01
 
 ///|
-pub const FEATURE_SEIPD_V2 : Int = 0x08
+pub const FEATURE_SEIPD_V2 : Int32 = 0x08
 
 ///|
-pub const SIGSUB_SIGNER_USER_ID : Int = 28
+pub const SIGSUB_SIGNER_USER_ID : Int32 = 28
 
 ///|
-pub const SIGSUB_REVOCATION_REASON : Int = 29
+pub const SIGSUB_REVOCATION_REASON : Int32 = 29
 
 ///|
-pub const SIGSUB_FEATURES : Int = 30
+pub const SIGSUB_FEATURES : Int32 = 30
 
 ///|
-pub const SIGSUB_EMBEDDED_SIGNATURE : Int = 32
+pub const SIGSUB_EMBEDDED_SIGNATURE : Int32 = 32
 
 ///|
-pub const SIGSUB_ISSUER_FINGERPRINT : Int = 33
+pub const SIGSUB_ISSUER_FINGERPRINT : Int32 = 33
 
 ///|
 /// A raw signature subpacket: critical bit, type id, body.
 pub(all) struct SigSubpacket {
   critical : Bool
-  sub_type : Int
+  sub_type : Int32
   body : Bytes
 } derive(Debug, Eq)
 
@@ -162,7 +162,7 @@ pub fn SigSubpacket::critical(self : SigSubpacket) -> Bool {
 }
 
 ///|
-pub fn SigSubpacket::sub_type(self : SigSubpacket) -> Int {
+pub fn SigSubpacket::sub_type(self : SigSubpacket) -> Int32 {
   self.sub_type
 }
 
@@ -177,10 +177,10 @@ pub fn SigSubpacket::body(self : SigSubpacket) -> Bytes {
 /// trailing salt, the trailer's version octet, and raw (non-MPI) Ed25519
 /// signature material.
 pub(all) struct SignaturePacket {
-  version : Int
+  version : Int32
   sig_type : SigType
   pub_algo : PubKeyAlgo
-  hash_algo : Int
+  hash_algo : Int32
   hashed_subpackets : Array[SigSubpacket]
   unhashed_subpackets : Array[SigSubpacket]
   /// The hashed subpacket area exactly as it appeared on the wire; third
@@ -188,7 +188,7 @@ pub(all) struct SignaturePacket {
   /// re-serialization (subpacket length encodings may differ).
   raw_hashed_area : Bytes
   /// First two octets of the digest (fast check).
-  fast_hash : Int
+  fast_hash : Int32
   /// v6 only: the 16/24/32-octet salt, hashed before the data and NOT
   /// counted in the trailer length. Empty for v4.
   salt : Bytes
@@ -198,7 +198,7 @@ pub(all) struct SignaturePacket {
 } derive(Debug)
 
 ///|
-pub fn SignaturePacket::version(self : SignaturePacket) -> Int {
+pub fn SignaturePacket::version(self : SignaturePacket) -> Int32 {
   self.version
 }
 
@@ -218,7 +218,7 @@ pub fn SignaturePacket::pub_algo(self : SignaturePacket) -> PubKeyAlgo {
 }
 
 ///|
-pub fn SignaturePacket::hash_algo(self : SignaturePacket) -> Int {
+pub fn SignaturePacket::hash_algo(self : SignaturePacket) -> Int32 {
   self.hash_algo
 }
 
@@ -237,7 +237,7 @@ pub fn SignaturePacket::unhashed_subpackets(
 }
 
 ///|
-pub fn SignaturePacket::fast_hash(self : SignaturePacket) -> Int {
+pub fn SignaturePacket::fast_hash(self : SignaturePacket) -> Int32 {
   self.fast_hash
 }
 
@@ -252,7 +252,7 @@ fn parse_subpackets(view : BytesView) -> Array[SigSubpacket] raise {
   let r = Reader::new(view)
   while r.remaining() > 0 {
     let first = r.read_u8()
-    let len : Int = if first < 192 {
+    let len : Int32 = if first < 192 {
       first
     } else if first < 255 {
       let second = r.read_u8()
@@ -300,7 +300,7 @@ fn serialize_subpackets(subs : Array[SigSubpacket]) -> Bytes {
 /// RFC 9580 §9.5 Table 23: the v6 signature salt size for a hash
 /// algorithm. Only SHA-2/SHA-3 have v6 salt sizes (MD5/SHA-1/RIPEMD-160
 /// are "N/A").
-pub fn salt_size_of_hash(hash_id : Int) -> Int raise {
+pub fn salt_size_of_hash(hash_id : Int32) -> Int32 raise {
   match hash_id {
     8 | 11 | 12 => 16 // SHA-256, SHA-224, SHA3-256
     9 => 24 // SHA-384
@@ -323,10 +323,10 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let sig_type = sig_type_of_number(r.read_u8())
   let pub_algo = pub_key_algo_of_number(r.read_u8())
   let hash_algo = r.read_u8()
-  let hashed_len : Int = if v6 { r.read_u32() } else { r.read_u16() }
+  let hashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let raw_hashed = r.read_bytes(hashed_len)
   let hashed = parse_subpackets(raw_hashed.exact_view())
-  let unhashed_len : Int = if v6 { r.read_u32() } else { r.read_u16() }
+  let unhashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let unhashed = parse_subpackets(r.read_bytes(unhashed_len).exact_view())
   let fast = r.read_u16()
   let salt : Bytes = if v6 {
@@ -425,7 +425,7 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
 
 ///|
 /// First subpacket body of the given type from `subs`.
-pub fn find_subpacket(subs : Array[SigSubpacket], t : Int) -> Bytes? {
+pub fn find_subpacket(subs : Array[SigSubpacket], t : Int32) -> Bytes? {
   for sp in subs {
     if sp.sub_type == t {
       return Some(sp.body)
@@ -436,7 +436,7 @@ pub fn find_subpacket(subs : Array[SigSubpacket], t : Int) -> Bytes? {
 
 ///|
 /// Signature creation time from the hashed subpackets (seconds since epoch).
-pub fn SignaturePacket::creation_time(self : SignaturePacket) -> Int? {
+pub fn SignaturePacket::creation_time(self : SignaturePacket) -> Int32? {
   match find_subpacket(self.hashed_subpackets, SIGSUB_CREATION_TIME) {
     Some(b) =>
       if b.length() == 4 {
@@ -502,7 +502,7 @@ pub fn SignaturePacket::key_flags(self : SignaturePacket) -> Bytes? {
 /// 4-octet big-endian seconds value of a lifetime subpacket body, or 0
 /// when absent/malformed (0 = "never expires", so callers need not
 /// distinguish the two).
-fn lifetime_secs(subs : Array[SigSubpacket], sub_type : Int) -> Int {
+fn lifetime_secs(subs : Array[SigSubpacket], sub_type : Int32) -> Int32 {
   match find_subpacket(subs, sub_type) {
     Some(b) =>
       if b.length() == 4 {
@@ -520,14 +520,14 @@ fn lifetime_secs(subs : Array[SigSubpacket], sub_type : Int) -> Int {
 ///|
 /// The Key Expiration Time subpacket (RFC 9580 §5.2.3.6): seconds after
 /// the associated key's creation time; 0 = the key never expires.
-pub fn SignaturePacket::key_expiration_time(self : SignaturePacket) -> Int {
+pub fn SignaturePacket::key_expiration_time(self : SignaturePacket) -> Int32 {
   lifetime_secs(self.hashed_subpackets, SIGSUB_KEY_EXPIRATION_TIME)
 }
 
 ///|
 /// The Signature Expiration Time subpacket (RFC 9580 §5.2.3.10): seconds
 /// after the signature's creation time; 0 = the signature never expires.
-pub fn SignaturePacket::sig_expiration_time(self : SignaturePacket) -> Int {
+pub fn SignaturePacket::sig_expiration_time(self : SignaturePacket) -> Int32 {
   lifetime_secs(self.hashed_subpackets, SIGSUB_SIG_EXPIRATION_TIME)
 }
 
@@ -552,10 +552,10 @@ pub fn SignaturePacket::supports_seipd_v2(self : SignaturePacket) -> Bool {
 /// preferred first (RFC 9580 §5.2.3.15). A trailing odd octet is ignored.
 pub fn SignaturePacket::preferred_aead(
   self : SignaturePacket,
-) -> Array[(Int, Int)]? {
+) -> Array[(Int32, Int32)]? {
   match find_subpacket(self.hashed_subpackets, SIGSUB_PREFERRED_AEAD) {
     Some(b) => {
-      let out : Array[(Int, Int)] = []
+      let out : Array[(Int32, Int32)] = []
       let mut i = 0
       while i + 1 < b.length() {
         out.push((b[i].to_int(), b[i + 1].to_int()))
@@ -594,7 +594,7 @@ pub fn SignaturePacket::hash_prefix(self : SignaturePacket) -> Bytes {
 ///|
 /// The final trailer: 0x04|0x06 0xFF and the 4-octet length of everything
 /// hashed before it (RFC 9580 §5.2.4).
-pub fn signature_trailer(version : Int, hashed_body_len : Int) -> Bytes {
+pub fn signature_trailer(version : Int32, hashed_body_len : Int32) -> Bytes {
   let w = Writer::new()
   w.u8(version)
   w.u8(255)
@@ -607,9 +607,9 @@ pub fn signature_trailer(version : Int, hashed_body_len : Int) -> Bytes {
 /// key emits) and version 6 (the same fields plus a hash salt and the
 /// 32-octet signing-key fingerprint, and with the 8-octet key id gone).
 pub(all) struct OnePassSigPacket {
-  version : Int
+  version : Int32
   sig_type : SigType
-  hash_algo : Int
+  hash_algo : Int32
   pub_algo : PubKeyAlgo
   /// v3 only: the 8-octet signing key id.
   key_id : Bytes
@@ -621,7 +621,7 @@ pub(all) struct OnePassSigPacket {
 } derive(Debug)
 
 ///|
-pub fn OnePassSigPacket::version(self : OnePassSigPacket) -> Int {
+pub fn OnePassSigPacket::version(self : OnePassSigPacket) -> Int32 {
   self.version
 }
 

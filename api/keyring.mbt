@@ -26,13 +26,13 @@ pub fn KeyRing::add_private(self : KeyRing, key : PrivateKey) -> Unit {
 
 ///|
 /// Number of public keys in the ring.
-pub fn KeyRing::public_count(self : KeyRing) -> Int {
+pub fn KeyRing::public_count(self : KeyRing) -> Int32 {
   self.public_keys.length()
 }
 
 ///|
 /// Number of private keys in the ring.
-pub fn KeyRing::private_count(self : KeyRing) -> Int {
+pub fn KeyRing::private_count(self : KeyRing) -> Int32 {
   self.private_keys.length()
 }
 
@@ -107,7 +107,7 @@ fn key_packet_verify_usable_at(
 pub fn KeyRing::find_encryption_key(
   self : KeyRing,
   key_id : BytesView,
-  now? : Int64 = 0L,
+  now~ : Int64 = 0L,
 ) -> @packet.PublicKeyPacket? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {
@@ -152,7 +152,7 @@ pub fn KeyRing::find_decryption_key(
 pub fn KeyRing::find_verification_key(
   self : KeyRing,
   key_id : BytesView,
-  now? : Int64 = 0L,
+  now~ : Int64 = 0L,
 ) -> PublicKey? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {

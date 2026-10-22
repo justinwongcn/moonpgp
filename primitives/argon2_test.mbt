@@ -29,7 +29,7 @@ test "argon2id RFC 9106 §5.3 KAT (t=3, m=32 KiB, p=4, T=32, with K and X)" {
 test "argon2id x/crypto vectors" {
   let pass = b"password"
   let salt = b"somesalt"
-  let cases : Array[(Int, Int, Int, String)] = [
+  let cases : Array[(Int32, Int32, Int32, String)] = [
     (1, 64, 1, "655ad15eac652dc59f7170a7332bf49b8469be1fdb9c28bb"),
     (2, 64, 1, "068d62b26455936aa6ebe60060b0a65870dbfa3ddf8d41f7"),
     (2, 64, 2, "350ac37222f436ccb5c0972f1ebd3bf6b958bf2071841362"),
@@ -86,17 +86,17 @@ test "argon2id memory cap is a policy knob, not a correctness change" {
 
 ///|
 /// One KiB above the hard ceiling: the call must fail before allocating.
-const ARGON2_OVER_LIMIT_KIB : Int = @primitives.ARGON2_MAX_MEMORY_KIB + 1024
+const ARGON2_OVER_LIMIT_KIB : Int32 = @primitives.ARGON2_MAX_MEMORY_KIB + 1024
 
 ///|
 fn assert_argon2_raises(
   pass : BytesView,
   salt : BytesView,
-  passes : Int,
-  m_kib : Int,
-  parallelism : Int,
-  tag_len : Int,
-  max_memory_kib? : Int = @primitives.ARGON2_MAX_MEMORY_KIB,
+  passes : Int32,
+  m_kib : Int32,
+  parallelism : Int32,
+  tag_len : Int32,
+  max_memory_kib~ : Int32 = @primitives.ARGON2_MAX_MEMORY_KIB,
 ) -> Unit raise {
   // The old shape put `fail(...)` INSIDE the `try`, so the `catch` swallowed
   // it and the helper could never fail: a call that wrongly succeeded passed.
@@ -168,7 +168,7 @@ test "argon2id go-crypto S2K derive vectors (8-octet salt)" {
 test "argon2id x/crypto vectors: m' rounding, odd p, long tags" {
   let pass = b"password"
   let salt = b"somesalt"
-  let cases : Array[(Int, Int, Int, Int, String)] = [
+  let cases : Array[(Int32, Int32, Int32, Int32, String)] = [
     (1, 100, 3, 16, "b9c657c11e03699ee8c9d0cda5d6b03a"),
     (2, 1000, 7, 16, "1aba3309d95e2fd00812355df499ce8a"),
     (3, 33, 1, 16, "40d1b39ac2dc92fc54ca64e802860dfe"),

@@ -9,11 +9,11 @@
 
 ///|
 /// BLAKE2b compression-function block size in octets.
-const BLAKE2B_BLOCK_SIZE : Int = 128
+const BLAKE2B_BLOCK_SIZE : Int32 = 128
 
 ///|
 /// BLAKE2b round count for the 64-bit variant.
-const BLAKE2B_ROUNDS : Int = 12
+const BLAKE2B_ROUNDS : Int32 = 12
 
 ///|
 /// BLAKE2b parameter block XOR constant: digest length in the low byte,
@@ -23,7 +23,7 @@ const BLAKE2B_PARAM_XOR : UInt64 = 0x01010000UL
 ///|
 /// Rotate a 64-bit word right. `n` must be in 1..63 (all BLAKE2b/Argon2
 /// rotations are).
-fn rotr64(x : UInt64, n : Int) -> UInt64 {
+fn rotr64(x : UInt64, n : Int32) -> UInt64 {
   (x >> n) | (x << (64 - n))
 }
 
@@ -39,7 +39,7 @@ fn blake2b_iv() -> FixedArray[UInt64] {
 ///|
 /// The BLAKE2b message schedule (RFC 7693 §2.7); rounds 10 and 11 repeat
 /// rows 0 and 1, which the `% 10` in the round loop handles.
-let blake2b_sigma : FixedArray[Int] = [
+let blake2b_sigma : FixedArray[Int32] = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, //
    14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3, //
    11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4, //
@@ -54,7 +54,7 @@ let blake2b_sigma : FixedArray[Int] = [
 
 ///|
 /// Read a 64-bit little-endian word at `off`.
-fn read_u64_le(b : ArrayView[Byte], off : Int) -> UInt64 {
+fn read_u64_le(b : ArrayView[Byte], off : Int32) -> UInt64 {
   b[off].to_uint64() |
   (b[off + 1].to_uint64() << 8) |
   (b[off + 2].to_uint64() << 16) |
@@ -70,10 +70,10 @@ fn read_u64_le(b : ArrayView[Byte], off : Int) -> UInt64 {
 /// working vector.
 fn blake2b_g(
   v : FixedArray[UInt64],
-  a : Int,
-  b : Int,
-  c : Int,
-  d : Int,
+  a : Int32,
+  b : Int32,
+  c : Int32,
+  d : Int32,
   x : UInt64,
   y : UInt64,
 ) -> Unit {
@@ -160,14 +160,14 @@ fn blake2b_compress(
 priv struct Blake2bState {
   h : FixedArray[UInt64]
   buf : Array[Byte]
-  mut buflen : Int
+  mut buflen : Int32
   /// Message octets already fed through the compression function.
   mut t : UInt64
-  out_len : Int
+  out_len : Int32
 }
 
 ///|
-fn Blake2bState::new(out_len : Int) -> Blake2bState {
+fn Blake2bState::new(out_len : Int32) -> Blake2bState {
   let h = blake2b_iv()
   h[0] = h[0] ^ (BLAKE2B_PARAM_XOR ^ out_len.to_uint64())
   {
@@ -225,7 +225,7 @@ fn Blake2bState::finalize(self : Blake2bState) -> Bytes {
 ///   )
 /// }
 /// ```
-pub fn blake2b(data : BytesView, out_len : Int) -> Bytes raise {
+pub fn blake2b(data : BytesView, out_len : Int32) -> Bytes raise {
   guard out_len >= 1 && out_len <= 64 else {
     @error.fail("blake2b: digest length must be 1..64")
   }

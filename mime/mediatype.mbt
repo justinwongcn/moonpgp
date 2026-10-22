@@ -110,9 +110,9 @@ pub fn parse_header_params(
 /// unquoted value and the index just past the closing quote.
 fn scan_quoted(
   chars : Array[Char],
-  start : Int,
-  n : Int,
-) -> (String, Int) raise {
+  start : Int32,
+  n : Int32,
+) -> (String, Int32) raise {
   let buf = StringBuilder()
   let mut i = start + 1
   let mut closed = false

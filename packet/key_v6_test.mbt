@@ -10,7 +10,7 @@
 /// `count_delta` perturbs the declared count.
 fn v6_aead_secret_body(
   public : @packet.PublicKeyPacket,
-  count_delta : Int,
+  count_delta : Int32,
 ) -> Bytes raise {
   let spec = @s2k.Iterated(@primitives.Sha256, Bytes::make(8, b'\x02'), 96).encode()
   let nonce = Bytes::make(15, b'\x03') // OCB nonce

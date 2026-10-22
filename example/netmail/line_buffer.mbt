@@ -13,9 +13,9 @@
 #cfg(target="native")
 priv struct LineBuffer {
   buf : FixedArray[Byte]
-  mut rstart : Int
-  mut rend : Int
-  fill : (FixedArray[Byte]) -> Int
+  mut rstart : Int32
+  mut rend : Int32
+  fill : (FixedArray[Byte]) -> Int32
 }
 
 ///|
@@ -89,7 +89,7 @@ fn LineBuffer::read_raw_line(self : LineBuffer) -> Bytes raise {
 
 ///|
 #cfg(target="native")
-fn LineBuffer::read_exact(self : LineBuffer, n : Int) -> Bytes raise {
+fn LineBuffer::read_exact(self : LineBuffer, n : Int32) -> Bytes raise {
   guard n >= 0 else { @error.fail("mailnet: negative read_exact \{n}") }
   let out : Array[Byte] = []
   let mut got = 0

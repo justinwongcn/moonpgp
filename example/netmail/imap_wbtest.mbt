@@ -8,10 +8,10 @@
 ///|
 priv struct FakeImapSock {
   script : Array[Bytes]
-  mut chunk : Int
-  mut off : Int
+  mut chunk : Int32
+  mut off : Int32
   sent : Array[Bytes]
-  mut closes : Int
+  mut closes : Int32
 }
 
 ///|
@@ -51,7 +51,7 @@ impl Socket for FakeImapSock with fn read_raw_line(self) -> Bytes raise {
 }
 
 ///|
-impl Socket for FakeImapSock with fn read_exact(self, n : Int) -> Bytes raise {
+impl Socket for FakeImapSock with fn read_exact(self, n : Int32) -> Bytes raise {
   let out : Array[Byte] = []
   let mut got = 0
   while got < n {

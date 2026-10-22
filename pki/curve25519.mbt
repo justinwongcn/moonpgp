@@ -169,7 +169,7 @@ fn ed_equal(p1 : EdPoint, p2 : EdPoint, ctx : Ed25519Ctx) -> Bool raise {
 /// the canonical-sign fixups. Raises on a non-decodable encoding.
 fn ed_recover_x(
   y : BigInt,
-  sign : Int,
+  sign : Int32,
   p : BigInt,
   d : BigInt,
   sqrt_factor : BigInt,
@@ -307,7 +307,7 @@ fn ed25519_ctx() -> Ed25519Ctx raise {
 /// 2^(8·len). All call sites hold that invariant by construction; the
 /// guard turns a future violation into a loud failure instead of
 /// silently dropping high bytes.
-fn bigint_to_le_bytes(v0 : BigInt, len : Int) -> Bytes {
+fn bigint_to_le_bytes(v0 : BigInt, len : Int32) -> Bytes {
   guard v0.bit_length() <= 8 * len else {
     abort("curve25519: bigint_to_le_bytes value does not fit")
   }

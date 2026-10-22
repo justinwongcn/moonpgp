@@ -50,7 +50,7 @@ pub fn SessionKey::algo(self : SessionKey) -> @primitives.CipherAlgo {
 /// Generate a fresh random session key (platform entropy; AES-256 unless
 /// another cipher is requested).
 pub fn generate_session_key(
-  algo? : @primitives.CipherAlgo = @primitives.Aes256,
+  algo~ : @primitives.CipherAlgo = @primitives.Aes256,
 ) -> SessionKey raise {
   SessionKey::new(@primitives.random_bytes(algo.key_size()), algo)
 }
@@ -121,7 +121,7 @@ pub fn decrypt_to_session_key(message : String, sk : SessionKey) -> Bytes raise 
 pub fn recover_session_key_with_password(
   message : String,
   passphrase : String,
-  argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> SessionKey raise {
   let block = @armor.decode(message)
   let packets = @packet.parse_packets(

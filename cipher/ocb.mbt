@@ -27,7 +27,7 @@ fn ocb_double(x : BytesView) -> Bytes {
 
 ///|
 /// Number of trailing zero bits (RFC 7253 ntz).
-fn ocb_ntz(n : Int) -> Int {
+fn ocb_ntz(n : Int32) -> Int32 {
   let mut v = n
   let mut x = 0
   while (v & 1) == 0 {
@@ -42,7 +42,7 @@ fn ocb_ntz(n : Int) -> Int {
 /// (RFC 7253 §4.1 key-dependent variables).
 fn ocb_l_table(
   bc : &@primitives.BlockCipher,
-  max_k : Int,
+  max_k : Int32,
 ) -> (Bytes, Bytes, Array[Bytes]) {
   let zero = Bytes::make(16, b'\x00')
   let l_star = bc.encrypt_block(zero.exact_view())
@@ -91,7 +91,7 @@ fn ocb_partial_block(part : BytesView) -> Bytes {
 ///|
 /// Extract a 128-bit window starting at a bit offset (RFC 7253
 /// Stretch[1+bottom..128+bottom]).
-fn ocb_bit_window(src : BytesView, bit_off : Int) -> Bytes {
+fn ocb_bit_window(src : BytesView, bit_off : Int32) -> Bytes {
   let out : Array[Byte] = Array(capacity=16)
   for i in 0..<16 {
     let hi_off = bit_off / 8 + i
@@ -115,7 +115,7 @@ pub fn ocb_encrypt(
   nonce : BytesView,
   ad : BytesView,
   plain : BytesView,
-  tag_len? : Int = 16,
+  tag_len~ : Int32 = 16,
 ) -> Bytes raise {
   guard bc.block_size() == 16 else {
     @error.fail("ocb: needs a 128-bit block cipher")

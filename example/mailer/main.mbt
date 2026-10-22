@@ -65,7 +65,7 @@ struct Config {
   mut domain : String?
   mut mode : String
   mut smtp_host : String
-  mut smtp_port : Int
+  mut smtp_port : Int32
   mut smtp_user : String?
   mut smtp_pass_env : String?
   mut smtp_tls : String
@@ -229,7 +229,7 @@ fn load_recipient_public(path : String) -> @api.PublicKey raise {
 /// Resolve --smtp-tls: explicit mode, or infer from the port (465 ->
 /// implicit, 587 -> starttls, otherwise plaintext) per plan
 /// tls-transport §3.5.
-fn resolve_tls_mode(flag : String, port : Int) -> @netmail.SmtpTlsMode? raise {
+fn resolve_tls_mode(flag : String, port : Int32) -> @netmail.SmtpTlsMode? raise {
   match flag {
     "implicit" => Some(@netmail.Implicit)
     "starttls" => Some(@netmail.Starttls)

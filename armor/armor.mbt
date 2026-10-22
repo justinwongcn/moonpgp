@@ -179,7 +179,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
         }
         // Base64 body until the CRC line or the END marker.
         let body = StringBuilder()
-        let mut crc : Int? = None
+        let mut crc : Int32? = None
         let mut closed = false
         while i < n {
           let l = lines[i]
@@ -228,8 +228,8 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
 }
 
 ///|
-fn parse_crc_line(line : StringView) -> Int? {
-  let body = line.chop_prefix("=")
+fn parse_crc_line(line : StringView) -> Int32? {
+  let body = line.strip_prefix("=")
   match body {
     None => None
     Some(s) =>

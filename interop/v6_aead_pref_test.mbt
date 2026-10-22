@@ -16,7 +16,7 @@
 test "our v6 keys write Preferred AEAD Ciphersuites as subpacket 39" {
   let public = @api.generate_ed25519_v6_key("Prefs <prefs@test.local>").to_public()
   let packets = @packet.parse_packets(public.to_bytes().exact_view())
-  let aead_body : Array[Int] = []
+  let aead_body : Array[Int32] = []
   for p in packets {
     if p.tag() == @packet.Signature {
       let sig = @packet.SignaturePacket::parse(p.body().exact_view())

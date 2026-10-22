@@ -7,13 +7,13 @@ import {
 }
 
 // Values
-pub fn aead_chunk_size(Int) -> Int64 raise
+pub fn aead_chunk_size(Int32) -> Int64 raise
 
-pub fn aead_mode_of_number(Int) -> AeadMode?
+pub fn aead_mode_of_number(Int32) -> AeadMode?
 
-pub fn aead_open(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int, BytesView) -> Bytes raise
+pub fn aead_open(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int32, BytesView) -> Bytes raise
 
-pub fn aead_seal(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int, BytesView) -> Bytes raise
+pub fn aead_seal(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int32, BytesView) -> Bytes raise
 
 pub fn aes_key_unwrap(BytesView, BytesView) -> Bytes raise
 
@@ -33,23 +33,23 @@ pub fn gcm_encrypt(&@primitives.BlockCipher, BytesView, BytesView, BytesView) ->
 
 pub fn ocb_decrypt(&@primitives.BlockCipher, BytesView, BytesView, BytesView) -> Bytes raise
 
-pub fn ocb_encrypt(&@primitives.BlockCipher, BytesView, BytesView, BytesView, tag_len? : Int) -> Bytes raise
+pub fn ocb_encrypt(&@primitives.BlockCipher, BytesView, BytesView, BytesView, tag_len? : Int32) -> Bytes raise
 
 pub fn openpgp_cfb_decrypt_resync(&@primitives.BlockCipher, BytesView) -> Bytes raise
 
 pub fn openpgp_cfb_encrypt_resync(&@primitives.BlockCipher, BytesView, BytesView) -> Bytes raise
 
-pub fn random_prefix(Int) -> Bytes raise
+pub fn random_prefix(Int32) -> Bytes raise
 
 pub fn seipd_v1_decrypt(&@primitives.BlockCipher, BytesView) -> Bytes raise
 
 pub fn seipd_v1_encrypt(&@primitives.BlockCipher, BytesView) -> Bytes raise
 
-pub fn seipd_v2_kdf(BytesView, BytesView, Int, AeadMode, BytesView) -> (Bytes, Bytes) raise
+pub fn seipd_v2_kdf(BytesView, BytesView, Int32, AeadMode, BytesView) -> (Bytes, Bytes) raise
 
-pub fn seipd_v2_open(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int, BytesView) -> Bytes raise
+pub fn seipd_v2_open(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int32, BytesView) -> Bytes raise
 
-pub fn seipd_v2_seal(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int, BytesView) -> Bytes raise
+pub fn seipd_v2_seal(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, Int32, BytesView) -> Bytes raise
 
 // Errors
 
@@ -60,10 +60,10 @@ pub(all) enum AeadMode {
   Gcm
 } derive(Eq, @debug.Debug)
 pub fn AeadMode::equal(Self, Self) -> Bool
-pub fn AeadMode::iv_length(Self) -> Int
+pub fn AeadMode::iv_length(Self) -> Int32
 pub fn AeadMode::not_equal(Self, Self) -> Bool
-pub fn AeadMode::number(Self) -> Int
-pub fn AeadMode::tag_length(Self) -> Int
+pub fn AeadMode::number(Self) -> Int32
+pub fn AeadMode::tag_length(Self) -> Int32
 pub fn AeadMode::to_repr(Self) -> @debug.Repr
 
 // Type aliases

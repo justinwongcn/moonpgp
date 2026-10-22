@@ -33,7 +33,7 @@ pub fn mod_inverse(a : BigInt, m : BigInt) -> BigInt raise {
 
 ///|
 /// Uniformly random BigInt in [0, 2^bits).
-fn random_bigint(bits : Int) -> BigInt raise {
+fn random_bigint(bits : Int32) -> BigInt raise {
   let nbytes = (bits + 7) / 8
   let raw = @primitives.random_bytes(nbytes)
   let mut v = BigInt::from_octets(raw.exact_view(), signum=1)
@@ -117,7 +117,7 @@ fn is_witness(a : BigInt, n : BigInt) -> Bool {
 ///|
 /// Miller-Rabin probabilistic primality test with `rounds` random bases
 /// (plus trial division). Error probability < 4^-rounds.
-pub fn is_probable_prime(n : BigInt, rounds~ : Int) -> Bool raise {
+pub fn is_probable_prime(n : BigInt, rounds~ : Int32) -> Bool raise {
   if n.compare_int(2) < 0 {
     return false
   }
@@ -151,9 +151,9 @@ pub fn is_probable_prime(n : BigInt, rounds~ : Int) -> Bool raise {
 /// minus-one has no factor in common with `coprime` (used for p-1
 /// coprime to the public exponent).
 pub fn random_prime(
-  bits : Int,
+  bits : Int32,
   coprime~ : BigInt,
-  rounds~ : Int,
+  rounds~ : Int32,
 ) -> BigInt raise {
   guard bits >= 2 else { @error.fail("pki: prime bit size too small") }
   let e = BigInt::from_int(0).lor(coprime)

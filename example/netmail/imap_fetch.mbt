@@ -5,7 +5,7 @@
 /// mailbox.
 pub fn ImapClient::imap_fetch_recent(
   self : ImapClient,
-  last_n : Int,
+  last_n : Int32,
 ) -> Array[MailSummary] raise {
   let exists = self.state.exists
   guard exists > 0 else { return [] }
@@ -37,7 +37,7 @@ pub fn ImapClient::imap_fetch_recent(
 /// decrypting the message the user actually pointed at.
 pub fn ImapClient::imap_fetch_message(
   self : ImapClient,
-  uid : Int,
+  uid : Int32,
 ) -> Bytes raise {
   let tag = self.send_command("UID FETCH \{uid} (BODY.PEEK[])")
   let reply = self.expect_ok(tag, "UID FETCH")
@@ -91,7 +91,7 @@ pub fn ImapClient::imap_fetch_message(
 
 ///|
 /// `* <seq> FETCH ( ... )` → (seq, items); other untagged lines → None.
-fn parse_fetch_items(line : Array[Node]) -> (Int, Array[Node])? {
+fn parse_fetch_items(line : Array[Node]) -> (Int32, Array[Node])? {
   guard line.length() == 3 else { return None }
   let seq = match line[0] {
     Atom(n) => parse_int(n)
@@ -112,7 +112,7 @@ fn parse_fetch_items(line : Array[Node]) -> (Int, Array[Node])? {
 }
 
 ///|
-fn summary_from_items(seq : Int, items : Array[Node]) -> MailSummary? {
+fn summary_from_items(seq : Int32, items : Array[Node]) -> MailSummary? {
   let mut uid = -1
   let mut flags = ""
   let mut internaldate = ""

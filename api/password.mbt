@@ -6,9 +6,9 @@ pub fn encrypt_with_password(
   plaintext : BytesView,
   passphrase : String,
   file_name? : String,
-  aead? : Bool = false,
-  argon2? : Bool = false,
-  argon2_memory_exp? : Int = 16,
+  aead~ : Bool = false,
+  argon2~ : Bool = false,
+  argon2_memory_exp~ : Int32 = 16,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
   if aead {
@@ -49,9 +49,9 @@ pub fn encrypt_with_password_argon2(
   plaintext : BytesView,
   passphrase : String,
   file_name? : String,
-  passes? : Int = 3,
-  parallelism? : Int = 4,
-  memory_exp? : Int = 16,
+  passes~ : Int32 = 3,
+  parallelism~ : Int32 = 4,
+  memory_exp~ : Int32 = 16,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let salt = @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE)
@@ -69,11 +69,11 @@ pub fn encrypt_with_password_v6(
   plaintext : BytesView,
   passphrase : String,
   file_name? : String,
-  aead? : @cipher.AeadMode = @cipher.Ocb,
-  argon2? : Bool = true,
-  passes? : Int = 3,
-  parallelism? : Int = 4,
-  memory_exp? : Int = 16,
+  aead~ : @cipher.AeadMode = @cipher.Ocb,
+  argon2~ : Bool = true,
+  passes~ : Int32 = 3,
+  parallelism~ : Int32 = 4,
+  memory_exp~ : Int32 = 16,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let algo = @primitives.Aes256
@@ -184,8 +184,8 @@ fn seal_skesk_with_password(
 pub fn decrypt_with_password(
   message : String,
   passphrase : String,
-  argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
-  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+  argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let armored = @armor.decode(message)
   decrypt_binary_with_password(
@@ -201,8 +201,8 @@ pub fn decrypt_with_password(
 pub fn decrypt_binary_with_password(
   data : BytesView,
   passphrase : String,
-  argon2_max_memory_kib? : Int = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
-  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+  argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let packets = @packet.parse_packets(data)
   let (msg_algo, session_key, skesk_version) = unwrap_skesk(
@@ -275,16 +275,16 @@ pub fn decrypt_binary_with_password(
 }
 
 ///|
-const SESSION_KEY_SIZE : Int = 32
+const SESSION_KEY_SIZE : Int32 = 32
 
 ///|
 /// S2K hashed-material target for passphrase derivation: 56,623,104 octets
 /// (~54 MiB), gpg's default count (byte 251). The previous 1 MiB was
 /// ~50x lighter than gpg's own interactive cost.
-const S2K_COUNT_TARGET : Int = 56623104
+const S2K_COUNT_TARGET : Int32 = 56623104
 
 ///|
-fn write_packet_length(w : @packet.Writer, length : Int) -> Unit {
+fn write_packet_length(w : @packet.Writer, length : Int32) -> Unit {
   if length < 192 {
     w.u8(length)
   } else if length < 8384 {
@@ -340,8 +340,8 @@ fn build_skesk(
 fn unwrap_skesk(
   packets : Array[@packet.RawPacket],
   passphrase : String,
-  argon2_max_memory_kib : Int,
-) -> (@primitives.CipherAlgo, Bytes, Int) raise {
+  argon2_max_memory_kib : Int32,
+) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
   for p in packets {
     if p.tag() == @packet.Skesk {
       let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
@@ -499,8 +499,8 @@ fn seal_aead_with_password(
   plaintext : BytesView,
   passphrase : String,
   file_name? : String,
-  argon2? : Bool = false,
-  argon2_memory_exp? : Int = 16,
+  argon2~ : Bool = false,
+  argon2_memory_exp~ : Int32 = 16,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let cipher_algo = @primitives.Aes256.number()
@@ -594,7 +594,7 @@ fn seal_aead_with_password(
 /// Walk a decrypted packet stream to the literal data, decompressing on
 /// the way. Trailing signature packets (one-pass) are consumed by later
 /// layers.
-fn extract_literal(inner : BytesView, max_decompressed : Int) -> Bytes raise {
+fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
   let mut stream = inner
   // At most two nesting levels: SEIPD -> compressed -> literal. A
   // one-pass signature packet may precede the data.
@@ -721,7 +721,7 @@ fn open_seipd_v2(
 fn decrypt_seipd_v2(
   seipd : @packet.SeipdPacket,
   session_key : BytesView,
-  max_decompressed : Int,
+  max_decompressed : Int32,
 ) -> Bytes raise {
   extract_literal(open_seipd_v2(seipd, session_key), max_decompressed)
 }

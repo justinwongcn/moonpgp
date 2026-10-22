@@ -88,7 +88,7 @@ fn x25519_wrap_session_key(
 fn x25519_unwrap_session_key(
   pkesk : @packet.PkeskPacket,
   sk : @packet.SecretKeyPacket,
-) -> (Int, Bytes) raise {
+) -> (Int32, Bytes) raise {
   let secret = x25519_native_secret(sk)
   let (algo, wrapped) = if pkesk.version() == 3 {
     let enc = pkesk.encrypted()

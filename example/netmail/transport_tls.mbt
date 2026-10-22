@@ -62,7 +62,7 @@ fn SmtpTrust::to_trusted_root(self : SmtpTrust) -> @tls.TrustedRoot {
 /// Format the resolver's UInt as dotted-quad IPv4 (network order:
 /// most significant octet first — verified against 127.0.0.1).
 #cfg(target="native")
-fn ipv4_string(ip : UInt) -> String {
+fn ipv4_string(ip : UInt32) -> String {
   let a = (ip >> 24) & 0xFF
   let b = (ip >> 16) & 0xFF
   let c = (ip >> 8) & 0xFF
@@ -116,7 +116,7 @@ fn verify_peer_certificate(tls : @tls.Tls, trust : SmtpTrust) -> Unit raise {
 ///|
 pub(all) struct TlsTransport {
   host : String
-  port : Int
+  port : Int32
   mode : SmtpTlsMode
   trust : SmtpTrust
   ehlo_domain : String

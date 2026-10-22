@@ -85,7 +85,7 @@ test "argon2 internals: pass trace (RFC 9106 KAT)" {
 
 ///|
 /// Fixed-width hex of `len` words starting at `off`.
-fn hex_words(mem : FixedArray[UInt64], off : Int, len : Int) -> String {
+fn hex_words(mem : FixedArray[UInt64], off : Int32, len : Int32) -> String {
   let mut out = ""
   for k in off..<(off + len) {
     out = out + hex_word(mem[k])

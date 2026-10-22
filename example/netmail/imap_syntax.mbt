@@ -44,7 +44,7 @@ fn read_logical_line(sock : &Socket) -> Array[Seg] raise {
 
 ///|
 /// Literal size when the line ends with `{n}` or `{n+}`, else -1.
-fn literal_marker_size(b : Bytes) -> Int raise {
+fn literal_marker_size(b : Bytes) -> Int32 raise {
   let n = b.length()
   guard n >= 3 else { return -1 }
   guard b[n - 1] == b'}' else { return -1 }
@@ -79,7 +79,7 @@ fn literal_marker_size(b : Bytes) -> Int raise {
 
 ///|
 /// Index of the `{` opening the trailing literal marker.
-fn marker_cut_index(b : Bytes) -> Int {
+fn marker_cut_index(b : Bytes) -> Int32 {
   let n = b.length()
   let mut k = n - 2
   if b[k] == b'+' {
@@ -142,7 +142,7 @@ fn parse_nodes(segs : Array[Seg]) -> Array[Node] raise {
 }
 
 ///|
-fn scan_quoted(text : Bytes, start : Int) -> (String, Int) raise {
+fn scan_quoted(text : Bytes, start : Int32) -> (String, Int32) raise {
   let sb = StringBuilder()
   let mut i = start
   while i < text.length() {
@@ -164,9 +164,9 @@ fn scan_quoted(text : Bytes, start : Int) -> (String, Int) raise {
 ///|
 fn scan_parens(
   segs : Array[Seg],
-  si : Int,
-  bi : Int,
-) -> (Array[Node], Int, Int) raise {
+  si : Int32,
+  bi : Int32,
+) -> (Array[Node], Int32, Int32) raise {
   let items : Array[Node] = []
   let mut s = si
   let mut b = bi
@@ -225,7 +225,11 @@ fn scan_parens(
 /// One atom: runs of non-space/non-delim bytes; a `[` section binds to
 /// the atom and consumes through the matching `]` (spaces and parens
 /// inside a section are part of it).
-fn scan_atom(segs : Array[Seg], si : Int, bi : Int) -> (String, Int, Int) raise {
+fn scan_atom(
+  segs : Array[Seg],
+  si : Int32,
+  bi : Int32,
+) -> (String, Int32, Int32) raise {
   let sb = StringBuilder()
   let mut s = si
   let mut b = bi

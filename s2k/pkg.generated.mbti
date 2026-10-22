@@ -7,15 +7,15 @@ import {
 }
 
 // Values
-pub const ARGON2_SALT_SIZE : Int = 16
+pub const ARGON2_SALT_SIZE : Int32 = 16
 
-pub const SALT_SIZE : Int = 8
+pub const SALT_SIZE : Int32 = 8
 
-pub fn decode_count(Int) -> Int
+pub fn decode_count(Int32) -> Int32
 
-pub fn encode_count(Int) -> Int
+pub fn encode_count(Int32) -> Int32
 
-pub fn parse(BytesView) -> (S2k, Int) raise
+pub fn parse(BytesView) -> (S2k, Int32) raise
 
 // Errors
 
@@ -23,11 +23,11 @@ pub fn parse(BytesView) -> (S2k, Int) raise
 pub(all) enum S2k {
   Simple(@primitives.HashId)
   Salted(@primitives.HashId, Bytes)
-  Iterated(@primitives.HashId, Bytes, Int)
-  Argon2(Bytes, Int, Int, Int)
+  Iterated(@primitives.HashId, Bytes, Int32)
+  Argon2(Bytes, Int32, Int32, Int32)
 } derive(Eq, @debug.Debug)
-pub fn S2k::derive_key(Self, BytesView, Int) -> Bytes raise
-pub fn S2k::derive_key_capped(Self, BytesView, Int, Int) -> Bytes raise
+pub fn S2k::derive_key(Self, BytesView, Int32) -> Bytes raise
+pub fn S2k::derive_key_capped(Self, BytesView, Int32, Int32) -> Bytes raise
 pub fn S2k::encode(Self) -> Bytes raise
 pub fn S2k::equal(Self, Self) -> Bool
 pub fn S2k::is_argon2(Self) -> Bool

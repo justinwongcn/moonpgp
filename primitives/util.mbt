@@ -16,7 +16,7 @@ pub fn ct_equal(a : BytesView, b : BytesView) -> Bool {
 ///|
 /// Left-pad `data` with zeros to `size` bytes (i2osp helper for fixed-width
 /// integers).
-pub fn pad_left(data : BytesView, size : Int) -> Bytes {
+pub fn pad_left(data : BytesView, size : Int32) -> Bytes {
   let pad = size - data.length()
   if pad <= 0 {
     return data.to_owned()
@@ -33,7 +33,7 @@ pub fn pad_left(data : BytesView, size : Int) -> Bytes {
 
 ///|
 /// Right-pad `data` with zeros to `size` bytes.
-pub fn pad_right(data : BytesView, size : Int) -> Bytes {
+pub fn pad_right(data : BytesView, size : Int32) -> Bytes {
   if data.length() >= size {
     return data.to_owned()
   }

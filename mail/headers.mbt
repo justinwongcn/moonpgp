@@ -121,7 +121,7 @@ let month_names : Array[String] = [
 ]
 
 ///|
-fn pad2(v : Int) -> String {
+fn pad2(v : Int32) -> String {
   if v < 10 {
     "0\{v}"
   } else {
@@ -134,7 +134,7 @@ fn pad2(v : Int) -> String {
 /// civil_from_days, valid across the full Int64 range including
 /// pre-1970 dates. Int64 division truncates toward zero, which is why
 /// rfc5322_date normalizes negative remainders before calling.
-fn civil_from_days(z0 : Int64) -> (Int, Int, Int) {
+fn civil_from_days(z0 : Int64) -> (Int32, Int32, Int32) {
   let z = z0 + 719468L
   let era = (if z >= 0L { z } else { z - 146096L }) / 146097L
   let doe = z - era * 146097L
@@ -172,11 +172,11 @@ fn i64_le_bytes(v : Int64) -> Bytes {
 /// convention as primitives/clock.mbt).
 #cfg(target="native")
 #borrow(t, buf)
-extern "c" fn c_localtime_r(t : Bytes, buf : FixedArray[Byte]) -> Int = "localtime_r"
+extern "c" fn c_localtime_r(t : Bytes, buf : FixedArray[Byte]) -> Int32 = "localtime_r"
 
 ///|
 #cfg(target="native")
-pub fn local_tz_offset_minutes(now_unix : Int64) -> Int raise {
+pub fn local_tz_offset_minutes(now_unix : Int64) -> Int32 raise {
   let tm = FixedArray::make(64, b'\x00')
   let r = c_localtime_r(i64_le_bytes(now_unix), tm)
   guard r != 0 else { @error.fail("mail: localtime_r failed") }
@@ -189,7 +189,7 @@ pub fn local_tz_offset_minutes(now_unix : Int64) -> Int raise {
 
 ///|
 #cfg(not(target="native"))
-pub fn local_tz_offset_minutes(_now_unix : Int64) -> Int {
+pub fn local_tz_offset_minutes(_now_unix : Int64) -> Int32 {
   0
 }
 
@@ -197,7 +197,7 @@ pub fn local_tz_offset_minutes(_now_unix : Int64) -> Int {
 /// RFC 5322 §3.3 date-time, e.g. "Fri, 02 Oct 2026 10:00:00 +0800".
 /// The zone offset is minutes east of UTC (covers half-hour zones like
 /// +0545); negative offsets format as -0730.
-pub fn rfc5322_date(now_unix : Int64, tz_offset_minutes : Int) -> String {
+pub fn rfc5322_date(now_unix : Int64, tz_offset_minutes : Int32) -> String {
   // `local` is a reserved word in newer MoonBit — avoid it
   let local_secs = now_unix + tz_offset_minutes.to_int64() * 60L
   let mut days = local_secs / 86400L

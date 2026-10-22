@@ -6,7 +6,7 @@
 /// Block size is always 16 for every algorithm OpenPGP 0/1 modes use with
 /// AES; still, callers must consult `block_size` rather than assume.
 pub(open) trait BlockCipher {
-  fn block_size(Self) -> Int
+  fn block_size(Self) -> Int32
   fn encrypt_block(Self, BytesView) -> Bytes
   fn decrypt_block(Self, BytesView) -> Bytes
 
@@ -29,7 +29,7 @@ pub(all) enum CipherAlgo {
 } derive(Eq, Debug)
 
 ///|
-pub fn CipherAlgo::number(self : CipherAlgo) -> Int {
+pub fn CipherAlgo::number(self : CipherAlgo) -> Int32 {
   match self {
     Tripledes => 2
     Cast5 => 3
@@ -40,7 +40,7 @@ pub fn CipherAlgo::number(self : CipherAlgo) -> Int {
 }
 
 ///|
-pub fn cipher_algo_of_number(n : Int) -> CipherAlgo? {
+pub fn cipher_algo_of_number(n : Int32) -> CipherAlgo? {
   match n {
     2 => Some(Tripledes)
     3 => Some(Cast5)
@@ -52,7 +52,7 @@ pub fn cipher_algo_of_number(n : Int) -> CipherAlgo? {
 }
 
 ///|
-pub fn CipherAlgo::key_size(self : CipherAlgo) -> Int {
+pub fn CipherAlgo::key_size(self : CipherAlgo) -> Int32 {
   match self {
     Tripledes => 24
     Cast5 => 16
@@ -64,7 +64,7 @@ pub fn CipherAlgo::key_size(self : CipherAlgo) -> Int {
 
 ///|
 /// Block size used by every supported algorithm.
-pub const BLOCK_SIZE : Int = 16
+pub const BLOCK_SIZE : Int32 = 16
 
 ///|
 /// Display name of a symmetric cipher algorithm, for error messages.

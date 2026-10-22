@@ -12,41 +12,46 @@
 ///|
 #cfg(target="native")
 #borrow(addr)
-extern "c" fn c_connect(fd : Int, addr : Bytes, len : Int) -> Int = "connect"
+extern "c" fn c_connect(fd : Int32, addr : Bytes, len : Int32) -> Int32 = "connect"
 
 ///|
 #cfg(target="native")
-extern "c" fn c_socket(domain : Int, tp : Int, protocol : Int) -> Int = "socket"
+extern "c" fn c_socket(domain : Int32, tp : Int32, protocol : Int32) -> Int32 = "socket"
 
 ///|
 #cfg(target="native")
 #borrow(buf)
 extern "c" fn c_recv(
-  fd : Int,
+  fd : Int32,
   buf : FixedArray[Byte],
-  len : Int,
-  flags : Int,
-) -> Int = "recv"
+  len : Int32,
+  flags : Int32,
+) -> Int32 = "recv"
 
 ///|
 #cfg(target="native")
 #borrow(data)
-extern "c" fn c_send(fd : Int, data : Bytes, len : Int, flags : Int) -> Int = "send"
+extern "c" fn c_send(
+  fd : Int32,
+  data : Bytes,
+  len : Int32,
+  flags : Int32,
+) -> Int32 = "send"
 
 ///|
 #cfg(target="native")
-extern "c" fn c_close(fd : Int) -> Int = "close"
+extern "c" fn c_close(fd : Int32) -> Int32 = "close"
 
 ///|
 #cfg(target="native")
 #borrow(opt)
 extern "c" fn c_setsockopt(
-  fd : Int,
-  level : Int,
-  name : Int,
+  fd : Int32,
+  level : Int32,
+  name : Int32,
   opt : Bytes,
-  len : Int,
-) -> Int = "setsockopt"
+  len : Int32,
+) -> Int32 = "setsockopt"
 
 ///|
 #cfg(target="native")
@@ -55,12 +60,12 @@ extern "c" fn c_perror(msg : Bytes) -> Unit = "perror"
 
 ///|
 #cfg(target="native")
-extern "c" fn c_signal(sig : Int, handler : Int64) -> Int64 = "signal"
+extern "c" fn c_signal(sig : Int32, handler : Int64) -> Int64 = "signal"
 
 ///|
 #cfg(target="native")
 #borrow(buf)
-extern "c" fn c_uname(buf : FixedArray[Byte]) -> Int = "uname"
+extern "c" fn c_uname(buf : FixedArray[Byte]) -> Int32 = "uname"
 
 ///|
 /// DNS is out of scope: dotted-quad IPv4 only (localhost maps to
@@ -85,7 +90,7 @@ fn parse_ipv4(host : String) -> (Byte, Byte, Byte, Byte) raise {
 
 ///|
 #cfg(target="native")
-fn parse_u8(s : StringView) -> Int raise {
+fn parse_u8(s : StringView) -> Int32 raise {
   guard s.length() >= 1 && s.length() <= 3 else {
     @error.fail("mailnet: bad IPv4 octet '\{s}'")
   }
@@ -126,7 +131,7 @@ fn is_darwin() -> Bool {
 ///|
 #cfg(target="native")
 priv struct NativeSock {
-  fd : Int
+  fd : Int32
   lb : LineBuffer
 }
 
@@ -135,7 +140,7 @@ priv struct NativeSock {
 /// attempted (dual setsockopt — macOS and Linux disagree on the level
 /// and option name; failures are ignored as best-effort).
 #cfg(target="native")
-fn open_native_sock(host : String, port : Int) -> NativeSock raise {
+fn open_native_sock(host : String, port : Int32) -> NativeSock raise {
   guard port > 0 && port <= 65535 else {
     @error.fail("mailnet: port out of range \{port}")
   }
@@ -176,7 +181,7 @@ fn open_native_sock(host : String, port : Int) -> NativeSock raise {
     c_close(fd) |> ignore
     @error.fail("mailnet: connect to \{host}:\{port} failed (see stderr)")
   }
-  let fill = fn(buf : FixedArray[Byte]) -> Int {
+  let fill = fn(buf : FixedArray[Byte]) -> Int32 {
     let n = c_recv(fd, buf, buf.length(), 0)
     if n < 0 {
       c_perror(b"moonpgp-mailnet")
@@ -196,7 +201,7 @@ fn open_native_sock(host : String, port : Int) -> NativeSock raise {
 
 ///|
 #cfg(target="native")
-pub fn connect_socket(host : String, port : Int) -> &Socket raise {
+pub fn connect_socket(host : String, port : Int32) -> &Socket raise {
   open_native_sock(host, port)
 }
 
@@ -204,7 +209,7 @@ pub fn connect_socket(host : String, port : Int) -> &Socket raise {
 /// SMTP's plaintext backend: the same POSIX socket behind the async
 /// Sock seam (plan tls-transport §3.2 PosixSock).
 #cfg(target="native")
-pub fn connect_sock(host : String, port : Int) -> &Sock raise {
+pub fn connect_sock(host : String, port : Int32) -> &Sock raise {
   open_native_sock(host, port)
 }
 
@@ -263,7 +268,7 @@ impl Socket for NativeSock with fn read_raw_line(self) -> Bytes raise {
 
 ///|
 #cfg(target="native")
-impl Socket for NativeSock with fn read_exact(self, n : Int) -> Bytes raise {
+impl Socket for NativeSock with fn read_exact(self, n : Int32) -> Bytes raise {
   self.lb.read_exact(n)
 }
 
@@ -291,6 +296,6 @@ impl Sock for NativeSock with fn close(self) -> Unit {
 /// is captured as an Int and closed through the POSIX FFI once the
 /// TLS layer is closed). Native only.
 #cfg(target="native")
-pub fn close_fd_raw(fd : Int) -> Unit {
+pub fn close_fd_raw(fd : Int32) -> Unit {
   c_close(fd) |> ignore
 }

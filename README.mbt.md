@@ -66,3 +66,7 @@ CI builds and tests the native, wasm, and js targets. Native is the preferred ta
 - On targets without a platform clock, expiration checks are disabled and revocation dates cannot be evaluated; revocation signatures are still cryptographically checked. The example SMTP/IMAP transports are native-only.
 
 See [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md) for dependency and attribution details.
+
+## License
+
+Apache-2.0. See [LICENSE](./LICENSE), [NOTICE](./NOTICE), and [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md).

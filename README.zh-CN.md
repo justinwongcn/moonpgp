@@ -66,3 +66,7 @@ CI 会构建并测试 native、wasm 和 js 目标；native 是首选目标。生
 - 不提供平台时钟的目标会关闭过期时间检查，且无法判断吊销日期；吊销签名仍会进行密码学验证。示例 SMTP/IMAP 传输仅支持 native。
 
 依赖与归属声明见 [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)。
+
+## 许可证
+
+Apache-2.0。详见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE) 与 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot acceptance gate: unit tests + interop + end-to-end mail flow.
-# Run from the openpgp/ project root: bash scripts/acceptance.sh
+# Run from the MoonBit module root: bash scripts/acceptance.sh
 #
 # Step 4 also runs the RFC 9580 Appendix A.5/A.12 Argon2 end-to-end vectors,
 # which are `#skip` in the default suite because each derivation allocates

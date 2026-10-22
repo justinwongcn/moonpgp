@@ -1,0 +1,7 @@
+# Local reference code and internal working documents are not part of the
+# mooncakes package. Test fixtures in testdata/ are distributed; the Go
+# generator module is not.
+/cert.rs
+/reference/
+/docs/
+/testdata/gocrypto/

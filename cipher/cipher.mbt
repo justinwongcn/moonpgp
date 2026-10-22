@@ -62,7 +62,7 @@ pub fn cfb_decrypt(
 /// copy of the last two (RFC 9580 §5.13.1). `bs` is the block size of the
 /// session-key cipher — 16 for AES but 8 for the legacy CAST5/3DES, where
 /// the old hardcoded 16 quietly produced an invalid prefix.
-pub fn random_prefix(bs : Int) -> Bytes raise {
+pub fn random_prefix(bs : Int32) -> Bytes raise {
   let p = @primitives.random_bytes(bs)
   p.add(p[bs - 2:bs].to_owned())
 }

@@ -14,7 +14,7 @@ pub(all) enum HashId {
 } derive(Eq, Debug)
 
 ///|
-pub fn HashId::number(self : HashId) -> Int {
+pub fn HashId::number(self : HashId) -> Int32 {
   match self {
     Md5 => 1
     Sha1 => 2
@@ -27,7 +27,7 @@ pub fn HashId::number(self : HashId) -> Int {
 }
 
 ///|
-pub fn hash_id_of_number(n : Int) -> HashId? {
+pub fn hash_id_of_number(n : Int32) -> HashId? {
   match n {
     1 => Some(Md5)
     2 => Some(Sha1)
@@ -42,7 +42,7 @@ pub fn hash_id_of_number(n : Int) -> HashId? {
 
 ///|
 /// Size of the digest output in bytes.
-pub fn HashId::digest_size(self : HashId) -> Int {
+pub fn HashId::digest_size(self : HashId) -> Int32 {
   match self {
     Md5 => 16
     Sha1 => 20
@@ -56,7 +56,7 @@ pub fn HashId::digest_size(self : HashId) -> Int {
 
 ///|
 /// Digest function block size in bytes (as used by HMAC, RFC 2104).
-pub fn HashId::block_size(self : HashId) -> Int {
+pub fn HashId::block_size(self : HashId) -> Int32 {
   match self {
     Sha384 | Sha512 => 128
     _ => 64

@@ -7,101 +7,101 @@ import {
 }
 
 // Values
-pub const FEATURE_SEIPD_V1 : Int = 0x01
+pub const FEATURE_SEIPD_V1 : Int32 = 0x01
 
-pub const FEATURE_SEIPD_V2 : Int = 0x08
+pub const FEATURE_SEIPD_V2 : Int32 = 0x08
 
-pub const SIGSUB_CREATION_TIME : Int = 2
+pub const SIGSUB_CREATION_TIME : Int32 = 2
 
-pub const SIGSUB_EMBEDDED_SIGNATURE : Int = 32
+pub const SIGSUB_EMBEDDED_SIGNATURE : Int32 = 32
 
-pub const SIGSUB_EXPORTABLE_CERTIFICATION : Int = 4
+pub const SIGSUB_EXPORTABLE_CERTIFICATION : Int32 = 4
 
-pub const SIGSUB_FEATURES : Int = 30
+pub const SIGSUB_FEATURES : Int32 = 30
 
-pub const SIGSUB_ISSUER_FINGERPRINT : Int = 33
+pub const SIGSUB_ISSUER_FINGERPRINT : Int32 = 33
 
-pub const SIGSUB_ISSUER_KEY_ID : Int = 16
+pub const SIGSUB_ISSUER_KEY_ID : Int32 = 16
 
-pub const SIGSUB_KEY_EXPIRATION_TIME : Int = 9
+pub const SIGSUB_KEY_EXPIRATION_TIME : Int32 = 9
 
-pub const SIGSUB_KEY_FLAGS : Int = 27
+pub const SIGSUB_KEY_FLAGS : Int32 = 27
 
-pub const SIGSUB_KEY_SERVER_PREFERENCES : Int = 23
+pub const SIGSUB_KEY_SERVER_PREFERENCES : Int32 = 23
 
-pub const SIGSUB_NOTATION_DATA : Int = 20
+pub const SIGSUB_NOTATION_DATA : Int32 = 20
 
-pub const SIGSUB_POLICY_URI : Int = 26
+pub const SIGSUB_POLICY_URI : Int32 = 26
 
-pub const SIGSUB_PREFERRED_AEAD : Int = 39
+pub const SIGSUB_PREFERRED_AEAD : Int32 = 39
 
-pub const SIGSUB_PREFERRED_COMP_ALGOS : Int = 22
+pub const SIGSUB_PREFERRED_COMP_ALGOS : Int32 = 22
 
-pub const SIGSUB_PREFERRED_HASH_ALGOS : Int = 21
+pub const SIGSUB_PREFERRED_HASH_ALGOS : Int32 = 21
 
-pub const SIGSUB_PREFERRED_KEY_SERVER : Int = 24
+pub const SIGSUB_PREFERRED_KEY_SERVER : Int32 = 24
 
-pub const SIGSUB_PREFERRED_SYM_ALGOS : Int = 11
+pub const SIGSUB_PREFERRED_SYM_ALGOS : Int32 = 11
 
-pub const SIGSUB_PRIMARY_USER_ID : Int = 25
+pub const SIGSUB_PRIMARY_USER_ID : Int32 = 25
 
-pub const SIGSUB_REGULAR_EXPRESSION : Int = 6
+pub const SIGSUB_REGULAR_EXPRESSION : Int32 = 6
 
-pub const SIGSUB_REVOCABLE : Int = 7
+pub const SIGSUB_REVOCABLE : Int32 = 7
 
-pub const SIGSUB_REVOCATION_REASON : Int = 29
+pub const SIGSUB_REVOCATION_REASON : Int32 = 29
 
-pub const SIGSUB_SIGNATURE_TARGET : Int = 31
+pub const SIGSUB_SIGNATURE_TARGET : Int32 = 31
 
-pub const SIGSUB_SIGNER_USER_ID : Int = 28
+pub const SIGSUB_SIGNER_USER_ID : Int32 = 28
 
-pub const SIGSUB_SIG_EXPIRATION_TIME : Int = 3
+pub const SIGSUB_SIG_EXPIRATION_TIME : Int32 = 3
 
-pub const SIGSUB_TRUST_SIGNATURE : Int = 5
+pub const SIGSUB_TRUST_SIGNATURE : Int32 = 5
 
-pub fn find_subpacket(Array[SigSubpacket], Int) -> Bytes?
+pub fn find_subpacket(Array[SigSubpacket], Int32) -> Bytes?
 
 pub fn parse_packets(BytesView) -> Array[RawPacket] raise
 
-pub fn pub_key_algo_of_number(Int) -> PubKeyAlgo
+pub fn pub_key_algo_of_number(Int32) -> PubKeyAlgo
 
-pub fn salt_size_of_hash(Int) -> Int raise
+pub fn salt_size_of_hash(Int32) -> Int32 raise
 
 pub fn serialize_packet(PacketTag, BytesView) -> Bytes
 
 pub fn serialize_packet_old(PacketTag, BytesView) -> Bytes
 
-pub fn session_key_checksum(BytesView) -> Int
+pub fn session_key_checksum(BytesView) -> Int32
 
-pub fn sig_type_of_number(Int) -> SigType
+pub fn sig_type_of_number(Int32) -> SigType
 
-pub fn signature_trailer(Int, Int) -> Bytes
+pub fn signature_trailer(Int32, Int32) -> Bytes
 
-pub fn tag_of_number(Int) -> PacketTag
+pub fn tag_of_number(Int32) -> PacketTag
 
 // Errors
 
 // Types and methods
 pub(all) struct AeadPacket {
-  version : Int
-  cipher_algo : Int
-  aead_algo : Int
-  chunk_octet : Int
+  version : Int32
+  cipher_algo : Int32
+  aead_algo : Int32
+  chunk_octet : Int32
   iv : Bytes
   ciphertext : Bytes
 } derive(@debug.Debug)
-pub fn AeadPacket::aead_algo(Self) -> Int
-pub fn AeadPacket::chunk_octet(Self) -> Int
-pub fn AeadPacket::cipher_algo(Self) -> Int
+pub fn AeadPacket::aead_algo(Self) -> Int32
+pub fn AeadPacket::chunk_octet(Self) -> Int32
+pub fn AeadPacket::cipher_algo(Self) -> Int32
 pub fn AeadPacket::ciphertext(Self) -> Bytes
 pub fn AeadPacket::iv(Self) -> Bytes
 pub fn AeadPacket::parse(BytesView) -> Self raise
 pub fn AeadPacket::to_body(Self) -> Bytes raise
 pub fn AeadPacket::to_repr(Self) -> @debug.Repr
-pub fn AeadPacket::version(Self) -> Int
+pub fn AeadPacket::version(Self) -> Int32
 
 pub struct CompressedPacket {
-  algo : Int
+  algo : Int32
   data : Bytes
 } derive(@debug.Debug)
 pub fn CompressedPacket::parse(BytesView) -> Self raise
@@ -111,12 +111,12 @@ pub fn CompressedPacket::to_repr(Self) -> @debug.Repr
 pub struct LiteralPacket {
   format : Char
   file_name : String
-  date : Int
+  date : Int32
   data : Bytes
 } derive(@debug.Debug)
 pub fn LiteralPacket::binary(BytesView, file_name? : String) -> Self
 pub fn LiteralPacket::data(Self) -> Bytes
-pub fn LiteralPacket::date(Self) -> Int
+pub fn LiteralPacket::date(Self) -> Int32
 pub fn LiteralPacket::file_name(Self) -> String
 pub fn LiteralPacket::format(Self) -> Char
 pub fn LiteralPacket::parse(BytesView) -> Self raise
@@ -124,9 +124,9 @@ pub fn LiteralPacket::to_body(Self) -> Bytes raise
 pub fn LiteralPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OnePassSigPacket {
-  version : Int
+  version : Int32
   sig_type : SigType
-  hash_algo : Int
+  hash_algo : Int32
   pub_algo : PubKeyAlgo
   key_id : Bytes
   salt : Bytes
@@ -139,7 +139,7 @@ pub fn OnePassSigPacket::parse(BytesView) -> Self raise
 pub fn OnePassSigPacket::salt(Self) -> Bytes
 pub fn OnePassSigPacket::to_body(Self) -> Bytes
 pub fn OnePassSigPacket::to_repr(Self) -> @debug.Repr
-pub fn OnePassSigPacket::version(Self) -> Int
+pub fn OnePassSigPacket::version(Self) -> Int32
 
 pub(all) enum PacketTag {
   Pkesk
@@ -160,17 +160,17 @@ pub(all) enum PacketTag {
   Seipd
   Mdc
   AeadEncData
-  Unknown(Int)
+  Unknown(Int32)
 } derive(Eq, @debug.Debug)
 pub fn PacketTag::equal(Self, Self) -> Bool
 pub fn PacketTag::not_equal(Self, Self) -> Bool
-pub fn PacketTag::number(Self) -> Int
+pub fn PacketTag::number(Self) -> Int32
 pub fn PacketTag::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PkeskPacket {
-  version : Int
+  version : Int32
   key_id : Bytes
-  key_version : Int
+  key_version : Int32
   fingerprint : Bytes
   pub_algo : PubKeyAlgo
   encrypted : Bytes
@@ -180,12 +180,12 @@ pub fn PkeskPacket::ecdh_ephemeral(Self) -> Bytes
 pub fn PkeskPacket::encrypted(Self) -> Bytes
 pub fn PkeskPacket::fingerprint(Self) -> Bytes
 pub fn PkeskPacket::key_id(Self) -> Bytes
-pub fn PkeskPacket::key_version(Self) -> Int
+pub fn PkeskPacket::key_version(Self) -> Int32
 pub fn PkeskPacket::parse(BytesView) -> Self raise
 pub fn PkeskPacket::pub_algo(Self) -> PubKeyAlgo
 pub fn PkeskPacket::to_body(Self) -> Bytes
 pub fn PkeskPacket::to_repr(Self) -> @debug.Repr
-pub fn PkeskPacket::version(Self) -> Int
+pub fn PkeskPacket::version(Self) -> Int32
 
 pub(all) enum PubKeyAlgo {
   RsaEncryptOrSign
@@ -197,29 +197,29 @@ pub(all) enum PubKeyAlgo {
   EdDsaLegacy
   X25519
   Ed25519
-  Unknown(Int)
+  Unknown(Int32)
 } derive(Eq, @debug.Debug)
 pub fn PubKeyAlgo::equal(Self, Self) -> Bool
 pub fn PubKeyAlgo::is_rsa(Self) -> Bool
 pub fn PubKeyAlgo::not_equal(Self, Self) -> Bool
-pub fn PubKeyAlgo::number(Self) -> Int
+pub fn PubKeyAlgo::number(Self) -> Int32
 pub fn PubKeyAlgo::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PublicKeyPacket {
-  version : Int
-  creation_time : Int
+  version : Int32
+  creation_time : Int32
   algo : PubKeyAlgo
   params : Array[Bytes]
 } derive(@debug.Debug)
 pub fn PublicKeyPacket::algo(Self) -> PubKeyAlgo
-pub fn PublicKeyPacket::creation_time(Self) -> Int
+pub fn PublicKeyPacket::creation_time(Self) -> Int32
 pub fn PublicKeyPacket::fingerprint(Self) -> Bytes raise
 pub fn PublicKeyPacket::key_id(Self) -> Bytes raise
 pub fn PublicKeyPacket::params(Self) -> Array[Bytes]
 pub fn PublicKeyPacket::parse(BytesView) -> Self raise
 pub fn PublicKeyPacket::to_body(Self) -> Bytes
 pub fn PublicKeyPacket::to_repr(Self) -> @debug.Repr
-pub fn PublicKeyPacket::version(Self) -> Int
+pub fn PublicKeyPacket::version(Self) -> Int32
 
 pub(all) struct RawPacket {
   tag : PacketTag
@@ -233,22 +233,22 @@ pub struct Reader {
   // private fields
 } derive(@debug.Debug)
 pub fn Reader::new(BytesView) -> Self
-pub fn Reader::position(Self) -> Int
-pub fn Reader::read_bytes(Self, Int) -> Bytes raise
+pub fn Reader::position(Self) -> Int32
+pub fn Reader::read_bytes(Self, Int32) -> Bytes raise
 pub fn Reader::read_mpi(Self) -> Bytes raise
 pub fn Reader::read_rest(Self) -> Bytes raise
-pub fn Reader::read_u16(Self) -> Int raise
-pub fn Reader::read_u32(Self) -> Int raise
-pub fn Reader::read_u8(Self) -> Int raise
-pub fn Reader::remaining(Self) -> Int
+pub fn Reader::read_u16(Self) -> Int32 raise
+pub fn Reader::read_u32(Self) -> Int32 raise
+pub fn Reader::read_u8(Self) -> Int32 raise
+pub fn Reader::remaining(Self) -> Int32
 pub fn Reader::to_repr(Self) -> @debug.Repr
 pub fn Reader::view(Self) -> BytesView
 
 pub(all) struct SecretKeyPacket {
   public : PublicKeyPacket
-  s2k_usage : Int
-  cipher_algo : Int
-  aead_algo : Int
+  s2k_usage : Int32
+  cipher_algo : Int32
+  aead_algo : Int32
   s2k_spec : Bytes
   iv : Bytes
   secret_material : Bytes
@@ -259,16 +259,16 @@ pub fn SecretKeyPacket::to_body(Self) -> Bytes
 pub fn SecretKeyPacket::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SeipdPacket {
-  version : Int
-  cipher_algo : Int
-  aead_algo : Int
-  chunk_octet : Int
+  version : Int32
+  cipher_algo : Int32
+  aead_algo : Int32
+  chunk_octet : Int32
   salt : Bytes
   ciphertext : Bytes
 } derive(@debug.Debug)
-pub fn SeipdPacket::aead_algo(Self) -> Int
-pub fn SeipdPacket::chunk_octet(Self) -> Int
-pub fn SeipdPacket::cipher_algo(Self) -> Int
+pub fn SeipdPacket::aead_algo(Self) -> Int32
+pub fn SeipdPacket::chunk_octet(Self) -> Int32
+pub fn SeipdPacket::cipher_algo(Self) -> Int32
 pub fn SeipdPacket::parse(BytesView) -> Self raise
 pub fn SeipdPacket::salt(Self) -> Bytes
 pub fn SeipdPacket::to_body(Self) -> Bytes
@@ -277,14 +277,14 @@ pub fn SeipdPacket::v1(BytesView) -> Self
 
 pub(all) struct SigSubpacket {
   critical : Bool
-  sub_type : Int
+  sub_type : Int32
   body : Bytes
 } derive(Eq, @debug.Debug)
 pub fn SigSubpacket::body(Self) -> Bytes
 pub fn SigSubpacket::critical(Self) -> Bool
 pub fn SigSubpacket::equal(Self, Self) -> Bool
 pub fn SigSubpacket::not_equal(Self, Self) -> Bool
-pub fn SigSubpacket::sub_type(Self) -> Int
+pub fn SigSubpacket::sub_type(Self) -> Int32
 pub fn SigSubpacket::to_repr(Self) -> @debug.Repr
 
 pub(all) enum SigType {
@@ -303,77 +303,77 @@ pub(all) enum SigType {
   CertificationRevocation
   Timestamp
   ThirdPartyConfirmation
-  Unknown(Int)
+  Unknown(Int32)
 } derive(Eq, @debug.Debug)
 pub fn SigType::equal(Self, Self) -> Bool
 pub fn SigType::not_equal(Self, Self) -> Bool
-pub fn SigType::number(Self) -> Int
+pub fn SigType::number(Self) -> Int32
 pub fn SigType::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignaturePacket {
-  version : Int
+  version : Int32
   sig_type : SigType
   pub_algo : PubKeyAlgo
-  hash_algo : Int
+  hash_algo : Int32
   hashed_subpackets : Array[SigSubpacket]
   unhashed_subpackets : Array[SigSubpacket]
   raw_hashed_area : Bytes
-  fast_hash : Int
+  fast_hash : Int32
   salt : Bytes
   sig_params : Array[Bytes]
 } derive(@debug.Debug)
-pub fn SignaturePacket::creation_time(Self) -> Int?
-pub fn SignaturePacket::fast_hash(Self) -> Int
+pub fn SignaturePacket::creation_time(Self) -> Int32?
+pub fn SignaturePacket::fast_hash(Self) -> Int32
 pub fn SignaturePacket::features(Self) -> Bytes?
-pub fn SignaturePacket::hash_algo(Self) -> Int
+pub fn SignaturePacket::hash_algo(Self) -> Int32
 pub fn SignaturePacket::hash_prefix(Self) -> Bytes
 pub fn SignaturePacket::hashed_subpackets(Self) -> Array[SigSubpacket]
 pub fn SignaturePacket::issuer_key_id(Self) -> Bytes?
-pub fn SignaturePacket::key_expiration_time(Self) -> Int
+pub fn SignaturePacket::key_expiration_time(Self) -> Int32
 pub fn SignaturePacket::key_flags(Self) -> Bytes?
 pub fn SignaturePacket::parse(BytesView) -> Self raise
-pub fn SignaturePacket::preferred_aead(Self) -> Array[(Int, Int)]?
+pub fn SignaturePacket::preferred_aead(Self) -> Array[(Int32, Int32)]?
 pub fn SignaturePacket::pub_algo(Self) -> PubKeyAlgo
 pub fn SignaturePacket::salt(Self) -> Bytes
-pub fn SignaturePacket::sig_expiration_time(Self) -> Int
+pub fn SignaturePacket::sig_expiration_time(Self) -> Int32
 pub fn SignaturePacket::sig_params(Self) -> Array[Bytes]
 pub fn SignaturePacket::sig_type(Self) -> SigType
 pub fn SignaturePacket::supports_seipd_v2(Self) -> Bool
 pub fn SignaturePacket::to_body(Self) -> Bytes
 pub fn SignaturePacket::to_repr(Self) -> @debug.Repr
 pub fn SignaturePacket::unhashed_subpackets(Self) -> Array[SigSubpacket]
-pub fn SignaturePacket::version(Self) -> Int
+pub fn SignaturePacket::version(Self) -> Int32
 
 pub(all) struct SkeskPacket {
-  version : Int
-  cipher_algo : Int
-  aead_algo : Int
+  version : Int32
+  cipher_algo : Int32
+  aead_algo : Int32
   s2k : @s2k.S2k
   iv : Bytes
   encrypted_session_key : Bytes
 } derive(@debug.Debug)
-pub fn SkeskPacket::aead_algo(Self) -> Int
-pub fn SkeskPacket::cipher_algo(Self) -> Int
+pub fn SkeskPacket::aead_algo(Self) -> Int32
+pub fn SkeskPacket::cipher_algo(Self) -> Int32
 pub fn SkeskPacket::encrypted_session_key(Self) -> Bytes
 pub fn SkeskPacket::iv(Self) -> Bytes
 pub fn SkeskPacket::parse(BytesView) -> Self raise
 pub fn SkeskPacket::s2k(Self) -> @s2k.S2k
 pub fn SkeskPacket::to_body(Self) -> Bytes raise
 pub fn SkeskPacket::to_repr(Self) -> @debug.Repr
-pub fn SkeskPacket::version(Self) -> Int
+pub fn SkeskPacket::version(Self) -> Int32
 
 pub struct Writer {
   // private fields
 } derive(@debug.Debug)
 pub fn Writer::bytes(Self, BytesView) -> Unit
-pub fn Writer::length(Self) -> Int
+pub fn Writer::length(Self) -> Int32
 pub fn Writer::mpi(Self, BytesView) -> Unit
 pub fn Writer::new() -> Self
 pub fn Writer::to_bytes(Self) -> Bytes
 pub fn Writer::to_repr(Self) -> @debug.Repr
-pub fn Writer::u16(Self, Int) -> Unit
-pub fn Writer::u32(Self, Int) -> Unit
-pub fn Writer::u8(Self, Int) -> Unit
+pub fn Writer::u16(Self, Int32) -> Unit
+pub fn Writer::u32(Self, Int32) -> Unit
+pub fn Writer::u8(Self, Int32) -> Unit
 
 // Type aliases
 

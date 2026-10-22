@@ -11,7 +11,7 @@ priv struct AesAdapter {
 }
 
 ///|
-impl BlockCipher for AesAdapter with fn block_size(_self) -> Int {
+impl BlockCipher for AesAdapter with fn block_size(_self) -> Int32 {
   BLOCK_SIZE
 }
 

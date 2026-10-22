@@ -112,7 +112,7 @@ pub struct DecryptionBuilder {
   priv passwords : Array[String]
   priv private_keys : Array[PrivateKey]
   priv verifiers : Array[PublicKey]
-  priv max_decompressed : Int
+  priv max_decompressed : Int32
 }
 
 ///|
@@ -130,7 +130,7 @@ pub fn Pgp::decryption(_self : Pgp) -> DecryptionBuilder {
 /// Override the decompressed-payload ceiling (M4; default 512 MiB).
 pub fn DecryptionBuilder::max_decompressed(
   self : DecryptionBuilder,
-  limit : Int,
+  limit : Int32,
 ) -> DecryptionBuilder {
   { ..self, max_decompressed: limit, }
 }
@@ -211,7 +211,7 @@ fn decrypt_and_verify_list(
   message : String,
   keys : Array[PrivateKey],
   verifiers : Array[PublicKey],
-  max_decompressed : Int,
+  max_decompressed : Int32,
 ) -> (Bytes, VerifyStatus) raise {
   if keys.length() == 1 && verifiers.length() == 1 {
     decrypt_and_verify(message, keys, Some(verifiers[0]), max_decompressed~)
@@ -239,7 +239,7 @@ fn decrypt_and_verify_list(
 /// Builder for key generation.
 pub struct KeyGenBuilder {
   priv user_id : String
-  priv bits : Int
+  priv bits : Int32
 }
 
 ///|
@@ -260,7 +260,7 @@ pub fn KeyGenBuilder::add_user_id(
 ///|
 pub fn KeyGenBuilder::rsa_bits(
   self : KeyGenBuilder,
-  bits : Int,
+  bits : Int32,
 ) -> KeyGenBuilder {
   { ..self, bits, }
 }

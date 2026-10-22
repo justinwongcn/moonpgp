@@ -73,7 +73,7 @@ fn cmac(bc : &@primitives.BlockCipher, msg : BytesView) -> Bytes raise {
 /// `OMAC^t(M) = CMAC([t]_128 || M)` — the EAX domain-separated MAC.
 fn eax_omac(
   bc : &@primitives.BlockCipher,
-  domain : Int,
+  domain : Int32,
   data : BytesView,
 ) -> Bytes raise {
   let prefix = Array::make(16, b'\x00')

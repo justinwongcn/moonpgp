@@ -21,18 +21,18 @@
 /// UIDVALIDITY is REPORTED, not persisted-compared across sessions —
 /// the stale-UID safety net is the UID echo check in imap_fetch_message.
 pub(all) struct MailboxState {
-  mut exists : Int
-  mut uidvalidity : Int
+  mut exists : Int32
+  mut uidvalidity : Int32
 }
 
 ///|
 /// One summarized message from the list fetch.
 pub(all) struct MailSummary {
-  seq : Int
-  uid : Int
+  seq : Int32
+  uid : Int32
   flags : String
   internaldate : String
-  size : Int
+  size : Int32
   /// Raw bytes of the requested header-fields block (a literal).
   headers : Bytes
 }
@@ -40,7 +40,7 @@ pub(all) struct MailSummary {
 ///|
 pub(all) struct ImapClient {
   sock : &Socket
-  mut tag_n : Int
+  mut tag_n : Int32
   state : MailboxState
 }
 
@@ -162,7 +162,7 @@ pub fn ImapClient::read_greeting(self : ImapClient) -> Unit raise {
 ///|
 pub fn connect_imap(
   host : String,
-  port : Int,
+  port : Int32,
   allow_insecure : Bool,
 ) -> ImapClient raise {
   if !is_local_host(host) && !allow_insecure {
@@ -262,7 +262,7 @@ pub fn ImapClient::imap_select(
 }
 
 ///|
-pub fn parse_int(s : String) -> Int? {
+pub fn parse_int(s : String) -> Int32? {
   guard s.length() > 0 else { return None }
   let mut v = 0
   for c in s {
@@ -299,7 +299,7 @@ pub fn ImapClient::imap_logout(self : ImapClient) -> Unit {
 /// tripped by abandoned sessions; imap_logout closes the socket too.
 pub fn with_imap_session(
   host : String,
-  port : Int,
+  port : Int32,
   allow_insecure : Bool,
   user : String,
   password : String,

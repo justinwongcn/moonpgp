@@ -1,11 +1,11 @@
 ///|
 /// PKESK packet body, versions 3 (RFC 9580 §5.1.1) and 6 (§5.1.2).
 pub(all) struct PkeskPacket {
-  version : Int
+  version : Int32
   /// v3 only: recipient key id (all zero for a hidden recipient).
   key_id : Bytes
   /// v6 only: recipient key version (0 for an anonymous recipient).
-  key_version : Int
+  key_version : Int32
   /// v6 only: recipient fingerprint (empty for an anonymous recipient).
   fingerprint : Bytes
   pub_algo : PubKeyAlgo
@@ -19,7 +19,7 @@ pub(all) struct PkeskPacket {
 } derive(Debug)
 
 ///|
-pub fn PkeskPacket::version(self : PkeskPacket) -> Int {
+pub fn PkeskPacket::version(self : PkeskPacket) -> Int32 {
   self.version
 }
 
@@ -29,7 +29,7 @@ pub fn PkeskPacket::key_id(self : PkeskPacket) -> Bytes {
 }
 
 ///|
-pub fn PkeskPacket::key_version(self : PkeskPacket) -> Int {
+pub fn PkeskPacket::key_version(self : PkeskPacket) -> Int32 {
   self.key_version
 }
 
@@ -178,12 +178,12 @@ pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
 /// version 6 adds the two count octets and the HKDF-SHA256 key
 /// separation (`info`/AD = tag | version | cipher | aead).
 pub(all) struct SkeskPacket {
-  version : Int
+  version : Int32
   /// Symmetric algorithm used for the message; also the default derivation
   /// length selector for the S2K key.
-  cipher_algo : Int
+  cipher_algo : Int32
   /// AEAD algorithm id for version 5 (0 for version 4).
-  aead_algo : Int
+  aead_algo : Int32
   s2k : @s2k.S2k
   /// AEAD IV for version 5 (empty for version 4).
   iv : Bytes
@@ -194,17 +194,17 @@ pub(all) struct SkeskPacket {
 } derive(Debug)
 
 ///|
-pub fn SkeskPacket::version(self : SkeskPacket) -> Int {
+pub fn SkeskPacket::version(self : SkeskPacket) -> Int32 {
   self.version
 }
 
 ///|
-pub fn SkeskPacket::cipher_algo(self : SkeskPacket) -> Int {
+pub fn SkeskPacket::cipher_algo(self : SkeskPacket) -> Int32 {
   self.cipher_algo
 }
 
 ///|
-pub fn SkeskPacket::aead_algo(self : SkeskPacket) -> Int {
+pub fn SkeskPacket::aead_algo(self : SkeskPacket) -> Int32 {
   self.aead_algo
 }
 
@@ -228,7 +228,7 @@ pub fn SkeskPacket::encrypted_session_key(self : SkeskPacket) -> Bytes {
 /// 3 GCM=12. Local table (mirroring @cipher.AeadMode::iv_length) keeps the
 /// packet layer free of a cipher-package dependency, like the cipher
 /// block-size table above.
-fn aead_iv_len(algo : Int) -> Int raise {
+fn aead_iv_len(algo : Int32) -> Int32 raise {
   match algo {
     1 => 16
     2 => 15
@@ -328,32 +328,32 @@ pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes raise {
 /// under --force-aead. RFC 9580 reserves tag 20 in favour of SEIPD v2;
 /// this packet exists here for GnuPG interop and legacy data.
 pub(all) struct AeadPacket {
-  version : Int
-  cipher_algo : Int
-  aead_algo : Int
-  chunk_octet : Int
+  version : Int32
+  cipher_algo : Int32
+  aead_algo : Int32
+  chunk_octet : Int32
   iv : Bytes
   /// Chunk ciphertexts+tags followed by the final tag.
   ciphertext : Bytes
 } derive(Debug)
 
 ///|
-pub fn AeadPacket::version(self : AeadPacket) -> Int {
+pub fn AeadPacket::version(self : AeadPacket) -> Int32 {
   self.version
 }
 
 ///|
-pub fn AeadPacket::cipher_algo(self : AeadPacket) -> Int {
+pub fn AeadPacket::cipher_algo(self : AeadPacket) -> Int32 {
   self.cipher_algo
 }
 
 ///|
-pub fn AeadPacket::aead_algo(self : AeadPacket) -> Int {
+pub fn AeadPacket::aead_algo(self : AeadPacket) -> Int32 {
   self.aead_algo
 }
 
 ///|
-pub fn AeadPacket::chunk_octet(self : AeadPacket) -> Int {
+pub fn AeadPacket::chunk_octet(self : AeadPacket) -> Int32 {
   self.chunk_octet
 }
 
@@ -414,7 +414,7 @@ pub struct LiteralPacket {
   format : Char
   file_name : String
   /// Modification date, seconds since epoch.
-  date : Int
+  date : Int32
   data : Bytes
 } derive(Debug)
 
@@ -429,7 +429,7 @@ pub fn LiteralPacket::file_name(self : LiteralPacket) -> String {
 }
 
 ///|
-pub fn LiteralPacket::date(self : LiteralPacket) -> Int {
+pub fn LiteralPacket::date(self : LiteralPacket) -> Int32 {
   self.date
 }
 
@@ -499,7 +499,7 @@ pub fn LiteralPacket::binary(
 /// Compressed data packet body (RFC 9580 §5.6): algorithm octet + data.
 pub struct CompressedPacket {
   /// 0 = uncompressed, 1 = ZIP (raw DEFLATE), 2 = ZLIB, 3 = BZip2.
-  algo : Int
+  algo : Int32
   data : Bytes
 } derive(Debug)
 
@@ -523,30 +523,30 @@ pub fn CompressedPacket::to_body(self : CompressedPacket) -> Bytes {
 /// SEIPD packet body: version 1 (RFC 9580 §5.13.1, the MDC-protected CFB
 /// shape) and version 2 (§5.13.2, the chunked AEAD shape).
 pub(all) struct SeipdPacket {
-  version : Int
+  version : Int32
   /// v2 only: symmetric cipher algorithm id.
-  cipher_algo : Int
+  cipher_algo : Int32
   /// v2 only: AEAD algorithm id.
-  aead_algo : Int
+  aead_algo : Int32
   /// v2 only: chunk-size octet (`chunk = 2^(c+6)` octets).
-  chunk_octet : Int
+  chunk_octet : Int32
   /// v2 only: 32-octet HKDF salt.
   salt : Bytes
   ciphertext : Bytes
 } derive(Debug)
 
 ///|
-pub fn SeipdPacket::cipher_algo(self : SeipdPacket) -> Int {
+pub fn SeipdPacket::cipher_algo(self : SeipdPacket) -> Int32 {
   self.cipher_algo
 }
 
 ///|
-pub fn SeipdPacket::aead_algo(self : SeipdPacket) -> Int {
+pub fn SeipdPacket::aead_algo(self : SeipdPacket) -> Int32 {
   self.aead_algo
 }
 
 ///|
-pub fn SeipdPacket::chunk_octet(self : SeipdPacket) -> Int {
+pub fn SeipdPacket::chunk_octet(self : SeipdPacket) -> Int32 {
   self.chunk_octet
 }
 
@@ -610,7 +610,7 @@ pub fn SeipdPacket::to_body(self : SeipdPacket) -> Bytes {
 
 ///|
 /// Session-key checksum (RFC 9580 §5.1): sum of octets mod 65536.
-pub fn session_key_checksum(key : BytesView) -> Int {
+pub fn session_key_checksum(key : BytesView) -> Int32 {
   let mut sum = 0
   for b in key {
     sum = (sum + b.to_int()) & 0xFFFF

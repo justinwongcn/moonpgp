@@ -16,7 +16,7 @@
 /// General block permutation: bit `perm[position]` of `src` (0-based,
 /// most-significant-first) becomes bit `width - 1 - position` of the
 /// result.
-fn des_permute(src : UInt64, perm : Array[Int], width : Int) -> UInt64 {
+fn des_permute(src : UInt64, perm : Array[Int32], width : Int32) -> UInt64 {
   let mut block = 0UL
   for position in 0..<perm.length() {
     let bit = (src >> perm[position]) & 1UL
@@ -265,7 +265,7 @@ fn DesState::crypt(self : DesState, src : BytesView, decrypt : Bool) -> Bytes {
 }
 
 ///|
-impl BlockCipher for DesState with fn block_size(_self) -> Int {
+impl BlockCipher for DesState with fn block_size(_self) -> Int32 {
   8
 }
 

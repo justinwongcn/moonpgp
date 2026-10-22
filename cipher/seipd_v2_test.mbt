@@ -135,8 +135,8 @@ test "seipd v2 seal/open round trip across an exact chunk boundary" {
 fn seipd_v2_open_sample(
   session_key : Bytes,
   salt : Bytes,
-  aead : Int,
-  chunk_octet : Int,
+  aead : Int32,
+  chunk_octet : Int32,
   cipher : Bytes,
   want_hkdf_hex : String,
 ) -> Bytes raise {

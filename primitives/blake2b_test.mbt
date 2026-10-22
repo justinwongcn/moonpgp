@@ -96,7 +96,7 @@ test "blake2b rejects an out-of-range digest length" {
 
 ///|
 /// `"abc"` followed by `n` zero octets.
-fn padded_abc(n : Int) -> Bytes {
+fn padded_abc(n : Int32) -> Bytes {
   let out : Array[Byte] = [b'a', b'b', b'c']
   for _ in 0..<n {
     out.push(b'\x00')

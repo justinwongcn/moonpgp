@@ -22,7 +22,7 @@ pub(all) struct RsaPrivateKey {
 
 ///|
 /// OCTET length of the modulus (k in PKCS#1 terms).
-pub fn RsaPublicKey::octet_length(self : RsaPublicKey) -> Int {
+pub fn RsaPublicKey::octet_length(self : RsaPublicKey) -> Int32 {
   (self.n.bit_length() + 7) / 8
 }
 
@@ -59,7 +59,7 @@ pub fn os2ip(data : BytesView) -> BigInt {
 
 ///|
 /// i2osp: integer to fixed-width octet string.
-pub fn i2osp(v : BigInt, length : Int) -> Bytes {
+pub fn i2osp(v : BigInt, length : Int32) -> Bytes {
   @primitives.pad_left(v.to_octets().exact_view(), length)
 }
 
@@ -184,7 +184,7 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
 /// Generate an RSA key pair whose modulus has `bits` bits with public
 /// exponent 65537. Primality uses Miller-Rabin with 40 random bases per
 /// candidate after trial division.
-pub fn generate_rsa_key(bits~ : Int) -> RsaPrivateKey raise {
+pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise {
   guard bits >= 1024 else {
     @error.fail("rsa: refusing to generate keys under 1024 bits")
   }

@@ -13,7 +13,7 @@
 /// RFC 9106 §4 recommended Argon2id option and what RFC 9580 Appendix A.5
 /// and A.12 use. A 20-octet S2K specifier can ask for up to 2^31 KiB, so
 /// callers must never allocate an attacker-chosen size unchecked.
-pub const ARGON2_MAX_MEMORY_KIB : Int = 2097152
+pub const ARGON2_MAX_MEMORY_KIB : Int32 = 2097152
 
 ///|
 /// Default Argon2 memory policy (KiB) for the public decrypt entry points:
@@ -35,27 +35,27 @@ pub const ARGON2_MAX_MEMORY_KIB : Int = 2097152
 ///
 /// `scripts/acceptance.sh` and the `slow:*` tests do exactly that, so the
 /// widened call is exercised by the release gate.
-pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int = 262144
+pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int32 = 262144
 
 ///|
 /// Argon2 version pinned by RFC 9580 (the current 1.3 version).
-const ARGON2_VERSION : Int = 0x13
+const ARGON2_VERSION : Int32 = 0x13
 
 ///|
 /// Argon2 type id for Argon2id (0=d, 1=i, 2=id).
-const ARGON2_TYPE_ID : Int = 2
+const ARGON2_TYPE_ID : Int32 = 2
 
 ///|
 /// One Argon2 block is 128 64-bit words (1024 octets).
-const ARGON2_BLOCK_WORDS : Int = 128
+const ARGON2_BLOCK_WORDS : Int32 = 128
 
 ///|
 /// Words between regenerations of the Argon2i address block.
-const ARGON2_ADDRESSES_IN_BLOCK : Int = 128
+const ARGON2_ADDRESSES_IN_BLOCK : Int32 = 128
 
 ///|
 /// Number of slices (synchronisation points) per pass.
-const ARGON2_SYNC_POINTS : Int = 4
+const ARGON2_SYNC_POINTS : Int32 = 4
 
 ///|
 /// The mutable working set of one Argon2 invocation.
@@ -70,17 +70,17 @@ priv struct Argon2Instance {
   input : FixedArray[UInt64]
   /// All-zero block used by `next_addresses`.
   zero : FixedArray[UInt64]
-  lanes : Int
+  lanes : Int32
   /// Rounded block count actually allocated (a multiple of 4*lanes).
-  m_prime : Int
+  m_prime : Int32
   /// Blocks per lane.
-  lane_len : Int
+  lane_len : Int32
   /// Blocks per slice (a quarter of a lane).
-  segment_len : Int
+  segment_len : Int32
 }
 
 ///|
-fn argon2_instance(lanes : Int, m_prime : Int) -> Argon2Instance {
+fn argon2_instance(lanes : Int32, m_prime : Int32) -> Argon2Instance {
   let lane_len = m_prime / lanes
   {
     mem: FixedArray::make(m_prime * ARGON2_BLOCK_WORDS, 0UL),
@@ -101,10 +101,10 @@ fn argon2_instance(lanes : Int, m_prime : Int) -> Argon2Instance {
 /// words of `b` in place.
 fn blamka_gb(
   b : FixedArray[UInt64],
-  i : Int,
-  j : Int,
-  k : Int,
-  l : Int,
+  i : Int32,
+  j : Int32,
+  k : Int32,
+  l : Int32,
 ) -> Unit {
   let mut a = b[i]
   let mut bb = b[j]
@@ -129,22 +129,22 @@ fn blamka_gb(
 /// (RFC 9106 §3.6).
 fn argon2_round(
   b : FixedArray[UInt64],
-  i0 : Int,
-  i1 : Int,
-  i2 : Int,
-  i3 : Int,
-  i4 : Int,
-  i5 : Int,
-  i6 : Int,
-  i7 : Int,
-  i8 : Int,
-  i9 : Int,
-  i10 : Int,
-  i11 : Int,
-  i12 : Int,
-  i13 : Int,
-  i14 : Int,
-  i15 : Int,
+  i0 : Int32,
+  i1 : Int32,
+  i2 : Int32,
+  i3 : Int32,
+  i4 : Int32,
+  i5 : Int32,
+  i6 : Int32,
+  i7 : Int32,
+  i8 : Int32,
+  i9 : Int32,
+  i10 : Int32,
+  i11 : Int32,
+  i12 : Int32,
+  i13 : Int32,
+  i14 : Int32,
+  i15 : Int32,
 ) -> Unit {
   blamka_gb(b, i0, i4, i8, i12)
   blamka_gb(b, i1, i5, i9, i13)
@@ -216,9 +216,9 @@ fn argon2_permute(b : FixedArray[UInt64]) -> Unit {
 /// back in place just before it is overwritten.
 fn argon2_fill_block(
   inst : Argon2Instance,
-  prev_off : Int,
-  ref_off : Int,
-  out_off : Int,
+  prev_off : Int32,
+  ref_off : Int32,
+  out_off : Int32,
   with_xor : Bool,
 ) -> Unit {
   let mem = inst.mem
@@ -276,15 +276,15 @@ fn argon2_next_addresses(inst : Argon2Instance) -> Unit {
 /// The reference-block index selection (RFC 9106 §3.4.1.3, `index_alpha`).
 fn argon2_index_alpha(
   inst : Argon2Instance,
-  pass : Int,
-  slice : Int,
-  index : Int,
+  pass : Int32,
+  slice : Int32,
+  index : Int32,
   j1 : UInt64,
   same_lane : Bool,
-) -> Int {
+) -> Int32 {
   let seg = inst.segment_len
   let lane_len = inst.lane_len
-  let reference_area_size : Int = if pass == 0 {
+  let reference_area_size : Int32 = if pass == 0 {
     if slice == 0 {
       index - 1
     } else if same_lane {
@@ -301,7 +301,7 @@ fn argon2_index_alpha(
   let mut relative_position = j1
   relative_position = (relative_position * relative_position) >> 32
   relative_position = area - 1UL - ((area * relative_position) >> 32)
-  let start_position : Int = if pass == 0 {
+  let start_position : Int32 = if pass == 0 {
     0
   } else if slice == ARGON2_SYNC_POINTS - 1 {
     0
@@ -316,10 +316,10 @@ fn argon2_index_alpha(
 /// (RFC 9106 §3.4.1.1).
 fn argon2_fill_segment(
   inst : Argon2Instance,
-  pass : Int,
-  lane : Int,
-  slice : Int,
-  passes : Int,
+  pass : Int32,
+  lane : Int32,
+  slice : Int32,
+  passes : Int32,
 ) -> Unit {
   let lanes = inst.lanes
   let seg = inst.segment_len
@@ -392,7 +392,7 @@ fn argon2_fill_segment(
 
 ///|
 /// Append a 32-bit little-endian integer.
-fn push_le32(out : Array[Byte], v : Int) -> Unit {
+fn push_le32(out : Array[Byte], v : Int32) -> Unit {
   out.push((v & 0xFF).to_byte())
   out.push(((v >> 8) & 0xFF).to_byte())
   out.push(((v >> 16) & 0xFF).to_byte())
@@ -412,7 +412,7 @@ fn push_sized(out : Array[Byte], data : BytesView) -> Unit {
 /// Store 128 little-endian words of `data` (1024 octets) at block `off`.
 fn argon2_store_block(
   mem : FixedArray[UInt64],
-  off : Int,
+  off : Int32,
   data : BytesView,
 ) -> Unit {
   let arr = data.to_array()
@@ -426,8 +426,8 @@ fn argon2_store_block(
 /// The 1024-octet little-endian serialization of `len` words of `words`.
 fn argon2_words_to_bytes(
   words : FixedArray[UInt64],
-  off : Int,
-  len : Int,
+  off : Int32,
+  len : Int32,
 ) -> Bytes {
   let out : Array[Byte] = Array(capacity=len * 8)
   for i in off..<(off + len) {
@@ -440,7 +440,7 @@ fn argon2_words_to_bytes(
 
 ///|
 /// The Argon2 variable-length hash H' (RFC 9106 §3.3).
-fn argon2_h_prime(input : BytesView, out_len : Int) -> Bytes raise {
+fn argon2_h_prime(input : BytesView, out_len : Int32) -> Bytes raise {
   let prefix : Array[Byte] = []
   push_le32(prefix, out_len)
   let head = concat2(Bytes::from_array(prefix), input)
@@ -474,10 +474,10 @@ fn argon2_h0(
   salt : BytesView,
   secret : BytesView,
   ad : BytesView,
-  tag_len : Int,
-  m_kib : Int,
-  passes : Int,
-  lanes : Int,
+  tag_len : Int32,
+  m_kib : Int32,
+  passes : Int32,
+  lanes : Int32,
 ) -> Bytes raise {
   let buf : Array[Byte] = []
   push_le32(buf, lanes)
@@ -502,11 +502,11 @@ pub fn argon2id_with_secret_ad(
   salt : BytesView,
   secret : BytesView,
   ad : BytesView,
-  passes : Int,
-  m_kib : Int,
-  parallelism : Int,
-  tag_len : Int,
-  max_memory_kib? : Int = ARGON2_MAX_MEMORY_KIB,
+  passes : Int32,
+  m_kib : Int32,
+  parallelism : Int32,
+  tag_len : Int32,
+  max_memory_kib~ : Int32 = ARGON2_MAX_MEMORY_KIB,
 ) -> Bytes raise {
   guard passes >= 1 else { @error.fail("argon2: passes must be non-zero") }
   guard parallelism >= 1 else {
@@ -604,11 +604,11 @@ pub fn argon2id_with_secret_ad(
 pub fn argon2id(
   pass : BytesView,
   salt : BytesView,
-  passes : Int,
-  m_kib : Int,
-  parallelism : Int,
-  tag_len : Int,
-  max_memory_kib? : Int = ARGON2_MAX_MEMORY_KIB,
+  passes : Int32,
+  m_kib : Int32,
+  parallelism : Int32,
+  tag_len : Int32,
+  max_memory_kib~ : Int32 = ARGON2_MAX_MEMORY_KIB,
 ) -> Bytes raise {
   argon2id_with_secret_ad(
     pass,

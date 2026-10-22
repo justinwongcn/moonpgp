@@ -60,7 +60,7 @@ fn create_pkesk(
 fn unwrap_pkesk(
   pkesk : @packet.PkeskPacket,
   sk : @packet.SecretKeyPacket,
-) -> (Int, Bytes) raise {
+) -> (Int32, Bytes) raise {
   match pkesk.pub_algo() {
     @packet.X25519 => x25519_unwrap_session_key(pkesk, sk)
     @packet.Ecdh => ecdh_unwrap_session_key(pkesk, sk)
@@ -171,7 +171,7 @@ fn seal_to_recipients(
 /// The chunk-size octet this library writes for v2 SEIPD packets:
 /// 2^(14+6) = 1 MiB (RFC 9580 §5.13.2 forbids values above 16). Internal:
 /// it is a writer-side policy knob, not part of the public API.
-const SEIPD_V2_CHUNK_OCTET : Int = 14
+const SEIPD_V2_CHUNK_OCTET : Int32 = 14
 
 ///|
 /// Seal a v2 SEIPD packet (RFC 9580 §5.13.2): fresh 32-octet salt, HKDF
@@ -179,7 +179,7 @@ const SEIPD_V2_CHUNK_OCTET : Int = 14
 fn seal_seipd_v2(
   algo : @primitives.CipherAlgo,
   mode : @cipher.AeadMode,
-  chunk_octet : Int,
+  chunk_octet : Int32,
   session_key : BytesView,
   plain : BytesView,
 ) -> @packet.SeipdPacket raise {
@@ -221,7 +221,7 @@ fn seal_seipd_v2(
 }
 
 ///|
-fn checksum_bytes(sum : Int) -> Bytes {
+fn checksum_bytes(sum : Int32) -> Bytes {
   Bytes::from_array([(sum >> 8).to_byte(), sum.to_byte()])
 }
 
@@ -232,7 +232,7 @@ fn checksum_bytes(sum : Int) -> Bytes {
 pub fn decrypt_binary_with_private_key(
   data : BytesView,
   key : PrivateKey,
-  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let packets = @packet.parse_packets(data)
   let inner = match decrypt_inner_with_key(packets, key) {
@@ -301,7 +301,7 @@ fn decrypt_inner_with_key(
 fn rsa_unwrap_session_key(
   pkesk : @packet.PkeskPacket,
   sk : @packet.SecretKeyPacket,
-) -> (Int, Bytes) raise {
+) -> (Int32, Bytes) raise {
   let rsa = rsa_secret_parts(sk)
   let k = rsa.public.octet_length()
   guard pkesk.encrypted().length() <= k else {
@@ -335,9 +335,9 @@ fn rsa_unwrap_session_key(
 /// packet because SEIPD v1 carries no cipher of its own.
 fn unwrap_seipd_inner(
   packets : Array[@packet.RawPacket],
-  algo_id : Int,
+  algo_id : Int32,
   session_key : Bytes,
-  esk_version : Int,
+  esk_version : Int32,
 ) -> Bytes raise {
   for p in packets {
     if p.tag() == @packet.Seipd {
@@ -373,7 +373,7 @@ fn unwrap_seipd_inner(
 pub fn decrypt_with_private_key(
   message : String,
   key : PrivateKey,
-  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let armored = @armor.decode(message)
   decrypt_binary_with_private_key(
@@ -388,8 +388,8 @@ pub fn decrypt_with_private_key(
 /// the preferred list as given, plus the mandatory-to-implement AES-128/OCB
 /// which RFC 9580 §5.2.3.15 says is "implicitly listed at the end" when the
 /// subpacket does not contain it.
-fn v6_ciphersuite_candidates(recipient : PublicKey) -> Array[(Int, Int)] {
-  let out : Array[(Int, Int)] = []
+fn v6_ciphersuite_candidates(recipient : PublicKey) -> Array[(Int32, Int32)] {
+  let out : Array[(Int32, Int32)] = []
   for pair in recipient.preferred_aead() {
     if !out.contains(pair) {
       out.push(pair)
@@ -412,7 +412,7 @@ fn v6_ciphersuite_candidates(recipient : PublicKey) -> Array[(Int, Int)] {
 fn pick_v6_ciphersuite(
   recipients : Array[PublicKey],
 ) -> (@primitives.CipherAlgo, @cipher.AeadMode) {
-  let lists : Array[Array[(Int, Int)]] = []
+  let lists : Array[Array[(Int32, Int32)]] = []
   for recipient in recipients {
     lists.push(v6_ciphersuite_candidates(recipient))
   }

@@ -32,7 +32,7 @@ fn is_ascii_printable(s : String) -> Bool {
 /// (ceil(n/3)*4) + "?=" (2) must stay ≤ 75, so n ≤ 47.25. The chunker
 /// splits before lead bytes only, so a chunk grows by at most 3 extra
 /// continuation octets; 45 keeps every word ≤ 72 octets.
-const RFC2047_CHUNK_BYTES : Int = 45
+const RFC2047_CHUNK_BYTES : Int32 = 45
 
 ///|
 fn flush_encoded_word(buf : StringBuilder, chunk : Array[Byte]) -> Unit {
@@ -78,7 +78,7 @@ pub fn encode_rfc2047(value : String) -> String raise {
 }
 
 ///|
-fn hex_val(c : Char) -> Int? {
+fn hex_val(c : Char) -> Int32? {
   let v = c.to_int()
   if v >= 0x30 && v <= 0x39 {
     Some(v - 0x30)
@@ -132,7 +132,10 @@ fn decode_word_data(enc : String, data : String) -> Bytes? {
 ///|
 /// Try to parse an encoded word at char position `start`. Returns the
 /// decoded bytes and the position just past the closing `?=`.
-fn try_parse_encoded_word(chars : Array[Char], start : Int) -> (Bytes, Int)? {
+fn try_parse_encoded_word(
+  chars : Array[Char],
+  start : Int32,
+) -> (Bytes, Int32)? {
   guard start + 1 < chars.length() &&
     chars[start] == '=' &&
     chars[start + 1] == '?' else {

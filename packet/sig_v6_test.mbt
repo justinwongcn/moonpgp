@@ -8,7 +8,7 @@
 /// A minimal v6 signature body: version | type | pubalgo | hashalgo |
 /// hashed area (4-octet length) | unhashed area (4-octet length) | hash tag
 /// | salt length + 16-octet salt | algorithm-specific parameters.
-fn v6_signature_body(pub_algo : Int, params : BytesView) -> Bytes {
+fn v6_signature_body(pub_algo : Int32, params : BytesView) -> Bytes {
   let w = @packet.Writer::new()
   w.u8(6)
   w.u8(0) // binary document signature

@@ -5,7 +5,7 @@
 /// library silently falls back to a fixed seed when the platform cannot
 /// provide entropy, which is catastrophic for key/session material. Here a
 /// failed entropy read is a hard error.
-pub fn random_bytes(n : Int) -> Bytes raise {
+pub fn random_bytes(n : Int32) -> Bytes raise {
   guard n >= 0 else { @error.fail("random_bytes: negative length") }
   let out : Array[Byte] = Array(capacity=n)
   while out.length() < n {
@@ -23,7 +23,7 @@ pub fn random_bytes(n : Int) -> Bytes raise {
 ///|
 /// A uniform random integer in `[0, max)` — used for Miller-Rabin bases and
 /// PKCS#1 padding selection.
-pub fn random_below(max : Int) -> Int raise {
+pub fn random_below(max : Int32) -> Int32 raise {
   guard max > 0 else { @error.fail("random_below: max must be positive") }
   // Rejection sampling over 31-bit words to avoid modulo bias.
   let limit = 0x7fffffff / max * max

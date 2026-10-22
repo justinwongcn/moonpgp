@@ -1,5 +1,5 @@
 ///|
-fn push_hex(out : Array[Byte], b : Int) -> Unit {
+fn push_hex(out : Array[Byte], b : Int32) -> Unit {
   out.push(b'=')
   let hi = b >> 4
   let lo = b & 15

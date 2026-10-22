@@ -181,7 +181,7 @@ pub fn build_encrypted_mail(
   recipients~ : Array[@api.PublicKey],
   domain~ : String,
   now_unix? : Int64,
-  tz_offset_minutes? : Int,
+  tz_offset_minutes? : Int32,
 ) -> String raise {
   guard !to.is_empty() else { @error.fail("mail: no To addresses") }
   guard !recipients.is_empty() else {

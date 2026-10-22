@@ -10,22 +10,22 @@
 ///|
 /// Key flag bits (RFC 9580 §5.2.3.29). The capability masks used here
 /// span octet 0 only, where all the classic capabilities live.
-const FLAG_CERTIFY : Int = 0x01
+const FLAG_CERTIFY : Int32 = 0x01
 
 ///|
-const FLAG_SIGN : Int = 0x02
+const FLAG_SIGN : Int32 = 0x02
 
 ///|
-const FLAG_ENCRYPT_COMM : Int = 0x04
+const FLAG_ENCRYPT_COMM : Int32 = 0x04
 
 ///|
-const FLAG_ENCRYPT_STORAGE : Int = 0x08
+const FLAG_ENCRYPT_STORAGE : Int32 = 0x08
 
 ///|
-const FLAG_ENCRYPT : Int = FLAG_ENCRYPT_COMM | FLAG_ENCRYPT_STORAGE
+const FLAG_ENCRYPT : Int32 = FLAG_ENCRYPT_COMM | FLAG_ENCRYPT_STORAGE
 
 ///|
-const FLAG_SIGN_OR_CERTIFY : Int = FLAG_SIGN | FLAG_CERTIFY
+const FLAG_SIGN_OR_CERTIFY : Int32 = FLAG_SIGN | FLAG_CERTIFY
 
 ///|
 /// True when a key packet expired at `now`: the governing signature's
@@ -140,7 +140,7 @@ fn revocation_effective_at(sig : @packet.SignaturePacket, now : Int64) -> Bool {
 /// Key flags octet 0 from a signature's hashed area; None when the
 /// subpacket is absent, which means "assume every capability" (the
 /// legacy rule gopenpgp encodes as `FlagsValid = false`).
-fn governing_flags(sig : @packet.SignaturePacket?) -> Int? {
+fn governing_flags(sig : @packet.SignaturePacket?) -> Int32? {
   match sig {
     Some(s) =>
       match s.key_flags() {
@@ -158,7 +158,7 @@ fn governing_flags(sig : @packet.SignaturePacket?) -> Int? {
 fn component_usable(
   packet : @packet.PublicKeyPacket,
   governing_sig : @packet.SignaturePacket?,
-  capability : Int,
+  capability : Int32,
   now : Int64,
 ) -> Bool {
   let flag_ok = match governing_flags(governing_sig) {

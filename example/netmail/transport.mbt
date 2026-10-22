@@ -42,7 +42,7 @@ pub fn FileTransport::send(
 /// TlsTransport, where TLS makes AUTH PLAIN legitimate.
 pub(all) struct SmtpTransport {
   host : String
-  port : Int
+  port : Int32
   ehlo_domain : String
   user : String?
   password : String?

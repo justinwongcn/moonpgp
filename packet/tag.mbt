@@ -19,11 +19,11 @@ pub(all) enum PacketTag {
   Seipd
   Mdc
   AeadEncData
-  Unknown(Int)
+  Unknown(Int32)
 } derive(Eq, Debug)
 
 ///|
-pub fn PacketTag::number(self : PacketTag) -> Int {
+pub fn PacketTag::number(self : PacketTag) -> Int32 {
   match self {
     Pkesk => 1
     Signature => 2
@@ -48,7 +48,7 @@ pub fn PacketTag::number(self : PacketTag) -> Int {
 }
 
 ///|
-pub fn tag_of_number(n : Int) -> PacketTag {
+pub fn tag_of_number(n : Int32) -> PacketTag {
   match n {
     1 => Pkesk
     2 => Signature
@@ -117,7 +117,7 @@ pub fn serialize_packet(tag : PacketTag, body : BytesView) -> Bytes {
 pub fn serialize_packet_old(tag : PacketTag, body : BytesView) -> Bytes {
   let w = Writer::new()
   let len = body.length()
-  let mode : Int = if len < 256 { 0 } else if len < 65536 { 1 } else { 2 }
+  let mode : Int32 = if len < 256 { 0 } else if len < 65536 { 1 } else { 2 }
   w.u8(0x80 | (tag.number() << 2) | mode)
   write_old_length(w, len)
   w.bytes(body)
@@ -125,7 +125,7 @@ pub fn serialize_packet_old(tag : PacketTag, body : BytesView) -> Bytes {
 }
 
 ///|
-fn write_new_length(w : Writer, length : Int) -> Unit {
+fn write_new_length(w : Writer, length : Int32) -> Unit {
   if length < 192 {
     w.u8(length)
   } else if length < 8384 {
@@ -139,7 +139,7 @@ fn write_new_length(w : Writer, length : Int) -> Unit {
 }
 
 ///|
-fn write_old_length(w : Writer, length : Int) -> Unit {
+fn write_old_length(w : Writer, length : Int32) -> Unit {
   if length < 256 {
     w.u8(length)
   } else if length < 65536 {
@@ -209,7 +209,7 @@ fn read_one_packet(r : Reader) -> RawPacket raise {
 
 ///|
 /// Returns the length, or `-(code)-1` for a partial length code.
-fn read_new_length(r : Reader) -> Int raise {
+fn read_new_length(r : Reader) -> Int32 raise {
   let first = r.read_u8()
   if first < 192 {
     first

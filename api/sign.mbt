@@ -169,14 +169,14 @@ fn sig_type_of(text_mode : Bool?) -> @packet.SigType {
 /// what an untrusted compressed packet may expand to. Mirrors the Argon2
 /// pre-allocation cap policy; override per call with
 /// `max_decompressed~`.
-pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int = 536870912
+pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int32 = 536870912
 
 ///|
 /// Decompress a compressed packet payload (shared by the verification and
 /// decryption walks, F16) under a hard output cap.
 fn decompress_payload(
   comp : @packet.CompressedPacket,
-  max_out : Int,
+  max_out : Int32,
 ) -> Bytes raise {
   match comp.algo {
     0 => comp.data
@@ -230,7 +230,7 @@ fn collect_data_sig(
   packets : Array[@packet.RawPacket],
   data0 : Bytes?,
   sig0 : @packet.SignaturePacket?,
-  max_decompressed : Int,
+  max_decompressed : Int32,
 ) -> (Bytes?, @packet.SignaturePacket?) raise {
   let mut data = data0
   let mut sig = sig0
@@ -464,7 +464,7 @@ pub fn sign_inline(
 pub fn verify_inline(
   message : String,
   verifier : PublicKey,
-  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> (Bytes, VerifyStatus) raise {
   let block = @armor.decode(message)
   let packets = @packet.parse_packets(block.data().exact_view())
@@ -508,7 +508,7 @@ pub fn decrypt_and_verify(
   message : String,
   decryption_keys : Array[PrivateKey],
   verifier : PublicKey?,
-  max_decompressed? : Int = DEFAULT_MAX_DECOMPRESSED_BYTES,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> (Bytes, VerifyStatus) raise {
   // Try private-key decryption first, then fall back to no-password
   // path only when no keys given? Keep explicit: caller decides.

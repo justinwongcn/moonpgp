@@ -181,7 +181,7 @@ fn preferred_subpackets(v6 : Bool) -> Array[@packet.SigSubpacket] {
 }
 
 ///|
-fn creation_subpacket(now : Int) -> @packet.SigSubpacket {
+fn creation_subpacket(now : Int32) -> @packet.SigSubpacket {
   {
     critical: false,
     sub_type: @packet.SIGSUB_CREATION_TIME,
@@ -190,7 +190,7 @@ fn creation_subpacket(now : Int) -> @packet.SigSubpacket {
 }
 
 ///|
-fn key_flags_subpacket(flags : Int) -> @packet.SigSubpacket {
+fn key_flags_subpacket(flags : Int32) -> @packet.SigSubpacket {
   {
     critical: false,
     sub_type: @packet.SIGSUB_KEY_FLAGS,
@@ -219,7 +219,7 @@ fn make_self_signature(
   secret_packet : @packet.SecretKeyPacket,
   pub_packet : @packet.PublicKeyPacket,
   user_id : String,
-  now : Int,
+  now : Int32,
 ) -> @packet.SignaturePacket raise {
   let v6 = pub_packet.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
@@ -275,7 +275,7 @@ fn make_self_signature(
 fn make_direct_key_signature(
   secret_packet : @packet.SecretKeyPacket,
   pub_packet : @packet.PublicKeyPacket,
-  now : Int,
+  now : Int32,
 ) -> @packet.SignaturePacket raise {
   guard pub_packet.version() >= 6 else {
     @error.fail("api: direct key signatures are a v6 construct")
@@ -312,7 +312,7 @@ fn make_binding_signature(
   secret_packet : @packet.SecretKeyPacket,
   primary_pub : @packet.PublicKeyPacket,
   subkey_pub : @packet.PublicKeyPacket,
-  now : Int,
+  now : Int32,
 ) -> @packet.SignaturePacket raise {
   let v6 = primary_pub.version() >= 6
   guard !v6 || subkey_pub.version() >= 6 else {
@@ -437,7 +437,7 @@ pub fn verify_key_signature(
   signer_pub : @packet.PublicKeyPacket,
   certified_pub : @packet.PublicKeyPacket,
   user_id? : String,
-  direct? : Bool = false,
+  direct~ : Bool = false,
 ) -> Bool raise {
   let digest : Bytes = if direct {
     hash_direct_key(sig, certified_pub)

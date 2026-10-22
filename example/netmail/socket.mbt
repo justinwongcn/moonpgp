@@ -13,7 +13,7 @@ pub(open) trait Socket {
   /// One CRLF- or LF-terminated line as raw bytes, terminator stripped.
   fn read_raw_line(Self) -> Bytes raise
   /// Exactly `n` octets, byte-faithful, independent of chunking.
-  fn read_exact(Self, n : Int) -> Bytes raise
+  fn read_exact(Self, n : Int32) -> Bytes raise
   fn close(Self) -> Unit
 }
 

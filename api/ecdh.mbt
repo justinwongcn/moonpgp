@@ -50,7 +50,7 @@ fn ecdh_kdf_param(pub_packet : @packet.PublicKeyPacket) -> Bytes raise {
 ///|
 /// The symmetric algorithm id carried in the key's KDF parameters
 /// (the key-wrap KEK size selector).
-fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int raise {
+fn ecdh_kdf_sym_algo(pub_packet : @packet.PublicKeyPacket) -> Int32 raise {
   // Index only after the guards: the packet layer accepts keys whose KDF
   // field is shorter than 4 octets, and callers hand them straight here.
   let params = pub_packet.params()
@@ -157,7 +157,7 @@ fn ecdh_wrap_session_key(
 fn ecdh_unwrap_session_key(
   pkesk : @packet.PkeskPacket,
   sk : @packet.SecretKeyPacket,
-) -> (Int, Bytes) raise {
+) -> (Int32, Bytes) raise {
   let secret = ecdh_secret_parts(sk)
   let eph = pkesk.ecdh_ephemeral()
   guard eph.length() == 33 && eph[0] == b'\x40' else {
@@ -188,7 +188,7 @@ fn ecdh_unwrap_session_key(
 /// KDF parameters: size 3, reserved 0x01, SHA-256 (id 8) hash,
 /// AES-128 (id 7) wrap — the exact form GnuPG writes for cv25519 keys.
 fn build_ecdh_secret_key_packet(
-  creation : Int,
+  creation : Int32,
 ) -> @packet.SecretKeyPacket raise {
   let x = @pki.x25519_generate()
   let point = Bytes::from_array([0x40]).add(x.public)

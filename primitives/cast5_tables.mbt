@@ -2,7 +2,7 @@
 /// CAST5 (CAST-128, RFC 2144) constant S-boxes S1–S8, transcribed from
 /// the RFC's Appendix A. OpenPGP only ever uses the full 16-byte key
 /// (algorithm 3), so only the 16-round form is implemented.
-let cast5_s1 : Array[UInt] = [
+let cast5_s1 : Array[UInt32] = [
   0x30fb40d4U, 0x9fa0ff0bU, 0x6beccd2fU, 0x3f258c7aU, 0x1e213f2fU, 0x9c004dd3U, 0x6003e540U,
   0xcf9fc949U, 0xbfd4af27U, 0x88bbbdb5U, 0xe2034090U, 0x98d09675U, 0x6e63a0e0U, 0x15c361d2U,
   0xc2e7661dU, 0x22d4ff8eU, 0x28683b6fU, 0xc07fd059U, 0xff2379c8U, 0x775f50e2U, 0x43c340d3U,
@@ -43,7 +43,7 @@ let cast5_s1 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s2 : Array[UInt] = [
+let cast5_s2 : Array[UInt32] = [
   0x1f201094U, 0xef0ba75bU, 0x69e3cf7eU, 0x393f4380U, 0xfe61cf7aU, 0xeec5207aU, 0x55889c94U,
   0x72fc0651U, 0xada7ef79U, 0x4e1d7235U, 0xd55a63ceU, 0xde0436baU, 0x99c430efU, 0x5f0c0794U,
   0x18dcdb7dU, 0xa1d6eff3U, 0xa0b52f7bU, 0x59e83605U, 0xee15b094U, 0xe9ffd909U, 0xdc440086U,
@@ -84,7 +84,7 @@ let cast5_s2 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s3 : Array[UInt] = [
+let cast5_s3 : Array[UInt32] = [
   0x8defc240U, 0x25fa5d9fU, 0xeb903dbfU, 0xe810c907U, 0x47607fffU, 0x369fe44bU, 0x8c1fc644U,
   0xaececa90U, 0xbeb1f9bfU, 0xeefbcaeaU, 0xe8cf1950U, 0x51df07aeU, 0x920e8806U, 0xf0ad0548U,
   0xe13c8d83U, 0x927010d5U, 0x11107d9fU, 0x07647db9U, 0xb2e3e4d4U, 0x3d4f285eU, 0xb9afa820U,
@@ -125,7 +125,7 @@ let cast5_s3 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s4 : Array[UInt] = [
+let cast5_s4 : Array[UInt32] = [
   0x9db30420U, 0x1fb6e9deU, 0xa7be7befU, 0xd273a298U, 0x4a4f7bdbU, 0x64ad8c57U, 0x85510443U,
   0xfa020ed1U, 0x7e287affU, 0xe60fb663U, 0x095f35a1U, 0x79ebf120U, 0xfd059d43U, 0x6497b7b1U,
   0xf3641f63U, 0x241e4adfU, 0x28147f5fU, 0x4fa2b8cdU, 0xc9430040U, 0x0cc32220U, 0xfdd30b30U,
@@ -166,7 +166,7 @@ let cast5_s4 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s5 : Array[UInt] = [
+let cast5_s5 : Array[UInt32] = [
   0x7ec90c04U, 0x2c6e74b9U, 0x9b0e66dfU, 0xa6337911U, 0xb86a7fffU, 0x1dd358f5U, 0x44dd9d44U,
   0x1731167fU, 0x08fbf1faU, 0xe7f511ccU, 0xd2051b00U, 0x735aba00U, 0x2ab722d8U, 0x386381cbU,
   0xacf6243aU, 0x69befd7aU, 0xe6a2e77fU, 0xf0c720cdU, 0xc4494816U, 0xccf5c180U, 0x38851640U,
@@ -207,7 +207,7 @@ let cast5_s5 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s6 : Array[UInt] = [
+let cast5_s6 : Array[UInt32] = [
   0xf6fa8f9dU, 0x2cac6ce1U, 0x4ca34867U, 0xe2337f7cU, 0x95db08e7U, 0x016843b4U, 0xeced5cbcU,
   0x325553acU, 0xbf9f0960U, 0xdfa1e2edU, 0x83f0579dU, 0x63ed86b9U, 0x1ab6a6b8U, 0xde5ebe39U,
   0xf38ff732U, 0x8989b138U, 0x33f14961U, 0xc01937bdU, 0xf506c6daU, 0xe4625e7eU, 0xa308ea99U,
@@ -248,7 +248,7 @@ let cast5_s6 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s7 : Array[UInt] = [
+let cast5_s7 : Array[UInt32] = [
   0x85e04019U, 0x332bf567U, 0x662dbfffU, 0xcfc65693U, 0x2a8d7f6fU, 0xab9bc912U, 0xde6008a1U,
   0x2028da1fU, 0x0227bce7U, 0x4d642916U, 0x18fac300U, 0x50f18b82U, 0x2cb2cb11U, 0xb232e75cU,
   0x4b3695f2U, 0xb28707deU, 0xa05fbcf6U, 0xcd4181e9U, 0xe150210cU, 0xe24ef1bdU, 0xb168c381U,
@@ -289,7 +289,7 @@ let cast5_s7 : Array[UInt] = [
 ]
 
 ///|
-let cast5_s8 : Array[UInt] = [
+let cast5_s8 : Array[UInt32] = [
   0xe216300dU, 0xbbddfffcU, 0xa7ebdabdU, 0x35648095U, 0x7789f8b7U, 0xe6c1121bU, 0x0e241600U,
   0x052ce8b5U, 0x11a9cfb0U, 0xe5952f11U, 0xece7990aU, 0x9386d174U, 0x2a42931cU, 0x76e38111U,
   0xb12def3aU, 0x37ddddfcU, 0xde9adeb1U, 0x0a0cc32cU, 0xbe197029U, 0x84a00940U, 0xbb243a0fU,

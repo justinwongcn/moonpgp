@@ -9,9 +9,9 @@
 ///|
 priv struct FakeSock {
   script : Array[String]
-  mut script_pos : Int
+  mut script_pos : Int32
   sent_raw : Array[Bytes]
-  mut closes : Int
+  mut closes : Int32
 }
 
 ///|

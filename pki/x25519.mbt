@@ -114,7 +114,7 @@ pub fn x25519_shared_secret(
 pub fn ecdh_kdf_sha256(
   z : BytesView,
   param : BytesView,
-  bits : Int,
+  bits : Int32,
 ) -> Bytes raise {
   guard bits % 8 == 0 && bits > 0 else {
     @error.fail("pki: bad KDF output size \{bits}")

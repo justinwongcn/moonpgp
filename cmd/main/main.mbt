@@ -132,14 +132,14 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
 }
 
 ///|
-fn check_args(got : Int, want : Int) -> Unit {
+fn check_args(got : Int32, want : Int32) -> Unit {
   if got < want {
     usage()
   }
 }
 
 ///|
-fn parse_bits(rest : Array[String], default : Int) -> Int {
+fn parse_bits(rest : Array[String], default : Int32) -> Int32 {
   match rest[3:rest.length()].to_owned() {
     [b, ..] => @string.parse_int(b) catch { _ => default }
     _ => default

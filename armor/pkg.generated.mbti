@@ -6,7 +6,7 @@ import {
 }
 
 // Values
-pub fn crc24(BytesView) -> Int
+pub fn crc24(BytesView) -> Int32
 
 pub fn decode(String) -> ArmorBlock raise
 

@@ -9,7 +9,7 @@ pub(all) enum CompressedAlgo {
 } derive(Eq, Debug)
 
 ///|
-pub fn CompressedAlgo::number(self : CompressedAlgo) -> Int {
+pub fn CompressedAlgo::number(self : CompressedAlgo) -> Int32 {
   match self {
     Uncompressed => 0
     Zip => 1
@@ -19,7 +19,7 @@ pub fn CompressedAlgo::number(self : CompressedAlgo) -> Int {
 }
 
 ///|
-pub fn compressed_algo_of_number(n : Int) -> CompressedAlgo? {
+pub fn compressed_algo_of_number(n : Int32) -> CompressedAlgo? {
   match n {
     0 => Some(Uncompressed)
     1 => Some(Zip)
@@ -67,7 +67,7 @@ pub extend CompressedAlgo with Eq::{not_equal, equal}
 /// Raw DEFLATE decompression with a hard output cap (M4): flate's
 /// limited inflater stops (raising) once the cap is exceeded, so the
 /// bomb never materializes.
-pub fn zip_decompress_capped(data : BytesView, max_out : Int) -> Bytes raise {
+pub fn zip_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise {
   @flate.inflate_all_limited(data.to_owned(), max_output=max_out) catch {
     _ => @error.fail("compress: inflate failed (limit \{max_out} octets)")
   }
@@ -78,7 +78,7 @@ pub fn zip_decompress_capped(data : BytesView, max_out : Int) -> Bytes raise {
 /// runs with bounded output windows, so total allocation stays at the cap
 /// instead of materializing the payload first. Checksum and framing stay
 /// with the decoder.
-pub fn zlib_decompress_capped(data : BytesView, max_out : Int) -> Bytes raise {
+pub fn zlib_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise {
   guard max_out >= 0 else { @error.fail("compress: bad output cap") }
   let dec = @zlib.Decoder::Decoder()
   let out : Array[Byte] = []

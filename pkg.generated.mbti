@@ -54,7 +54,7 @@ pub fn sign_cleartext(String, @api.PrivateKey) -> String raise
 
 pub fn sign_cleartext_with(String, @api.PrivateKey, @primitives.HashId) -> String raise
 
-pub fn sign_detached(BytesView, @api.PrivateKey, text_mode? : Bool) -> String raise
+pub fn sign_detached(BytesView, @api.PrivateKey, text_mode? : Bool, created? : Int) -> String raise
 
 pub fn sign_inline(BytesView, @api.PrivateKey, text_mode? : Bool) -> String raise
 

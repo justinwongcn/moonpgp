@@ -36,9 +36,9 @@ moon run cmd/main -- help
 
 ## Features
 
-- **Keys:** generate, import, export, lock and unlock with a passphrase. RSA, Ed25519 (legacy EdDSA), and Curve25519/X25519 are covered; new keys are v4, and v6 works too. Helpers check capabilities, expiry, and revocation.
-- **Messages:** public-key or passphrase encryption, detached/inline/cleartext signatures, session-key operations, optional ZIP/ZLIB compression. Anything this library encrypts uses AES; CAST5 and 3DES exist for decryption only.
-- **v6 messages:** v6 PKESK/SKESK and v2 SEIPD with OCB, EAX, or GCM AEAD, end to end. Regular v4 recipient and passphrase flows default to v1 SEIPD.
+- **Keys:** generate, import, export, lock and unlock with a passphrase. RSA, Ed25519 (legacy EdDSA), and Curve25519/X25519 are covered; new keys are v4, and v6 works too. All bound subkeys are kept, each judged by its own key flags, and helpers check capabilities, expiry, and revocation. You can also revoke a key or a single subkey, and issue a standalone `.rev` certificate to apply later — gpg's `--gen-revoke` certificates apply too.
+- **Messages:** public-key or passphrase encryption, detached/inline/cleartext signatures, session-key operations, optional ZIP/ZLIB compression. Document signatures come from the primary key when it may sign, otherwise from a signing subkey (its binding carries the cross-certification gpg requires). Anything this library encrypts uses AES; CAST5 and 3DES exist for decryption only.
+- **v6 messages:** v6 PKESK/SKESK and v2 SEIPD with OCB, EAX, or GCM AEAD, end to end. In the encryption builder, `.password_v6` adds a v6 passphrase recipient; v4 and v6 shapes don't mix in one message. Regular v4 recipient and passphrase flows default to v1 SEIPD.
 - **Passphrase protection:** iterated-and-salted S2K and Argon2, including the AEAD-protected secret-key formats.
 - **Email:** `mime` parses and verifies PGP/MIME; `mail` builds RFC 5322 messages, signed and encrypted PGP/MIME included. The SMTP/IMAP clients under `example/` are examples rather than library API, and they only run on native.
 

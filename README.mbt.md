@@ -60,8 +60,8 @@ CI covers native, wasm, and js; for day-to-day work, use native. Key generation 
 ## Security and limitations
 
 - Import verifies the signatures it understands (User ID certifications, subkey bindings, v6 direct-key signatures), but that's signature checking, not trust management: whether a key really belongs to someone is for your application to decide.
-- Ed25519 and X25519 arithmetic runs on `@bigint` and is not constant-time, and a GC runtime makes no promise about wiping private keys from memory.
-- Decrypting untrusted Argon2-protected data is capped at 256 MiB of memory by default; over-limit requests are rejected before anything is allocated. Some APIs let you set a different limit.
+- RSA, Ed25519, and X25519 arithmetic runs on `@bigint` and is not constant-time, and a GC runtime makes no promise about wiping private keys from memory.
+- Decrypting untrusted Argon2-protected data is capped at 64 MiB of memory by default; over-limit requests are rejected before anything is allocated. Some APIs let you set a different limit.
 - The encryption APIs don't pad v2 SEIPD messages, so ciphertext length gives away roughly how long the plaintext is.
 - On targets without a platform clock, expiration checks are off and revocation dates can't be evaluated; revocation signatures are still checked cryptographically.
 

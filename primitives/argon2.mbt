@@ -96,64 +96,167 @@ fn argon2_instance(lanes : Int32, m_prime : Int32) -> Argon2Instance {
 }
 
 ///|
-/// The BlaMka mixing function GB (RFC 9106 §3.6): the BLAKE2b G with the
-/// `2 * trunc(a) * trunc(b)` term added to each addition, operating on four
-/// words of `b` in place.
-fn blamka_gb(
+/// One full round of the Argon2 permutation P (RFC 9106 §3.6) over the 16
+/// words at `o0..o15`: load them into locals, run the eight BlaMka GB
+/// mixings entirely in registers (rotations inlined as shift-or — a call
+/// per rotation is 512 calls per block), and store back once. GB is the
+/// BLAKE2b G with `2 * trunc(a) * trunc(b)` added to each addition.
+fn argon2_round16(
   b : FixedArray[UInt64],
-  i : Int32,
-  j : Int32,
-  k : Int32,
-  l : Int32,
+  o0 : Int32,
+  o1 : Int32,
+  o2 : Int32,
+  o3 : Int32,
+  o4 : Int32,
+  o5 : Int32,
+  o6 : Int32,
+  o7 : Int32,
+  o8 : Int32,
+  o9 : Int32,
+  o10 : Int32,
+  o11 : Int32,
+  o12 : Int32,
+  o13 : Int32,
+  o14 : Int32,
+  o15 : Int32,
 ) -> Unit {
-  let mut a = b[i]
-  let mut bb = b[j]
-  let mut c = b[k]
-  let mut d = b[l]
-  a = a + bb + 2UL * (a & 0xFFFFFFFFUL) * (bb & 0xFFFFFFFFUL)
-  d = rotr64(d ^ a, 32)
-  c = c + d + 2UL * (c & 0xFFFFFFFFUL) * (d & 0xFFFFFFFFUL)
-  bb = rotr64(bb ^ c, 24)
-  a = a + bb + 2UL * (a & 0xFFFFFFFFUL) * (bb & 0xFFFFFFFFUL)
-  d = rotr64(d ^ a, 16)
-  c = c + d + 2UL * (c & 0xFFFFFFFFUL) * (d & 0xFFFFFFFFUL)
-  bb = rotr64(bb ^ c, 63)
-  b[i] = a
-  b[j] = bb
-  b[k] = c
-  b[l] = d
-}
-
-///|
-/// The Argon2 permutation P on 16 words identified by their indices
-/// (RFC 9106 §3.6).
-fn argon2_round(
-  b : FixedArray[UInt64],
-  i0 : Int32,
-  i1 : Int32,
-  i2 : Int32,
-  i3 : Int32,
-  i4 : Int32,
-  i5 : Int32,
-  i6 : Int32,
-  i7 : Int32,
-  i8 : Int32,
-  i9 : Int32,
-  i10 : Int32,
-  i11 : Int32,
-  i12 : Int32,
-  i13 : Int32,
-  i14 : Int32,
-  i15 : Int32,
-) -> Unit {
-  blamka_gb(b, i0, i4, i8, i12)
-  blamka_gb(b, i1, i5, i9, i13)
-  blamka_gb(b, i2, i6, i10, i14)
-  blamka_gb(b, i3, i7, i11, i15)
-  blamka_gb(b, i0, i5, i10, i15)
-  blamka_gb(b, i1, i6, i11, i12)
-  blamka_gb(b, i2, i7, i8, i13)
-  blamka_gb(b, i3, i4, i9, i14)
+  let mut v0 = b[o0]
+  let mut v1 = b[o1]
+  let mut v2 = b[o2]
+  let mut v3 = b[o3]
+  let mut v4 = b[o4]
+  let mut v5 = b[o5]
+  let mut v6 = b[o6]
+  let mut v7 = b[o7]
+  let mut v8 = b[o8]
+  let mut v9 = b[o9]
+  let mut v10 = b[o10]
+  let mut v11 = b[o11]
+  let mut v12 = b[o12]
+  let mut v13 = b[o13]
+  let mut v14 = b[o14]
+  let mut v15 = b[o15]
+  let mask = 0xFFFFFFFFUL
+  // GB(v0, v4, v8, v12)
+  v0 = v0 + v4 + 2UL * (v0 & mask) * (v4 & mask)
+  let t = v12 ^ v0
+  v12 = (t >> 32) | (t << 32)
+  v8 = v8 + v12 + 2UL * (v8 & mask) * (v12 & mask)
+  let t = v4 ^ v8
+  v4 = (t >> 24) | (t << 40)
+  v0 = v0 + v4 + 2UL * (v0 & mask) * (v4 & mask)
+  let t = v12 ^ v0
+  v12 = (t >> 16) | (t << 48)
+  v8 = v8 + v12 + 2UL * (v8 & mask) * (v12 & mask)
+  let t = v4 ^ v8
+  v4 = (t >> 63) | (t << 1)
+  // GB(v1, v5, v9, v13)
+  v1 = v1 + v5 + 2UL * (v1 & mask) * (v5 & mask)
+  let t = v13 ^ v1
+  v13 = (t >> 32) | (t << 32)
+  v9 = v9 + v13 + 2UL * (v9 & mask) * (v13 & mask)
+  let t = v5 ^ v9
+  v5 = (t >> 24) | (t << 40)
+  v1 = v1 + v5 + 2UL * (v1 & mask) * (v5 & mask)
+  let t = v13 ^ v1
+  v13 = (t >> 16) | (t << 48)
+  v9 = v9 + v13 + 2UL * (v9 & mask) * (v13 & mask)
+  let t = v5 ^ v9
+  v5 = (t >> 63) | (t << 1)
+  // GB(v2, v6, v10, v14)
+  v2 = v2 + v6 + 2UL * (v2 & mask) * (v6 & mask)
+  let t = v14 ^ v2
+  v14 = (t >> 32) | (t << 32)
+  v10 = v10 + v14 + 2UL * (v10 & mask) * (v14 & mask)
+  let t = v6 ^ v10
+  v6 = (t >> 24) | (t << 40)
+  v2 = v2 + v6 + 2UL * (v2 & mask) * (v6 & mask)
+  let t = v14 ^ v2
+  v14 = (t >> 16) | (t << 48)
+  v10 = v10 + v14 + 2UL * (v10 & mask) * (v14 & mask)
+  let t = v6 ^ v10
+  v6 = (t >> 63) | (t << 1)
+  // GB(v3, v7, v11, v15)
+  v3 = v3 + v7 + 2UL * (v3 & mask) * (v7 & mask)
+  let t = v15 ^ v3
+  v15 = (t >> 32) | (t << 32)
+  v11 = v11 + v15 + 2UL * (v11 & mask) * (v15 & mask)
+  let t = v7 ^ v11
+  v7 = (t >> 24) | (t << 40)
+  v3 = v3 + v7 + 2UL * (v3 & mask) * (v7 & mask)
+  let t = v15 ^ v3
+  v15 = (t >> 16) | (t << 48)
+  v11 = v11 + v15 + 2UL * (v11 & mask) * (v15 & mask)
+  let t = v7 ^ v11
+  v7 = (t >> 63) | (t << 1)
+  // GB(v0, v5, v10, v15)
+  v0 = v0 + v5 + 2UL * (v0 & mask) * (v5 & mask)
+  let t = v15 ^ v0
+  v15 = (t >> 32) | (t << 32)
+  v10 = v10 + v15 + 2UL * (v10 & mask) * (v15 & mask)
+  let t = v5 ^ v10
+  v5 = (t >> 24) | (t << 40)
+  v0 = v0 + v5 + 2UL * (v0 & mask) * (v5 & mask)
+  let t = v15 ^ v0
+  v15 = (t >> 16) | (t << 48)
+  v10 = v10 + v15 + 2UL * (v10 & mask) * (v15 & mask)
+  let t = v5 ^ v10
+  v5 = (t >> 63) | (t << 1)
+  // GB(v1, v6, v11, v12)
+  v1 = v1 + v6 + 2UL * (v1 & mask) * (v6 & mask)
+  let t = v12 ^ v1
+  v12 = (t >> 32) | (t << 32)
+  v11 = v11 + v12 + 2UL * (v11 & mask) * (v12 & mask)
+  let t = v6 ^ v11
+  v6 = (t >> 24) | (t << 40)
+  v1 = v1 + v6 + 2UL * (v1 & mask) * (v6 & mask)
+  let t = v12 ^ v1
+  v12 = (t >> 16) | (t << 48)
+  v11 = v11 + v12 + 2UL * (v11 & mask) * (v12 & mask)
+  let t = v6 ^ v11
+  v6 = (t >> 63) | (t << 1)
+  // GB(v2, v7, v8, v13)
+  v2 = v2 + v7 + 2UL * (v2 & mask) * (v7 & mask)
+  let t = v13 ^ v2
+  v13 = (t >> 32) | (t << 32)
+  v8 = v8 + v13 + 2UL * (v8 & mask) * (v13 & mask)
+  let t = v7 ^ v8
+  v7 = (t >> 24) | (t << 40)
+  v2 = v2 + v7 + 2UL * (v2 & mask) * (v7 & mask)
+  let t = v13 ^ v2
+  v13 = (t >> 16) | (t << 48)
+  v8 = v8 + v13 + 2UL * (v8 & mask) * (v13 & mask)
+  let t = v7 ^ v8
+  v7 = (t >> 63) | (t << 1)
+  // GB(v3, v4, v9, v14)
+  v3 = v3 + v4 + 2UL * (v3 & mask) * (v4 & mask)
+  let t = v14 ^ v3
+  v14 = (t >> 32) | (t << 32)
+  v9 = v9 + v14 + 2UL * (v9 & mask) * (v14 & mask)
+  let t = v4 ^ v9
+  v4 = (t >> 24) | (t << 40)
+  v3 = v3 + v4 + 2UL * (v3 & mask) * (v4 & mask)
+  let t = v14 ^ v3
+  v14 = (t >> 16) | (t << 48)
+  v9 = v9 + v14 + 2UL * (v9 & mask) * (v14 & mask)
+  let t = v4 ^ v9
+  v4 = (t >> 63) | (t << 1)
+  b[o0] = v0
+  b[o1] = v1
+  b[o2] = v2
+  b[o3] = v3
+  b[o4] = v4
+  b[o5] = v5
+  b[o6] = v6
+  b[o7] = v7
+  b[o8] = v8
+  b[o9] = v9
+  b[o10] = v10
+  b[o11] = v11
+  b[o12] = v12
+  b[o13] = v13
+  b[o14] = v14
+  b[o15] = v15
 }
 
 ///|
@@ -162,7 +265,7 @@ fn argon2_round(
 fn argon2_permute(b : FixedArray[UInt64]) -> Unit {
   for i in 0..<8 {
     let base = i * 16
-    argon2_round(
+    argon2_round16(
       b,
       base + 0,
       base + 1,
@@ -183,8 +286,10 @@ fn argon2_permute(b : FixedArray[UInt64]) -> Unit {
     )
   }
   for i in 0..<8 {
+    // Column j takes word j/2 of the strided pair at rows j/2 (two words
+    // per row: index c + (row * 16) + (j mod 2)).
     let c = 2 * i
-    argon2_round(
+    argon2_round16(
       b,
       c,
       c + 1,

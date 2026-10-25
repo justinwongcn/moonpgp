@@ -7,6 +7,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The module version lives in `moon.mod` (`version`); a section is only renamed to
 a released version when that version is published to mooncakes.io.
 
+## [Unreleased]
+
+### Changed — performance: Argon2 permutation round in registers
+
+- `argon2_round16` replaces the per-word `blamka_gb`/`argon2_round` pair:
+  one P round now loads its 16 words into locals, runs the eight GB
+  mixings with rotations inlined as shift-or (the old shape made ~640
+  calls per 1 KiB block: 128 GB calls × 8 array round-trips plus a
+  `rotr64` call per rotation), and stores back once. Math is unchanged —
+  the RFC 9106 §5.3 KAT pass trace, the x/crypto vectors and the
+  go-crypto 64 MiB S2K derive vectors all stay byte-identical. Measured
+  for 64 MiB/t=3/p=4 on this machine (moon 0.1.20261023): native debug
+  1.28s → 1.15s, native release 0.15s → 0.11s.
+- **Stale baselines re-measured** (context for the 0.3.0-era notes): on
+  the 2026-10-23 toolchain the core `BigInt::pow` is Montgomery with a
+  4-bit window, and RSA-2048 keygen (`pki/bench_test.mbt`) measures
+  0.9–1.9s wall including startup — the earlier ≈9.5s figure no longer
+  reproduces, and with it the need to rework prime-candidate filtering.
+  Argon2 64 MiB likewise measures 1.2–1.3s debug / 0.15s release before
+  this change (the earlier ≈6.6s figure came from a different
+  toolchain/machine state). Both recorded with the caveat that this
+  machine's timings vary ~2× under background load; comparisons here
+  were made by interleaving freshly built binaries.
+
 ## [0.3.0] - 2026-10-26
 
 ### Added / Changed — task 3 of the Jev-prioritized plan (2026-10-26)

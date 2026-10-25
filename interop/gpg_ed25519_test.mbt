@@ -18,7 +18,7 @@ test "parse gpg ed25519 key with ecdh subkey" {
   assert_eq(key.fingerprint(), gpg_ed25519_fingerprint())
   assert_eq(key.user_id(), "GnuPG Ed <gpg@test.local>")
   assert_eq(@packet.PublicKeyPacket::algo(key.primary), @packet.EdDsaLegacy)
-  let sub = key.encryption_subkey.unwrap()
+  let sub = key.subkeys[0].key
   assert_eq(@packet.PublicKeyPacket::algo(sub), @packet.Ecdh)
   // Subkey round-trips to the exact wire bytes gpg wrote.
   let body = sub.to_body()

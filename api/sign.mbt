@@ -413,32 +413,34 @@ fn verify_signature_packet(
   if sig.has_unknown_critical_subpacket() {
     return Failed
   }
-  // Which key of the transferable key issued this signature?
+  // Which key of the transferable key issued this signature? The issuer
+  // key id is matched against the primary and EVERY bound subkey (N2);
+  // `comp` carries the matched subkey's own binding/revocation into the
+  // lifecycle gate.
   let issuer = sig.issuer_key_id()
   let primary_id = verifier.primary.key_id()
-  // Lenient on purpose (F15): a subkey whose id cannot be computed merely
-  // drops out of the candidate match; verification must not fail for it.
-  let sub_id : Bytes? = match verifier.encryption_subkey {
-    Some(sub) => Some(sub.key_id()) catch { _ => None }
-    None => None
-  }
-  let signer : @packet.PublicKeyPacket? = match issuer {
+  let signer : (@packet.PublicKeyPacket, SubkeyCert?)? = match issuer {
     Some(id) =>
       if primary_id.equal(id) {
-        Some(verifier.primary)
-      } else if sub_id is Some(sid) && sid.equal(id) {
-        verifier.encryption_subkey
+        Some((verifier.primary, None))
       } else {
-        None
+        // Lenient on purpose (F15): a subkey whose id cannot be computed
+        // merely drops out of the candidate match.
+        let mut hit : (@packet.PublicKeyPacket, SubkeyCert?)? = None
+        for c in verifier.subkeys {
+          let sid = c.key.key_id() catch { _ => Bytes::new(0) }
+          if sid.length() > 0 && sid.equal(id) {
+            hit = Some((c.key, Some(c)))
+            break
+          }
+        }
+        hit
       }
-    None => Some(verifier.primary)
+    None => Some((verifier.primary, None))
   }
   match signer {
     None => NoVerifier
-    Some(signer_pk) => {
-      let signed_by_subkey = sub_id is Some(sid) &&
-        issuer is Some(id) &&
-        sid.equal(id)
+    Some((signer_pk, comp)) => {
       let digest = document_hash(sig, data, sig.sig_type())
       // RFC 9580 §5.2.4: a v6 verifier MUST reject the signature when the
       // left 16 bits of the digest do not match the stored hash tag.
@@ -461,7 +463,7 @@ fn verify_signature_packet(
         _ => false
       }
       if verified {
-        lifecycle_status(sig, verifier, signed_by_subkey)
+        lifecycle_status(sig, verifier, comp)
       } else {
         Failed
       }
@@ -478,32 +480,29 @@ fn verify_signature_packet(
 fn lifecycle_status(
   sig : @packet.SignaturePacket,
   verifier : PublicKey,
-  signed_by_subkey : Bool,
+  comp : SubkeyCert?,
 ) -> VerifyStatus {
   let now = @primitives.unix_now()
   if verifier.is_revoked(now) {
     return KeyRevoked
   }
-  if signed_by_subkey {
-    match verifier.encryption_subkey {
-      Some(sk) => {
-        if subkey_revoked_at(
-            verifier.subkey_revocation,
-            verifier.primary,
-            sk,
-            now,
-          ) {
-          return KeyRevoked
-        }
-        if packet_expired_at(sk, verifier.subkey_binding, now) ||
-          sig_expired_opt(verifier.subkey_binding, now) {
-          return Expired
-        }
+  match comp {
+    Some(c) => {
+      if subkey_revoked_at(c.revocation, verifier.primary, c.key, now) {
+        return KeyRevoked
       }
-      None => ()
+      // A subkey only exists as part of its certificate: an expired
+      // primary leaves the subkey's signatures without a current
+      // certification too (N7).
+      if verifier.is_expired(now) {
+        return Expired
+      }
+      if packet_expired_at(c.key, Some(c.binding), now) ||
+        sig_expired_opt(Some(c.binding), now) {
+        return Expired
+      }
     }
-  } else if verifier.is_expired(now) {
-    return Expired
+    None => if verifier.is_expired(now) { return Expired }
   }
   if sig_expired_at(sig, now) {
     return Expired
@@ -554,18 +553,23 @@ fn one_pass_sig_for(
 /// Create an inline-signed, armored message: One-Pass-Signature ||
 /// Literal || Signature.
 ///
-/// `created` is the signature creation time in seconds since 1970; without
-/// it the current time is used (see `sign_detached` — deterministic for
-/// RSA/Ed25519 keys, so the message becomes reproducible).
+/// `created` is the signature creation time in seconds since 1970; without it
+/// the current time is used (see `sign_detached` — deterministic for
+/// RSA/Ed25519 keys, so the message becomes reproducible). `file_name` names
+/// the literal packet (N9; default "message.txt").
 pub fn sign_inline(
   data : BytesView,
   key : PrivateKey,
   text_mode? : Bool,
   created? : Int32,
+  file_name? : String,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(key, data, sig_type, created?)
-  let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
+  let literal = @packet.LiteralPacket::binary(
+    data,
+    file_name=file_name.unwrap_or("message.txt"),
+  )
   let ops = one_pass_sig_for(key, sig, @primitives.Sha256)
   let w = @packet.Writer::new()
   w.bytes(
@@ -604,8 +608,9 @@ pub fn verify_inline(
 ///|
 /// Sign and encrypt in one step (inline signature inside SEIPD).
 ///
-/// `created` is the signature creation time in seconds since 1970; without
-/// it the current time is used (see `sign_detached`).
+/// `created` is the signature creation time in seconds since 1970; without it
+/// the current time is used (see `sign_detached`). `file_name` names the
+/// literal packet (N9; default "message.txt").
 pub fn sign_and_encrypt(
   data : BytesView,
   signer : PrivateKey,
@@ -613,10 +618,14 @@ pub fn sign_and_encrypt(
   text_mode? : Bool,
   compress? : @compress.CompressedAlgo,
   created? : Int32,
+  file_name? : String,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
   let sig = make_document_signature(signer, data, sig_type, created?)
-  let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
+  let literal = @packet.LiteralPacket::binary(
+    data,
+    file_name=file_name.unwrap_or("message.txt"),
+  )
   let ops = one_pass_sig_for(signer, sig, @primitives.Sha256)
   let inner = @packet.Writer::new()
   inner.bytes(

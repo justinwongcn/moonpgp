@@ -220,13 +220,15 @@ fn finish_signature(
 }
 
 ///|
-/// Create a self-certification (PositiveCertification, 0x13) of `user_id`
-/// over the primary key.
+/// Create a self-certification of `user_id` over the primary key. Any of
+/// the four certification types 0x10-0x13 binds the User ID (N3); the
+/// default is PositiveCertification, what gpg and this library emit.
 fn make_self_signature(
   secret_packet : @packet.SecretKeyPacket,
   pub_packet : @packet.PublicKeyPacket,
   user_id : String,
   now : Int32,
+  cert_type~ : @packet.SigType = @packet.PositiveCertification,
 ) -> @packet.SignaturePacket raise {
   let v6 = pub_packet.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
@@ -262,7 +264,7 @@ fn make_self_signature(
     } else {
       4
     },
-    sig_type: @packet.PositiveCertification,
+    sig_type: cert_type,
     pub_algo: secret_packet.public.algo(),
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
@@ -315,11 +317,15 @@ fn make_direct_key_signature(
 /// Create a subkey binding signature (0x18): version 4 for a v4 primary
 /// key, version 6 (with a hash salt and the fingerprint issuer subpacket)
 /// for a v6 one. A v6 primary key may only certify v6 subkeys.
+/// `key_flags` states the subkey's capabilities (default encrypt-only,
+/// 0x0C — what this library generates; N2 tests bind signing subkeys
+/// with 0x02).
 fn make_binding_signature(
   secret_packet : @packet.SecretKeyPacket,
   primary_pub : @packet.PublicKeyPacket,
   subkey_pub : @packet.PublicKeyPacket,
   now : Int32,
+  key_flags~ : Int32 = 0x0C,
 ) -> @packet.SignaturePacket raise {
   let v6 = primary_pub.version() >= 6
   guard !v6 || subkey_pub.version() >= 6 else {
@@ -327,7 +333,7 @@ fn make_binding_signature(
   }
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
-    key_flags_subpacket(0x0C),
+    key_flags_subpacket(key_flags),
     ..preferred_subpackets(v6),
   ]
   if v6 {

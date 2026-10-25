@@ -94,8 +94,13 @@ fn read_public_fields(
   r : Reader,
 ) -> (Int32, Int32, PubKeyAlgo, Array[Bytes]) raise {
   let version = r.read_u8()
-  guard version == 4 || version == 5 || version == 6 else {
-    @error.fail("packet: unsupported public key version \{version}")
+  // v5 is the abandoned 4880bis draft shape: nothing else here
+  // understands it (fingerprints, PKESK pairing), so reject it at the
+  // parse layer instead of accepting a key that fails at first use (N8).
+  guard version == 4 || version == 6 else {
+    @error.fail(
+      "packet: unsupported public key version \{version} (v5 draft keys are not supported)",
+    )
   }
   let creation_time = r.read_u32()
   let algo_num = r.read_u8()

@@ -11,15 +11,14 @@ test "generate key with verifiable self-signatures" {
   assert_true(ok)
   // Subkey binding verifies.
   let ok2 = @api.verify_key_signature(
-    key.subkey_binding.unwrap(),
+    key.subkeys[0].binding,
     key.primary.public,
-    key.encryption_subkey.unwrap().public,
+    key.subkeys[0].secret.public,
   )
   assert_true(ok2)
   // Subkey differs from primary.
   assert_true(
-    key.primary.public.key_id() !=
-    key.encryption_subkey.unwrap().public.key_id(),
+    key.primary.public.key_id() != key.subkeys[0].secret.public.key_id(),
   )
 }
 

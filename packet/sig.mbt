@@ -510,8 +510,8 @@ pub fn SignaturePacket::creation_time(self : SignaturePacket) -> Int32? {
 }
 
 ///|
-/// Issuer key id, preferring the v0.16 subpacket; falls back to the
-/// issuer-fingerprint subpacket's trailing key id.
+/// Issuer key id, preferring the type 16 (Issuer Key ID) subpacket; falls
+/// back to the issuer-fingerprint subpacket's trailing key id.
 pub fn SignaturePacket::issuer_key_id(self : SignaturePacket) -> Bytes? {
   match find_subpacket(self.hashed_subpackets, SIGSUB_ISSUER_KEY_ID) {
     Some(b) => return Some(b)

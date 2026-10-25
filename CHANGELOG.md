@@ -9,6 +9,48 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Fixed — second review round N1–N10 (2026-10-26)
+
+- **N1 (P1, security)**: a subkey packet without a SubkeyBinding signature
+  is now rejected at import (RFC 9580 §10.1). Previously such a subkey was
+  accepted and treated as encryption-capable with "all capabilities",
+  so a subkey injected into a forwarded public key received the mail
+  without any authentication by the primary key (probe-verified exploit).
+- **N2**: transferable keys keep EVERY bound subkey (`PublicKey::subkeys :
+  Array[SubkeyCert]` / `PrivateKey::subkeys : Array[SecretSubkeyCert]`,
+  each carrying its own binding and revocation) instead of only the last
+  one. Encryption selection judges each subkey by its own key flags, and
+  document signatures issued by a signing subkey verify against the
+  certificate. **Breaking**: replaces the `encryption_subkey` /
+  `subkey_binding` / `subkey_revocation` fields.
+- **N3**: persona (0x11) and casual (0x12) self-certifications bind a
+  User ID like positive ones; keys certified only that way now import.
+- **N4**: password decryption tries every SKESK in the message — the
+  retry spans the payload decryption, so a wrong passphrase whose v4 SKESK
+  unwraps to plausible garbage still falls through at the SEIPD integrity
+  check. The encryption builder now seals to every configured passphrase
+  (one SKESK each, shared session key) instead of silently using only the
+  first, and the decryption builder tries all configured passphrases.
+- **N5**: the decryption builder consults the configured verifiers even
+  with several decryption keys (best-ranked status per gopenpgp's
+  prioritizeSignatureErrors), instead of silently returning "no signature".
+- **N6 (documented)**: old-format indeterminate-length packets consume the
+  rest of the stream by design (go-crypto parity); the limitation is now
+  documented at the parse site.
+- **N7**: a cryptographically valid subkey signature is `Expired` (not
+  `Ok`) when the primary key has expired.
+- **N8**: v5 (RFC 4880bis draft) key packets are rejected at parse with a
+  clear message instead of parsing and failing at first use.
+- **N9**: `sign_inline` / `sign_and_encrypt` gained `file_name?` (default
+  "message.txt"); the encryption builder passes its `file_name` through
+  the sign+encrypt path too.
+- **N10**: comment typo in `packet/sig.mbt` ("v0.16 subpacket" → type 16
+  Issuer Key ID).
+- Gates: 8 new regression tests (subkey injection, dual-subkey selection
+  and subkey signing, persona/casual import, two-password messages,
+  multi-key builder verification, expired-primary subkey signatures, v5
+  rejection, file_name). `moon test` 414/414.
+
 ### Added — root facade package (2026-10-12)
 
 - `import "justinwongcn/moonpgp"` now gives the complete high-level

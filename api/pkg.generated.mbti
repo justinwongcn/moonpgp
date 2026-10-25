@@ -48,7 +48,7 @@ pub fn recover_session_key_with_key(String, PrivateKey) -> SessionKey raise
 
 pub fn recover_session_key_with_password(String, String, argon2_max_memory_kib? : Int32) -> SessionKey raise
 
-pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo, created? : Int32) -> String raise
+pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo, created? : Int32, file_name? : String) -> String raise
 
 pub fn sign_cleartext(String, PrivateKey, created? : Int32) -> String raise
 
@@ -56,7 +56,7 @@ pub fn sign_cleartext_with(String, PrivateKey, @primitives.HashId, created? : In
 
 pub fn sign_detached(BytesView, PrivateKey, text_mode? : Bool, created? : Int32) -> String raise
 
-pub fn sign_inline(BytesView, PrivateKey, text_mode? : Bool, created? : Int32) -> String raise
+pub fn sign_inline(BytesView, PrivateKey, text_mode? : Bool, created? : Int32, file_name? : String) -> String raise
 
 pub fn verify_cleartext(String, PublicKey) -> (String, VerifyStatus) raise
 
@@ -125,10 +125,8 @@ pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
   user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
-  encryption_subkey : @packet.SecretKeyPacket?
-  subkey_binding : @packet.SignaturePacket?
+  subkeys : Array[SecretSubkeyCert]
   revocations : Array[@packet.SignaturePacket]
-  subkey_revocation : @packet.SignaturePacket?
 } derive(@debug.Debug)
 pub fn PrivateKey::can_encrypt(Self, Int64) -> Bool
 pub fn PrivateKey::can_verify(Self, Int64) -> Bool
@@ -154,10 +152,8 @@ pub struct PublicKey {
   primary : @packet.PublicKeyPacket
   user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
-  encryption_subkey : @packet.PublicKeyPacket?
-  subkey_binding : @packet.SignaturePacket?
+  subkeys : Array[SubkeyCert]
   revocations : Array[@packet.SignaturePacket]
-  subkey_revocation : @packet.SignaturePacket?
 } derive(@debug.Debug)
 pub fn PublicKey::can_encrypt(Self, Int64) -> Bool
 pub fn PublicKey::can_verify(Self, Int64) -> Bool
@@ -177,6 +173,13 @@ pub fn PublicKey::to_bytes(Self) -> Bytes
 pub fn PublicKey::to_repr(Self) -> @debug.Repr
 pub fn PublicKey::user_id(Self) -> String
 
+pub(all) struct SecretSubkeyCert {
+  secret : @packet.SecretKeyPacket
+  binding : @packet.SignaturePacket
+  revocation : @packet.SignaturePacket?
+} derive(@debug.Debug)
+pub fn SecretSubkeyCert::to_repr(Self) -> @debug.Repr
+
 pub(all) struct SessionKey {
   key : Bytes
   algo : @primitives.CipherAlgo
@@ -185,6 +188,13 @@ pub fn SessionKey::algo(Self) -> @primitives.CipherAlgo
 pub fn SessionKey::key(Self) -> Bytes
 pub fn SessionKey::new(BytesView, @primitives.CipherAlgo) -> Self raise
 pub fn SessionKey::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SubkeyCert {
+  key : @packet.PublicKeyPacket
+  binding : @packet.SignaturePacket
+  revocation : @packet.SignaturePacket?
+} derive(@debug.Debug)
+pub fn SubkeyCert::to_repr(Self) -> @debug.Repr
 
 pub(all) struct UserIdBinding {
   user_id : String

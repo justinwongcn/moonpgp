@@ -43,7 +43,9 @@ pub using @api {
   type Pgp,
   type PrivateKey,
   type PublicKey,
+  type SecretSubkeyCert,
   type SessionKey,
+  type SubkeyCert,
   type UserIdBinding,
   type VerifyStatus,
 }

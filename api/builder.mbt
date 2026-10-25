@@ -93,14 +93,18 @@ pub fn EncryptionBuilder::finish(
   fn(data : BytesView) -> String raise {
     if !recipients.is_empty() {
       // Public-key path; wrap an inline signature when a signer is set.
+      // `file_name` applies to both branches (N9).
       let armored = match signer {
-        Some(sk) => sign_and_encrypt(data, sk, recipients, compress?)
+        Some(sk) =>
+          sign_and_encrypt(data, sk, recipients, file_name~, compress?)
         None => encrypt_to_recipients(data, recipients, file_name~, compress?)
       }
       return armored
     }
     if !passwords.is_empty() {
-      return encrypt_with_password(data, passwords[0], file_name~, compress?)
+      // Every supplied passphrase gets its own SKESK over one shared
+      // session key (N4) instead of silently dropping all but the first.
+      return seal_skesks_with_passwords(data, passwords, file_name~, compress?)
     }
     @error.fail("api: encryption requires a password or a recipient")
   }
@@ -200,41 +204,99 @@ pub fn DecryptionBuilder::finish(
       }
     }
     if !passwords.is_empty() {
-      return Data(
-        decrypt_with_password(message, passwords[0], max_decompressed~),
-      )
+      // Try each passphrase in turn (N4): the message may have been
+      // sealed to several and the matching SKESK need not be first.
+      let mut last_error : String? = None
+      for pass in passwords {
+        let data : Bytes? = Some(
+          decrypt_with_password(message, pass, max_decompressed~),
+        ) catch {
+          e => {
+            last_error = Some(e.to_string())
+            None
+          }
+        }
+        if data is Some(d) {
+          return Data(d)
+        }
+      }
+      match last_error {
+        Some(msg) => @error.fail(msg)
+        None => @error.fail("api: decryption failed")
+      }
     }
     @error.fail("api: decryption requires a password or a private key")
   }
 }
 
 ///|
-/// decrypt_and_verify over a list of candidate keys.
+/// decrypt_and_verify over a list of candidate keys: every key is tried
+/// until one decrypts, and — when verifiers were supplied — every
+/// verifier is consulted on that successful decryption, keeping the
+/// best-ranked status (N5: verifiers used to be silently dropped the
+/// moment more than one key was given).
 fn decrypt_and_verify_list(
   message : String,
   keys : Array[PrivateKey],
   verifiers : Array[PublicKey],
   max_decompressed : Int32,
 ) -> (Bytes, VerifyStatus) raise {
-  if keys.length() == 1 && verifiers.length() == 1 {
-    decrypt_and_verify(message, keys, Some(verifiers[0]), max_decompressed~)
-  } else if keys.length() == 1 {
-    decrypt_and_verify(message, keys, None, max_decompressed~)
-  } else {
-    // Try each key until one matches.
-    let mut last_error : String? = None
-    for key in keys {
-      try {
-        let (d, s) = decrypt_and_verify(message, [key], None, max_decompressed~)
-        return (d, s)
-      } catch {
-        e => last_error = Some(e.to_string())
+  let mut last_error : String? = None
+  for key in keys {
+    if verifiers.is_empty() {
+      let pair : (Bytes, VerifyStatus)? = Some(
+        decrypt_and_verify(message, [key], None, max_decompressed~),
+      ) catch {
+        e => {
+          last_error = Some(e.to_string())
+          None
+        }
+      }
+      if pair is Some(result) {
+        return result
+      }
+    } else {
+      let mut best : (Bytes, VerifyStatus)? = None
+      for v in verifiers {
+        let pair : (Bytes, VerifyStatus)? = Some(
+          decrypt_and_verify(message, [key], Some(v), max_decompressed~),
+        ) catch {
+          e => {
+            last_error = Some(e.to_string())
+            None
+          }
+        }
+        if pair is Some((d, s)) {
+          let take = match best {
+            Some((_, cur)) => status_rank(s) > status_rank(cur)
+            None => true
+          }
+          if take {
+            best = Some((d, s))
+          }
+        }
+      }
+      if best is Some(result) {
+        return result
       }
     }
-    match last_error {
-      Some(msg) => @error.fail(msg)
-      None => @error.fail("api: decryption failed")
-    }
+  }
+  match last_error {
+    Some(msg) => @error.fail(msg)
+    None => @error.fail("api: decryption failed")
+  }
+}
+
+///|
+/// Ranking across candidate verifiers (gopenpgp's
+/// prioritizeSignatureErrors): a verified signature outranks everything;
+/// among failures, verification rejections outweigh missing signatures.
+fn status_rank(status : VerifyStatus) -> Int32 {
+  match status {
+    Ok => 4
+    Failed | KeyRevoked | Expired => 3
+    NoVerifier => 2
+    NotSigned => 1
   }
 }
 

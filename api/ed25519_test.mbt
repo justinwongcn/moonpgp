@@ -14,9 +14,9 @@ test "ed25519 key generation with verifiable self-signature" {
   assert_true(ok)
   // RSA encryption subkey binding verifies against the Ed25519 primary.
   let ok2 = @api.verify_key_signature(
-    key.subkey_binding.unwrap(),
+    key.subkeys[0].binding,
     key.primary.public,
-    key.encryption_subkey.unwrap().public,
+    key.subkeys[0].secret.public,
   )
   assert_true(ok2)
   // Fingerprint is a v4 SHA-1 fingerprint.
@@ -68,7 +68,7 @@ test "ed25519 inline and cleartext signing" {
 test "ed25519 primary with ecdh subkey encrypt/decrypt" {
   let key = @api.generate_ed25519_key("Ed <ed@example.com>")
   assert_eq(
-    @packet.PublicKeyPacket::algo(key.encryption_subkey.unwrap().public),
+    @packet.PublicKeyPacket::algo(key.subkeys[0].secret.public),
     @packet.Ecdh,
   )
   let plaintext = @primitives.utf8_bytes("ecdh subkey under ed25519 primary")

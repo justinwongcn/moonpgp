@@ -67,9 +67,17 @@ test "tampered user id fails import (certification must verify)" {
 test "swapped subkey fails import (binding must verify)" {
   let key = generate_key("A <a@example.com>", bits=2048)
   let other = generate_key("B <b@example.com>", bits=2048)
+  // Another key's subkey under this key's binding: the binding does not
+  // cover the foreign material, so import must reject it.
   let mixed : PrivateKey = {
     ..key,
-    encryption_subkey: other.encryption_subkey,
+    subkeys: [
+      SecretSubkeyCert::{
+        secret: other.subkeys[0].secret,
+        binding: key.subkeys[0].binding,
+        revocation: None,
+      },
+    ],
   }
   let raised = try {
     let _ = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
@@ -99,11 +107,11 @@ test "keyring finds non-RSA encryption subkeys (previously is_rsa-gated)" {
   let ed = generate_ed25519_key("Ed <ed@example.com>")
   let ring = KeyRing::new()
   ring.add_public(ed.to_public())
-  let sub_id = ed.to_public().encryption_subkey.unwrap().key_id()
+  let sub_id = ed.to_public().subkeys[0].key.key_id()
   assert_true(ring.find_encryption_key(sub_id) is Some(_))
   let v6 = generate_ed25519_v6_key("V6 <v6@example.com>")
   ring.add_public(v6.to_public())
-  let v6_sub = v6.to_public().encryption_subkey.unwrap().key_id()
+  let v6_sub = v6.to_public().subkeys[0].key.key_id()
   assert_true(ring.find_encryption_key(v6_sub) is Some(_))
   // The primary (EdDSA) is not encryption-capable and must not resolve.
   assert_true(ring.find_encryption_key(v6.key_id()) is None)
@@ -115,12 +123,13 @@ test "expired subkey binding drops the subkey from encryption selection" {
   // 60 s after the subkey's creation. (Not re-imported: the signature is
   // no longer valid wire data once its hashed area changed.)
   let key = generate_key("X <x@example.com>", bits=2048)
-  let created = key.encryption_subkey.unwrap().public.creation_time
+  let created = key.subkeys[0].secret.public.creation_time
   let exp = created + 60
+  let old = key.subkeys[0].binding
   let expired_binding : @packet.SignaturePacket = {
-    ..key.subkey_binding.unwrap(),
+    ..old,
     hashed_subpackets: [
-      ..key.subkey_binding.unwrap().hashed_subpackets,
+      ..old.hashed_subpackets,
       {
         critical: false,
         sub_type: @packet.SIGSUB_KEY_EXPIRATION_TIME,
@@ -133,7 +142,16 @@ test "expired subkey binding drops the subkey from encryption selection" {
       },
     ],
   }
-  let pk = { ..key, subkey_binding: Some(expired_binding), }.to_public()
+  let pk = {
+    ..key,
+    subkeys: [
+      SecretSubkeyCert::{
+        secret: key.subkeys[0].secret,
+        binding: expired_binding,
+        revocation: None,
+      },
+    ],
+  }.to_public()
   let now = @primitives.unix_now()
   if now != 0L {
     // Past its binding's lifetime the subkey drops out of selection; the

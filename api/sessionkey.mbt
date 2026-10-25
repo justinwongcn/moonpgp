@@ -145,9 +145,8 @@ pub fn recover_session_key_with_key(
     @armor.ArmorBlock::data(block).exact_view(),
   )
   let candidates : Array[@packet.SecretKeyPacket] = [key.primary]
-  match key.encryption_subkey {
-    Some(sk) => candidates.push(sk)
-    None => ()
+  for c in key.subkeys {
+    candidates.push(c.secret)
   }
   for p in packets {
     if p.tag() == @packet.Pkesk {

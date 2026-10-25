@@ -311,9 +311,8 @@ fn decrypt_inner_with_key(
   key : PrivateKey,
 ) -> Bytes? raise {
   let candidates : Array[@packet.SecretKeyPacket] = [key.primary]
-  match key.encryption_subkey {
-    Some(sk) => candidates.push(sk)
-    None => ()
+  for c in key.subkeys {
+    candidates.push(c.secret)
   }
   for p in packets {
     if p.tag() == @packet.Pkesk {

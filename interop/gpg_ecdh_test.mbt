@@ -28,7 +28,7 @@ test "decrypt gpg-encrypted ECDH message with our cv25519 subkey" {
   assert_false(key.is_locked())
   assert_eq(key.fingerprint(), our_ecdh_fingerprint())
   assert_eq(
-    @packet.PublicKeyPacket::algo(key.encryption_subkey.unwrap().public),
+    @packet.PublicKeyPacket::algo(key.subkeys[0].secret.public),
     @packet.Ecdh,
   )
   let plaintext = @api.decrypt_with_private_key(

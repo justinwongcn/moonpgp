@@ -32,26 +32,26 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
       ).exact_view(),
     )
   }
-  match self.encryption_subkey {
-    Some(subkey) => {
-      w.bytes(
-        @packet.serialize_packet(
-          @packet.SecretSubkey,
-          subkey.to_body().exact_view(),
-        ).exact_view(),
-      )
-      match self.subkey_binding {
-        Some(b) =>
-          w.bytes(
-            @packet.serialize_packet(
-              @packet.Signature,
-              b.to_body().exact_view(),
-            ).exact_view(),
-          )
-        None => ()
-      }
+  for c in self.subkeys {
+    w.bytes(
+      @packet.serialize_packet(
+        @packet.SecretSubkey,
+        c.secret.to_body().exact_view(),
+      ).exact_view(),
+    )
+    w.bytes(
+      @packet.serialize_packet(
+        @packet.Signature,
+        c.binding.to_body().exact_view(),
+      ).exact_view(),
+    )
+    match c.revocation {
+      Some(r) =>
+        w.bytes(
+          @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+        )
+      None => ()
     }
-    None => ()
   }
   w.to_bytes()
 }
@@ -128,26 +128,26 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
       ).exact_view(),
     )
   }
-  match self.encryption_subkey {
-    Some(subkey) => {
-      w.bytes(
-        @packet.serialize_packet(
-          @packet.PublicSubkey,
-          subkey.to_body().exact_view(),
-        ).exact_view(),
-      )
-      match self.subkey_binding {
-        Some(b) =>
-          w.bytes(
-            @packet.serialize_packet(
-              @packet.Signature,
-              b.to_body().exact_view(),
-            ).exact_view(),
-          )
-        None => ()
-      }
+  for c in self.subkeys {
+    w.bytes(
+      @packet.serialize_packet(
+        @packet.PublicSubkey,
+        c.key.to_body().exact_view(),
+      ).exact_view(),
+    )
+    w.bytes(
+      @packet.serialize_packet(
+        @packet.Signature,
+        c.binding.to_body().exact_view(),
+      ).exact_view(),
+    )
+    match c.revocation {
+      Some(r) =>
+        w.bytes(
+          @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+        )
+      None => ()
     }
-    None => ()
   }
   w.to_bytes()
 }
@@ -164,24 +164,56 @@ fn packets_of(data : BytesView) -> Array[@packet.RawPacket] raise {
 }
 
 ///|
-fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
-  let mut primary : @packet.PublicKeyPacket? = None
+/// One subkey as it appeared on the wire during a transferable-key walk:
+/// the public half, the secret packet when the wire carried one, and the
+/// binding/revocation signatures that followed it.
+priv struct ParsedSubkey {
+  public : @packet.PublicKeyPacket
+  secret : @packet.SecretKeyPacket?
+  mut binding : @packet.SignaturePacket?
+  mut revocation : @packet.SignaturePacket?
+}
+
+///|
+/// The result of walking a transferable key's packets once, shared by the
+/// public and private import paths so the two cannot disagree about what
+/// the wire said.
+priv struct ParsedKey {
+  primary_pub : @packet.PublicKeyPacket
+  primary_secret : @packet.SecretKeyPacket?
+  user_ids : Array[UserIdBinding]
+  direct : @packet.SignaturePacket?
+  subkeys : Array[ParsedSubkey]
+  revocations : Array[@packet.SignaturePacket]
+}
+
+///|
+/// Walk the packet stream of a transferable key once: primary packet,
+/// User IDs with their certifications, the Direct Key signature, every
+/// subkey with its own binding (and revocation), and primary-key
+/// revocations. Bindings and revocations attach to the most recent
+/// subkey, so a normal `Subkey || Binding [|| Revocation]` sequence pairs
+/// correctly no matter how many subkeys the certificate carries (N2).
+fn parse_transferable(packets : Array[@packet.RawPacket]) -> ParsedKey raise {
+  let mut primary_pub : @packet.PublicKeyPacket? = None
+  let mut primary_secret : @packet.SecretKeyPacket? = None
   // User IDs pair with the certification that follows them (wire order;
   // a later certification of the same User ID replaces the earlier one).
   let bindings : Array[UserIdBinding] = []
   let mut pending_uid : String? = None
   let mut direct : @packet.SignaturePacket? = None
-  let mut subkey : @packet.PublicKeyPacket? = None
-  let mut binding : @packet.SignaturePacket? = None
+  let subkeys : Array[ParsedSubkey] = []
   let revocations : Array[@packet.SignaturePacket] = []
-  let mut subkey_revocation : @packet.SignaturePacket? = None
   for p in packets {
     match p.tag() {
       @packet.PublicKey =>
-        primary = Some(@packet.PublicKeyPacket::parse(p.body().exact_view()))
+        primary_pub = Some(
+          @packet.PublicKeyPacket::parse(p.body().exact_view()),
+        )
       @packet.SecretKey => {
         let sk = @packet.SecretKeyPacket::parse(p.body().exact_view())
-        primary = Some(sk.public)
+        primary_pub = Some(sk.public)
+        primary_secret = Some(sk)
       }
       @packet.UserId =>
         // Lossy on purpose: a key with an undecodable User ID stays usable
@@ -191,7 +223,13 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
       @packet.Signature => {
         let s = @packet.SignaturePacket::parse(p.body().exact_view())
         match s.sig_type() {
-          @packet.PositiveCertification | @packet.GenericCertification => {
+          // All four self-certification types 0x10-0x13 bind the User ID
+          // (N3): gpg keys certified as casual/persona self-sigs are just
+          // as much transferable keys as positive ones.
+          @packet.PositiveCertification
+          | @packet.GenericCertification
+          | @packet.PersonaCertification
+          | @packet.CasualCertification => {
             let uid = match pending_uid {
               Some(u) => u
               // A certification before any User ID cannot be bound to
@@ -214,47 +252,101 @@ fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
             }
           }
           @packet.DirectSignature => direct = Some(s)
-          @packet.SubkeyBinding => binding = Some(s)
+          @packet.SubkeyBinding =>
+            // A binding after the last subkey re-binds it (last wins); a
+            // binding with no subkey before it certifies nothing.
+            if subkeys.length() > 0 {
+              let last = subkeys[subkeys.length() - 1]
+              last.binding = Some(s)
+            }
           @packet.KeyRevocation => revocations.push(s)
-          @packet.SubkeyRevocation => subkey_revocation = Some(s)
+          @packet.SubkeyRevocation =>
+            if subkeys.length() > 0 {
+              let last = subkeys[subkeys.length() - 1]
+              last.revocation = Some(s)
+            }
           // CertificationRevocation withdrawals are not modeled.
           _ => ()
         }
       }
       @packet.PublicSubkey =>
-        subkey = Some(@packet.PublicKeyPacket::parse(p.body().exact_view()))
+        subkeys.push(ParsedSubkey::{
+          public: @packet.PublicKeyPacket::parse(p.body().exact_view()),
+          secret: None,
+          binding: None,
+          revocation: None,
+        })
       @packet.SecretSubkey => {
         let sk = @packet.SecretKeyPacket::parse(p.body().exact_view())
-        subkey = Some(sk.public)
+        subkeys.push(ParsedSubkey::{
+          public: sk.public,
+          secret: Some(sk),
+          binding: None,
+          revocation: None,
+        })
       }
       _ => ()
     }
   }
-  match primary {
-    Some(p) => {
-      // RFC 9580 §5.2.3.10: a v6 key must carry a valid Direct Key
-      // signature before it may be used. A v6 key without a User ID uses
-      // that signature as its key-level self-signature.
-      if p.version() >= 6 && direct is None {
-        @error.fail("api: v6 key has no direct-key signature")
-      }
-      // Only a bare key (no User ID) may rely on its Direct signature
-      // alone; every certified User ID must carry a certification.
-      if bindings.is_empty() && direct is None {
-        @error.fail("api: key has no self-signature")
-      }
-      validate_key_signatures(p, bindings, direct, subkey, binding)
-      PublicKey::{
-        primary: p,
+  match primary_pub {
+    Some(p) =>
+      ParsedKey::{
+        primary_pub: p,
+        primary_secret,
         user_ids: bindings,
-        direct_signature: direct,
-        encryption_subkey: subkey,
-        subkey_binding: binding,
+        direct,
+        subkeys,
         revocations,
-        subkey_revocation,
       }
-    }
     None => @error.fail("api: no key packet found")
+  }
+}
+
+///|
+/// Structural requirements plus cryptographic validation of everything
+/// the key model relies on — shared by the public and private import
+/// paths so neither can accept what the other rejects.
+fn check_transferable(parsed : ParsedKey) -> Unit raise {
+  // RFC 9580 §5.2.3.10: a v6 key must carry a valid Direct Key
+  // signature before it may be used. A v6 key without a User ID uses
+  // that signature as its key-level self-signature.
+  if parsed.primary_pub.version() >= 6 && parsed.direct is None {
+    @error.fail("api: v6 key has no direct-key signature")
+  }
+  // Only a bare key (no User ID) may rely on its Direct signature
+  // alone; every certified User ID must carry a certification.
+  if parsed.user_ids.is_empty() && parsed.direct is None {
+    @error.fail("api: key has no self-signature")
+  }
+  validate_key_signatures(
+    parsed.primary_pub,
+    parsed.user_ids,
+    parsed.direct,
+    parsed.subkeys,
+  )
+}
+
+///|
+/// Import-time structural and cryptographic validation, then assembly
+/// into a `PublicKey`.
+fn build_public(packets : Array[@packet.RawPacket]) -> PublicKey raise {
+  let parsed = parse_transferable(packets)
+  check_transferable(parsed)
+  let subkeys : Array[SubkeyCert] = []
+  for s in parsed.subkeys {
+    // N1: validation above guarantees the binding exists and verifies.
+    subkeys.push(SubkeyCert::{
+      key: s.public,
+      binding: s.binding.unwrap(),
+      revocation: s.revocation,
+    })
+  }
+  PublicKey::{
+    primary: parsed.primary_pub,
+    user_ids: parsed.user_ids,
+    direct_signature: parsed.direct,
+    subkeys,
+    revocations: parsed.revocations,
   }
 }
 
@@ -267,8 +359,7 @@ fn validate_key_signatures(
   primary : @packet.PublicKeyPacket,
   bindings : Array[UserIdBinding],
   direct : @packet.SignaturePacket?,
-  subkey : @packet.PublicKeyPacket?,
-  binding : @packet.SignaturePacket?,
+  subkeys : Array[ParsedSubkey],
 ) -> Unit raise {
   for b in bindings {
     let ok = verify_key_signature(
@@ -294,16 +385,20 @@ fn validate_key_signatures(
     }
     None => ()
   }
-  match (subkey, binding) {
-    (Some(sk), Some(b)) => {
-      let ok = verify_key_signature(b, primary, sk) catch { _ => false }
-      if !ok {
-        @error.fail(
-          "api: subkey binding signature does not verify over the key",
-        )
-      }
+  for s in subkeys {
+    // N1 (RFC 9580 §10.1): a transferable subkey MUST carry a binding
+    // signature. Accepting an unbound subkey let a subkey injected into a
+    // forwarded certificate be treated as encryption-capable without any
+    // authentication by the primary key.
+    let b = match s.binding {
+      Some(b) => b
+      None =>
+        @error.fail("api: subkey has no binding signature (RFC 9580 §10.1)")
     }
-    _ => ()
+    let ok = verify_key_signature(b, primary, s.public) catch { _ => false }
+    if !ok {
+      @error.fail("api: subkey binding signature does not verify over the key")
+    }
   }
 }
 
@@ -318,38 +413,33 @@ pub fn PublicKey::from_bytes(data : BytesView) -> PublicKey raise {
 /// material stays in whatever state the wire had it (locked or unlocked);
 /// use `PrivateKey::unlock` for locked keys.
 pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
-  let packets = packets_of(data)
-  let pub_half = build_public(packets)
-  let mut primary : @packet.SecretKeyPacket? = None
-  let mut subkey : @packet.SecretKeyPacket? = None
-  let mut binding : @packet.SignaturePacket? = None
-  for p in packets {
-    match p.tag() {
-      @packet.SecretKey =>
-        primary = Some(@packet.SecretKeyPacket::parse(p.body().exact_view()))
-      @packet.SecretSubkey =>
-        subkey = Some(@packet.SecretKeyPacket::parse(p.body().exact_view()))
-      @packet.Signature => {
-        let s = @packet.SignaturePacket::parse(p.body().exact_view())
-        if s.sig_type() == @packet.SubkeyBinding {
-          binding = Some(s)
-        }
-      }
-      _ => ()
-    }
-  }
-  match primary {
-    Some(p) =>
-      PrivateKey::{
-        primary: p,
-        user_ids: pub_half.user_ids,
-        direct_signature: pub_half.direct_signature,
-        encryption_subkey: subkey,
-        subkey_binding: binding,
-        revocations: pub_half.revocations,
-        subkey_revocation: pub_half.subkey_revocation,
-      }
+  let parsed = parse_transferable(packets_of(data))
+  check_transferable(parsed)
+  let primary = match parsed.primary_secret {
+    Some(p) => p
     None => @error.fail("api: no secret key packet found")
+  }
+  // A private certificate may carry public-only subkeys (an export that
+  // skipped some secret material); they are validated like any other
+  // subkey but contribute no usable secret here.
+  let subkeys : Array[SecretSubkeyCert] = []
+  for s in parsed.subkeys {
+    let secret = match s.secret {
+      Some(sk) => sk
+      None => continue
+    }
+    subkeys.push(SecretSubkeyCert::{
+      secret,
+      binding: s.binding.unwrap(),
+      revocation: s.revocation,
+    })
+  }
+  PrivateKey::{
+    primary,
+    user_ids: parsed.user_ids,
+    direct_signature: parsed.direct,
+    subkeys,
+    revocations: parsed.revocations,
   }
 }
 

@@ -37,12 +37,11 @@ pub fn KeyRing::private_count(self : KeyRing) -> Int32 {
 }
 
 ///|
-/// All public key packets (primary + subkey) of a key, with their packets.
+/// All public key packets (primary + subkeys) of a key, with their packets.
 fn all_public_packets(key : PublicKey) -> Array[@packet.PublicKeyPacket] {
   let out = [key.primary]
-  match key.encryption_subkey {
-    Some(sk) => out.push(sk)
-    None => ()
+  for c in key.subkeys {
+    out.push(c.key)
   }
   out
 }
@@ -50,7 +49,8 @@ fn all_public_packets(key : PublicKey) -> Array[@packet.PublicKeyPacket] {
 ///|
 /// True when the packet is an encryption-capable component of `key` that
 /// is still usable at `now` (key/subkey not revoked, flags permit —
-/// absent flags count as capable —, nothing expired).
+/// absent flags count as capable —, nothing expired). Each subkey is
+/// judged by its own binding (N2).
 fn key_packet_encryption_usable_at(
   key : PublicKey,
   packet : @packet.PublicKeyPacket,
@@ -59,13 +59,11 @@ fn key_packet_encryption_usable_at(
   if key.is_revoked(now) {
     return false
   }
-  match key.encryption_subkey {
-    Some(sk) =>
-      if sk.key_id().equal(packet.key_id()) {
-        return !subkey_revoked_at(key.subkey_revocation, key.primary, sk, now) &&
-          component_usable(sk, key.subkey_binding, FLAG_ENCRYPT, now)
-      }
-    None => ()
+  for c in key.subkeys {
+    if c.key.key_id().equal(packet.key_id()) {
+      return !subkey_revoked_at(c.revocation, key.primary, c.key, now) &&
+        component_usable(c.key, Some(c.binding), FLAG_ENCRYPT, now)
+    }
   }
   key.primary.algo().is_rsa() &&
   component_usable(key.primary, Some(key.self_signature()), FLAG_ENCRYPT, now)
@@ -90,11 +88,12 @@ fn key_packet_verify_usable_at(
       now,
     )
   }
-  match key.encryption_subkey {
-    Some(sk) =>
-      component_usable(sk, key.subkey_binding, FLAG_SIGN_OR_CERTIFY, now)
-    None => false
+  for c in key.subkeys {
+    if component_usable(c.key, Some(c.binding), FLAG_SIGN_OR_CERTIFY, now) {
+      return true
+    }
   }
+  false
 }
 
 ///|
@@ -131,10 +130,9 @@ pub fn KeyRing::find_decryption_key(
   key_id : BytesView,
 ) -> @packet.SecretKeyPacket? raise {
   for key in self.private_keys {
-    let candidates = [key.primary]
-    match key.encryption_subkey {
-      Some(sk) => candidates.push(sk)
-      None => ()
+    let candidates : Array[@packet.SecretKeyPacket] = [key.primary]
+    for c in key.subkeys {
+      candidates.push(c.secret)
     }
     for sk in candidates {
       let id = sk.public.key_id()

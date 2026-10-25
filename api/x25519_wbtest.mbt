@@ -47,10 +47,7 @@ fn v3_x25519_pkesk(
 ///|
 test "a v3 PKESK to a v6 X25519 key decrypts" {
   let key = generate_ed25519_v6_key("V3 <v3@test.local>")
-  let enc_key = match key.encryption_subkey {
-    Some(sk) => sk.public
-    None => fail("expected an encryption subkey")
-  }
+  let enc_key = key.subkeys[0].secret.public
   let plaintext = @primitives.utf8_bytes("v3 PKESK + v1 SEIPD\n")
   let session_key = @primitives.random_bytes(32)
   let pkesk = v3_x25519_pkesk(enc_key, session_key)
@@ -82,10 +79,7 @@ test "a v3 PKESK to a v6 X25519 key decrypts" {
 ///|
 test "a v6 PKESK before a v1 SEIPD is discarded, not mis-decrypted" {
   let key = generate_ed25519_v6_key("Mis <mis@test.local>")
-  let enc_key = match key.encryption_subkey {
-    Some(sk) => sk.public
-    None => fail("expected an encryption subkey")
-  }
+  let enc_key = key.subkeys[0].secret.public
   let plaintext = @primitives.utf8_bytes("mismatched versions\n")
   let session_key = @primitives.random_bytes(32)
   let (eph, wrapped) = x25519_wrap_session_key(

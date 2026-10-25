@@ -183,7 +183,13 @@ fn read_one_packet(r : Reader) -> RawPacket raise {
       1 => chunks.push(r.read_bytes(r.read_u16()))
       2 => chunks.push(r.read_bytes(r.read_u32()))
       _ =>
-        // Mode 3: indeterminate length; body runs to the end of the container.
+        // Mode 3 (indeterminate length): the body runs to the end of the
+        // enclosing stream — the same read-to-end semantics go-crypto uses.
+        // RFC 4880 §4.2.1 constrains this form to packets whose extent is
+        // unknown in advance (de facto the last packet of a stream), so a
+        // mode-3 packet followed by more packets is malformed input and
+        // those trailing packets are consumed into its body (N6, documented
+        // limitation: there is no in-band marker to find the true end).
         chunks.push(r.read_rest())
     }
   }

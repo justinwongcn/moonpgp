@@ -126,10 +126,8 @@ pub fn generate_key(user_id : String, bits~ : Int32 = 3072) -> PrivateKey raise 
     primary,
     user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
     direct_signature: None,
-    encryption_subkey: Some(subkey),
-    subkey_binding: Some(binding),
+    subkeys: [SecretSubkeyCert::{ secret: subkey, binding, revocation: None, }],
     revocations: [],
-    subkey_revocation: None,
   }
 }
 
@@ -154,10 +152,8 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
     primary,
     user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
     direct_signature: None,
-    encryption_subkey: Some(subkey),
-    subkey_binding: Some(binding),
+    subkeys: [SecretSubkeyCert::{ secret: subkey, binding, revocation: None, }],
     revocations: [],
-    subkey_revocation: None,
   }
 }
 
@@ -211,9 +207,7 @@ pub fn generate_ed25519_v6_key(user_id : String) -> PrivateKey raise {
     primary,
     user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
     direct_signature: Some(direct),
-    encryption_subkey: Some(subkey),
-    subkey_binding: Some(binding),
+    subkeys: [SecretSubkeyCert::{ secret: subkey, binding, revocation: None, }],
     revocations: [],
-    subkey_revocation: None,
   }
 }

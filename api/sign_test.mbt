@@ -10,9 +10,9 @@ test "stress: repeated keygen with verification" {
         user_id=key.user_id(),
       )
       let ok2 = @api.verify_key_signature(
-        key.subkey_binding.unwrap(),
+        key.subkeys[0].binding,
         key.primary.public,
-        key.encryption_subkey.unwrap().public,
+        key.subkeys[0].secret.public,
       )
       assert_true(ok1)
       assert_true(ok2)
@@ -86,7 +86,7 @@ test "keyring lookup by key id" {
   // M1: lookups are capability-aware. The encryption-only subkey (key
   // flags 0x0C) no longer resolves as a verification key, but it does
   // resolve as an encryption key.
-  let sub_id = alice.to_public().encryption_subkey.unwrap().key_id()
+  let sub_id = alice.to_public().subkeys[0].key.key_id()
   assert_true(ring.find_verification_key(sub_id) is None)
   assert_true(ring.find_encryption_key(sub_id) is Some(_))
 }

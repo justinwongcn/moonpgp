@@ -132,10 +132,7 @@ test "decrypt RFC 9580 A.8.5 X25519 + v6 PKESK + v2 SEIPD (OCB)" {
   let key = @api.PrivateKey::from_armored(A4_ARMORED)
   assert_eq(key.primary.public.version(), 6)
   assert_eq(key.primary.public.algo(), @packet.Ed25519)
-  let subkey = match key.encryption_subkey {
-    Some(sk) => sk
-    None => fail("A.4 has an encryption subkey")
-  }
+  let subkey = key.subkeys[0].secret
   assert_eq(subkey.public.version(), 6)
   assert_eq(subkey.public.algo(), @packet.X25519)
   assert_eq(
@@ -147,10 +144,7 @@ test "decrypt RFC 9580 A.8.5 X25519 + v6 PKESK + v2 SEIPD (OCB)" {
 ///|
 test "v6 key generation round trips through armor and encryption" {
   let key = @api.generate_ed25519_v6_key("V6 Round Trip <v6rt@example.com>")
-  let subkey = match key.encryption_subkey {
-    Some(sk) => sk
-    None => fail("generated v6 key must carry an encryption subkey")
-  }
+  let subkey = key.subkeys[0].secret
   assert_eq(subkey.public.version(), 6)
   assert_eq(subkey.public.algo(), @packet.X25519)
   // The public half must stay usable after an armor round trip.

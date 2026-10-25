@@ -278,6 +278,19 @@ pub fn PrivateKey::unlock(
   passphrase : String,
   argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> PrivateKey raise {
+  let subkeys : Array[SecretSubkeyCert] = []
+  for c in self.subkeys {
+    subkeys.push(SecretSubkeyCert::{
+      secret: unlock_secret_key(
+        c.secret,
+        passphrase,
+        0xC7,
+        argon2_max_memory_kib,
+      ),
+      binding: c.binding,
+      revocation: c.revocation,
+    })
+  }
   {
     primary: unlock_secret_key(
       self.primary,
@@ -287,14 +300,8 @@ pub fn PrivateKey::unlock(
     ),
     user_ids: self.user_ids,
     direct_signature: self.direct_signature,
-    encryption_subkey: match self.encryption_subkey {
-      Some(sk) =>
-        Some(unlock_secret_key(sk, passphrase, 0xC7, argon2_max_memory_kib))
-      None => None
-    },
-    subkey_binding: self.subkey_binding,
+    subkeys,
     revocations: self.revocations,
-    subkey_revocation: self.subkey_revocation,
   }
 }
 
@@ -305,17 +312,20 @@ pub fn PrivateKey::lock(
   self : PrivateKey,
   passphrase : String,
 ) -> PrivateKey raise {
+  let subkeys : Array[SecretSubkeyCert] = []
+  for c in self.subkeys {
+    subkeys.push(SecretSubkeyCert::{
+      secret: lock_secret_key(c.secret, passphrase),
+      binding: c.binding,
+      revocation: c.revocation,
+    })
+  }
   {
     primary: lock_secret_key(self.primary, passphrase),
     user_ids: self.user_ids,
     direct_signature: self.direct_signature,
-    encryption_subkey: match self.encryption_subkey {
-      Some(sk) => Some(lock_secret_key(sk, passphrase))
-      None => None
-    },
-    subkey_binding: self.subkey_binding,
+    subkeys,
     revocations: self.revocations,
-    subkey_revocation: self.subkey_revocation,
   }
 }
 
@@ -332,6 +342,21 @@ pub fn PrivateKey::lock_argon2(
   parallelism~ : Int32 = 4,
   memory_exp~ : Int32 = 16,
 ) -> PrivateKey raise {
+  let subkeys : Array[SecretSubkeyCert] = []
+  for c in self.subkeys {
+    subkeys.push(SecretSubkeyCert::{
+      secret: lock_secret_key_argon2(
+        c.secret,
+        passphrase,
+        0xC7,
+        passes,
+        parallelism,
+        memory_exp,
+      ),
+      binding: c.binding,
+      revocation: c.revocation,
+    })
+  }
   {
     primary: lock_secret_key_argon2(
       self.primary,
@@ -343,41 +368,40 @@ pub fn PrivateKey::lock_argon2(
     ),
     user_ids: self.user_ids,
     direct_signature: self.direct_signature,
-    encryption_subkey: match self.encryption_subkey {
-      Some(sk) =>
-        Some(
-          lock_secret_key_argon2(
-            sk, passphrase, 0xC7, passes, parallelism, memory_exp,
-          ),
-        )
-      None => None
-    },
-    subkey_binding: self.subkey_binding,
+    subkeys,
     revocations: self.revocations,
-    subkey_revocation: self.subkey_revocation,
   }
 }
 
 ///|
-/// True when any secret component (primary key or encryption subkey) is
-/// still passphrase-protected. `unlock` unlocks both together and gopenpgp's
-/// `IsLocked` uses the same "any component" semantics, so looking at the
-/// primary alone misreports a key whose subkey is the protected one.
+/// True when any secret component (primary key or a subkey) is still
+/// passphrase-protected. `unlock` unlocks all components together and
+/// gopenpgp's `IsLocked` uses the same "any component" semantics, so
+/// looking at the primary alone misreports a key whose subkey is the
+/// protected one.
 pub fn PrivateKey::is_locked(self : PrivateKey) -> Bool {
-  let subkey_locked = match self.encryption_subkey {
-    Some(sk) => sk.s2k_usage != 0
-    None => false
+  if self.primary.s2k_usage != 0 {
+    return true
   }
-  self.primary.s2k_usage != 0 || subkey_locked
+  for c in self.subkeys {
+    if c.secret.s2k_usage != 0 {
+      return true
+    }
+  }
+  false
 }
 
 ///|
 /// True when any secret component uses the RFC 9580 AEAD protection
 /// (S2K usage octet 253).
 pub fn PrivateKey::is_aead_protected(self : PrivateKey) -> Bool {
-  let subkey_aead = match self.encryption_subkey {
-    Some(sk) => sk.s2k_usage == 253
-    None => false
+  if self.primary.s2k_usage == 253 {
+    return true
   }
-  self.primary.s2k_usage == 253 || subkey_aead
+  for c in self.subkeys {
+    if c.secret.s2k_usage == 253 {
+      return true
+    }
+  }
+  false
 }

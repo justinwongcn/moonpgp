@@ -193,20 +193,23 @@ pub fn PublicKey::is_revoked(self : PublicKey, now : Int64) -> Bool {
 }
 
 ///|
-/// The encryption-capable packet to use at `now`: the subkey when present
-/// and usable, otherwise the primary for RSA — mirroring the structural
-/// `encryption_key` with lifecycle checks applied. None when nothing on
-/// the key may encrypt at `now`.
+/// The encryption-capable packet to use at `now`: the last usable
+/// encryption subkey in wire order (each judged by its own binding —
+/// flags, expiry, revocation), otherwise the primary for RSA. None when
+/// nothing on the key may encrypt at `now`.
 pub fn PublicKey::encryption_packet_at(
   self : PublicKey,
   now : Int64,
 ) -> @packet.PublicKeyPacket? {
-  match self.encryption_subkey {
-    Some(sk) =>
-      if !subkey_revoked_at(self.subkey_revocation, self.primary, sk, now) &&
-        component_usable(sk, self.subkey_binding, FLAG_ENCRYPT, now) {
-        return Some(sk)
-      }
+  let mut chosen : @packet.PublicKeyPacket? = None
+  for c in self.subkeys {
+    if !subkey_revoked_at(c.revocation, self.primary, c.key, now) &&
+      component_usable(c.key, Some(c.binding), FLAG_ENCRYPT, now) {
+      chosen = Some(c.key)
+    }
+  }
+  match chosen {
+    Some(k) => return Some(k)
     None => ()
   }
   if self.primary.algo().is_rsa() &&
@@ -235,8 +238,8 @@ pub fn PublicKey::can_encrypt(self : PublicKey, now : Int64) -> Bool {
 
 ///|
 /// True when, at `now`, some component may sign or certify: not revoked,
-/// primary (or subkey) flags permit signing/certifying, and the governing
-/// signatures have not expired.
+/// primary (or any subkey) flags permit signing/certifying, and the
+/// governing signatures have not expired.
 pub fn PublicKey::can_verify(self : PublicKey, now : Int64) -> Bool {
   if self.is_revoked(now) {
     return false
@@ -249,11 +252,12 @@ pub fn PublicKey::can_verify(self : PublicKey, now : Int64) -> Bool {
     ) {
     return true
   }
-  match self.encryption_subkey {
-    Some(sk) =>
-      component_usable(sk, self.subkey_binding, FLAG_SIGN_OR_CERTIFY, now)
-    None => false
+  for c in self.subkeys {
+    if component_usable(c.key, Some(c.binding), FLAG_SIGN_OR_CERTIFY, now) {
+      return true
+    }
   }
+  false
 }
 
 ///|

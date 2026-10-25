@@ -12,13 +12,13 @@ pub struct PrivateKey {
   /// v6 keys: the Direct Key signature (type 0x1F) over the primary key,
   /// required by RFC 9580 §5.2.3.10 before a v6 key may be used.
   direct_signature : @packet.SignaturePacket?
-  encryption_subkey : @packet.SecretKeyPacket?
-  subkey_binding : @packet.SignaturePacket?
+  /// Every bound subkey in wire order (N2). Import guarantees each entry's
+  /// binding signature verifies over (primary, subkey) — a subkey without
+  /// a binding is rejected rather than trusted (RFC 9580 §10.1).
+  subkeys : Array[SecretSubkeyCert]
   /// Primary-key revocation signatures (type 0x20) found on import;
   /// verified lazily by `is_revoked` (their validity is time-dependent).
   revocations : Array[@packet.SignaturePacket]
-  /// Subkey revocation signature (type 0x28), when the wire had one.
-  subkey_revocation : @packet.SignaturePacket?
 } derive(Debug)
 
 ///|
@@ -29,12 +29,29 @@ pub struct PublicKey {
   /// All certified User IDs, in wire order (M5).
   user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
-  encryption_subkey : @packet.PublicKeyPacket?
-  subkey_binding : @packet.SignaturePacket?
+  /// Every bound subkey in wire order (N2); see `PrivateKey::subkeys`.
+  subkeys : Array[SubkeyCert]
   /// Primary-key revocation signatures (type 0x20) found on import.
   revocations : Array[@packet.SignaturePacket]
-  /// Subkey revocation signature (type 0x28), when the wire had one.
-  subkey_revocation : @packet.SignaturePacket?
+} derive(Debug)
+
+///|
+/// One bound subkey of a public transferable key: the public key packet,
+/// the SubkeyBinding signature by the primary (import-verified), and the
+/// SubkeyRevocation signature when the wire carried one.
+pub(all) struct SubkeyCert {
+  key : @packet.PublicKeyPacket
+  binding : @packet.SignaturePacket
+  revocation : @packet.SignaturePacket?
+} derive(Debug)
+
+///|
+/// The private-key half of one bound subkey: the secret key packet plus
+/// the same binding/revocation signatures as its public twin.
+pub(all) struct SecretSubkeyCert {
+  secret : @packet.SecretKeyPacket
+  binding : @packet.SignaturePacket
+  revocation : @packet.SignaturePacket?
 } derive(Debug)
 
 ///|
@@ -123,29 +140,46 @@ pub fn PublicKey::self_signature(self : PublicKey) -> @packet.SignaturePacket {
 }
 
 ///|
-/// The public key packet of an encryption-capable key: the subkey when
-/// present, otherwise the primary key.
+/// The public key packet of an encryption-capable key, structurally (no
+/// clock): the last subkey whose binding flags permit encryption (absent
+/// flags count as capable), otherwise the RSA primary key. The
+/// lifecycle-aware choice is `encryption_packet_at`.
 pub fn PublicKey::encryption_key(self : PublicKey) -> @packet.PublicKeyPacket? {
-  match self.encryption_subkey {
-    Some(k) => Some(k)
-    None => if self.primary.algo().is_rsa() { Some(self.primary) } else { None }
+  let mut chosen : @packet.PublicKeyPacket? = None
+  for c in self.subkeys {
+    match governing_flags(Some(c.binding)) {
+      Some(f) => if (f & FLAG_ENCRYPT) != 0 { chosen = Some(c.key) }
+      None => chosen = Some(c.key)
+    }
+  }
+  match chosen {
+    Some(k) => return Some(k)
+    None => ()
+  }
+  if self.primary.algo().is_rsa() {
+    Some(self.primary)
+  } else {
+    None
   }
 }
 
 ///|
 /// Strip the secret material, producing a transferable public key.
 pub fn PrivateKey::to_public(self : PrivateKey) -> PublicKey {
+  let subkeys : Array[SubkeyCert] = []
+  for c in self.subkeys {
+    subkeys.push(SubkeyCert::{
+      key: c.secret.public,
+      binding: c.binding,
+      revocation: c.revocation,
+    })
+  }
   PublicKey::{
     primary: self.primary.public,
     user_ids: self.user_ids,
     direct_signature: self.direct_signature,
-    encryption_subkey: match self.encryption_subkey {
-      Some(sk) => Some(sk.public)
-      None => None
-    },
-    subkey_binding: self.subkey_binding,
+    subkeys,
     revocations: self.revocations,
-    subkey_revocation: self.subkey_revocation,
   }
 }
 
@@ -154,3 +188,9 @@ pub extend PrivateKey with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 pub extend PublicKey with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SubkeyCert with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+pub extend SecretSubkeyCert with @moonbitlang/core/debug.Debug::{to_repr}

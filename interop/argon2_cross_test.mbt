@@ -52,10 +52,7 @@ test "decrypt a go-crypto v6 PKESK + v2 SEIPD message" {
   )
   assert_eq(key.primary.public.version(), 6)
   assert_eq(key.primary.public.algo(), @packet.Ed25519)
-  let subkey = match key.encryption_subkey {
-    Some(sk) => sk
-    None => fail("the go-crypto v6 fixture has an encryption subkey")
-  }
+  let subkey = key.subkeys[0].secret
   assert_eq(subkey.public.algo(), @packet.X25519)
   assert_eq(
     @api.decrypt_with_private_key(

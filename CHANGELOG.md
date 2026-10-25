@@ -7,7 +7,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The module version lives in `moon.mod` (`version`); a section is only renamed to
 a released version when that version is published to mooncakes.io.
 
-## [Unreleased]
+## [0.3.0] - 2026-10-26
 
 ### Added / Changed — task 3 of the Jev-prioritized plan (2026-10-26)
 

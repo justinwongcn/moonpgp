@@ -1,6 +1,6 @@
 # moonpgp
 
-An OpenPGP library written in MoonBit for message encryption and decryption, signatures, key management, and PGP/MIME email workflows.
+An OpenPGP library written in MoonBit: message encryption and decryption, signatures, key management, and PGP/MIME email.
 
 **Module:** `justinwongcn/moonpgp` · [Package documentation](https://mooncakes.io/docs/justinwongcn/moonpgp)
 
@@ -8,13 +8,13 @@ An OpenPGP library written in MoonBit for message encryption and decryption, sig
 
 ## Install
 
-Requires the MoonBit toolchain. Dependencies are resolved by `moon`.
+You'll need the MoonBit toolchain; `moon` resolves dependencies for you.
 
 ```bash
 moon add justinwongcn/moonpgp
 ```
 
-Import the root package for the high-level API. Import `mime` and `mail` separately when needed:
+The root package has the main API. Add `mime` and `mail` when you need PGP/MIME parsing or RFC 5322 message building:
 
 ```text
 import {
@@ -24,9 +24,9 @@ import {
 }
 ```
 
-The root package exposes the `@api` functions and their option types as `@moonpgp.*`. The `mime` and `mail` packages provide PGP/MIME parsing and RFC 5322 message composition.
+The root package exposes its `@api` functions and option types as `@moonpgp.*`.
 
-To try the command-line demo from a clone:
+There's also a command-line demo, if you clone the repo:
 
 ```bash
 git clone https://github.com/justinwongcn/moonpgp
@@ -36,17 +36,17 @@ moon run cmd/main -- help
 
 ## Features
 
-- **Keys:** import, export, generate, lock, and unlock OpenPGP keys. Supports RSA, Ed25519 (EdDSA legacy), and Curve25519/X25519 workflows, with v4 keys as the default generation format and v6 support available through the relevant APIs. Key lifecycle helpers check capabilities, expiration, and revocation.
-- **Messages:** public-key and passphrase encryption; detached, inline, and cleartext signatures; session-key operations; optional ZIP/ZLIB compression. AES is used for generated messages; CAST5 and 3DES are supported for decryption only.
-- **Modern formats:** v6 keys and messages, including v6 PKESK/SKESK and v2 SEIPD with OCB, EAX, or GCM AEAD. Standard v4 recipient and passphrase workflows use v1 SEIPD by default.
-- **Passphrase protection:** iterated-and-salted S2K and Argon2 S2K, including supported AEAD-protected secret keys.
-- **Email:** `mime` parses and verifies PGP/MIME messages; `mail` builds RFC 5322 messages, including signed and encrypted PGP/MIME. SMTP/IMAP clients are examples under `example/`, not part of the library API, and support native only.
+- **Keys:** generate, import, export, lock and unlock with a passphrase. RSA, Ed25519 (legacy EdDSA), and Curve25519/X25519 are covered; new keys are v4, and v6 works too. Helpers check capabilities, expiry, and revocation.
+- **Messages:** public-key or passphrase encryption, detached/inline/cleartext signatures, session-key operations, optional ZIP/ZLIB compression. Anything this library encrypts uses AES; CAST5 and 3DES exist for decryption only.
+- **v6 messages:** v6 PKESK/SKESK and v2 SEIPD with OCB, EAX, or GCM AEAD, end to end. Regular v4 recipient and passphrase flows default to v1 SEIPD.
+- **Passphrase protection:** iterated-and-salted S2K and Argon2, including the AEAD-protected secret-key formats.
+- **Email:** `mime` parses and verifies PGP/MIME; `mail` builds RFC 5322 messages, signed and encrypted PGP/MIME included. The SMTP/IMAP clients under `example/` are examples rather than library API, and they only run on native.
 
-## Interoperability and checks
+## Interop and local checks
 
-The test suite includes selected interoperability workflows with GnuPG, OpenSSL, and go-crypto, along with RFC test vectors. See [`scripts/interop_check.sh`](./scripts/interop_check.sh) for the GnuPG interoperability checks.
+Tests include some interop with GnuPG, OpenSSL, and go-crypto, plus RFC test vectors. The GnuPG checks live in [`scripts/interop_check.sh`](./scripts/interop_check.sh).
 
-Local checks:
+Locally:
 
 ```bash
 moon check --target all --deny-warn
@@ -55,17 +55,17 @@ moon test --target native
 moon fmt --check
 ```
 
-CI builds and tests the native, wasm, and js targets. Native is the preferred target. Operations that generate keys or random values require a platform entropy source; availability depends on the runtime.
+CI covers native, wasm, and js; for day-to-day work, use native. Key generation and anything else that depends on randomness needs a platform entropy source, which not every runtime provides.
 
 ## Security and limitations
 
-- Import validates the supported key signatures, including User ID certifications, subkey bindings, and v6 direct-key signatures. This is not identity or third-party trust validation; applications must establish trust in a key separately.
-- Ed25519 and X25519 field arithmetic uses `@bigint` and is not constant-time. Garbage-collected runtimes also cannot guarantee private-key memory wiping.
-- Decryption of untrusted Argon2-protected data is subject to a default 256 MiB memory limit. Requests above the limit are rejected before allocation; callers can choose a different limit where the API allows it.
-- v2 SEIPD messages are not padded by the encryption APIs and therefore reveal approximate plaintext length.
-- On targets without a platform clock, expiration checks are disabled and revocation dates cannot be evaluated; revocation signatures are still cryptographically checked. The example SMTP/IMAP transports are native-only.
+- Import verifies the signatures it understands (User ID certifications, subkey bindings, v6 direct-key signatures), but that's signature checking, not trust management: whether a key really belongs to someone is for your application to decide.
+- Ed25519 and X25519 arithmetic runs on `@bigint` and is not constant-time, and a GC runtime makes no promise about wiping private keys from memory.
+- Decrypting untrusted Argon2-protected data is capped at 256 MiB of memory by default; over-limit requests are rejected before anything is allocated. Some APIs let you set a different limit.
+- The encryption APIs don't pad v2 SEIPD messages, so ciphertext length gives away roughly how long the plaintext is.
+- On targets without a platform clock, expiration checks are off and revocation dates can't be evaluated; revocation signatures are still checked cryptographically.
 
-See [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md) for dependency and attribution details.
+Dependency and attribution details are in [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md).
 
 ## License
 

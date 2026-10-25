@@ -398,10 +398,13 @@ fn rsa_unwrap_checked(
 }
 
 ///|
-/// Decrypt the SEIPD container in `packets` and return its raw inner packet
-/// stream. A v2 container names its own cipher, so the PKESK/SKESK
-/// algorithm id is unused there; a v1 container takes it from the ESK
-/// packet because SEIPD v1 carries no cipher of its own.
+/// Decrypt the encrypted container in `packets` and return its raw inner
+/// packet stream: SEIPD v1/v2 (tag 18), or the 4880bis tag-20 AEAD
+/// container gpg 2.4 emits for recipients whose self-signature advertises
+/// the AEAD feature (consolidation finding: the private-key path used to
+/// recognize only tag 18). A v2 container names its own cipher, so the
+/// PKESK/SKESK algorithm id is unused there; a v1 container takes it from
+/// the ESK packet because SEIPD v1 carries no cipher of its own.
 fn unwrap_seipd_inner(
   packets : Array[@packet.RawPacket],
   algo_id : Int32,
@@ -409,6 +412,44 @@ fn unwrap_seipd_inner(
   esk_version : Int32,
 ) -> Bytes raise {
   for p in packets {
+    if p.tag() == @packet.AeadEncData {
+      // 4880bis tag 20 (the gpg --force-aead shape): the ESK session key
+      // opens the AEAD container directly; the container names its own
+      // cipher and mode. Same lenient treatment as the password path —
+      // the shape is not part of RFC 9580 but GnuPG interop needs it.
+      let aead = @packet.AeadPacket::parse(p.body().exact_view())
+      let algo = @error.require(
+        @primitives.cipher_algo_of_number(aead.cipher_algo()),
+        "api: unsupported AEAD cipher algorithm \{aead.cipher_algo()}",
+      )
+      let mode = @error.require(
+        @cipher.aead_mode_of_number(aead.aead_algo()),
+        "api: unknown AEAD algorithm \{aead.aead_algo()}",
+      )
+      guard session_key.length() == algo.key_size() else {
+        @error.fail("api: session key length does not match the AEAD cipher")
+      }
+      let bc = @primitives.new_block_cipher(algo, session_key.exact_view())
+      // Associated-data header: 0xD4 | version | cipher | aead | chunk octet.
+      let header5 = Bytes::from_array([
+        0xD4,
+        aead.version().to_byte(),
+        aead.cipher_algo().to_byte(),
+        aead.aead_algo().to_byte(),
+        aead.chunk_octet().to_byte(),
+      ])
+      let inner = @cipher.aead_open(
+        bc,
+        mode,
+        header5.exact_view(),
+        aead.iv().exact_view(),
+        aead.chunk_octet(),
+        aead.ciphertext().exact_view(),
+      )
+      // Raw inner packet stream, like the SEIPD branches; the public
+      // entry points run extract_literal on it.
+      return inner
+    }
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
       // RFC 9580 §10.3.2.1 (Table 26): "An implementation processing an

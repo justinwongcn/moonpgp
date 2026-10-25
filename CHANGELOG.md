@@ -7,6 +7,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The module version lives in `moon.mod` (`version`); a section is only renamed to
 a released version when that version is published to mooncakes.io.
 
+## [Unreleased]
+
+### Fixed / Added — consolidation round (2026-10-26, task 1 of the Jev-prioritized plan)
+
+- **Tag-20 AEAD containers decrypt on the private-key path** (found by the
+  new GnuPG dual-subkey fixture): gpg 2.4 emits the 4880bis AEAD packet
+  (tag 20) for recipients whose self-signature advertises the AEAD feature;
+  `decrypt_with_private_key` / `decrypt_and_verify` used to recognize only
+  SEIPD (tag 18). The ESK session key now opens the container directly,
+  mirroring the password path's lenient GnuPG-interop handling.
+- **Primary-key revocations survive re-export**: `PrivateKey::to_bytes` /
+  `PublicKey::to_bytes` silently dropped `revocations`, so a round-tripped
+  certificate lost its revocation status (`is_revoked` went back to false).
+- **BZip2 honestly unsupported**: the old comment claimed "BZip2 is
+  decode-only", which was never true — the registry's bzip2 package is a
+  native libbz2 binding this pure-MoonBit library does not take. Comments
+  and error messages now say "not implemented" in both directions, with
+  regression tests.
+- Real-GnuPG dual-subkey interop fixtures (Ed25519 cert-only primary +
+  cv25519 encryption subkey + Ed25519 signing subkey; generation script
+  `testdata/gen_gpg_dual_subkey_vectors.sh`): import keeps both subkeys, a
+  signature issued by the signing subkey verifies, a gpg-encrypted message
+  decrypts, and our encryption selects the encryption subkey — the
+  multi-subkey model (N2) now has real-world data behind it.
+- 12 targeted tests for coverage-report gaps: private import of a
+  public-only bound subkey, same-UID re-certification (last wins),
+  revocation packet attach/re-export, bare-v6 accessors, structural
+  `encryption_key`, unlock no-op, wrong-passphrase error paths (cheap-S2K
+  fixture), v6 password round-trip, literal-walk chains (OPS / algo-0 /
+  ZIP), `verify_detached` armor shape errors, `NoVerifier` without a
+  verifier, v6 session-key recovery.
+
 ## [0.2.0] - 2026-10-26
 
 ### Fixed — second review round N1–N10 (2026-10-26)

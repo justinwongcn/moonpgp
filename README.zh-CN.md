@@ -1,6 +1,6 @@
 # moonpgp
 
-使用 MoonBit 编写的 OpenPGP 库，支持消息加解密、签名、密钥管理与 PGP/MIME 邮件工作流。
+用 MoonBit 写的 OpenPGP 库，可以做消息加解密、签名、密钥管理，也支持 PGP/MIME 邮件。
 
 **模块：** `justinwongcn/moonpgp` · [包文档](https://mooncakes.io/docs/justinwongcn/moonpgp)
 
@@ -8,13 +8,13 @@
 
 ## 安装
 
-需要 MoonBit 工具链。依赖由 `moon` 自动解析。
+需要 MoonBit 工具链，依赖交给 `moon` 解析：
 
 ```bash
 moon add justinwongcn/moonpgp
 ```
 
-高层 API 可从根包导入；需要 PGP/MIME 或邮件组装时，分别导入 `mime` 和 `mail`：
+根包是主要 API；要解析 PGP/MIME 或组装 RFC 5322 邮件，再单独导入 `mime` 和 `mail`：
 
 ```text
 import {
@@ -24,9 +24,9 @@ import {
 }
 ```
 
-根包将 `@api` 函数及其选项类型以 `@moonpgp.*` 导出。`mime` 和 `mail` 包分别提供 PGP/MIME 解析与 RFC 5322 邮件组装。
+根包把 `@api` 的函数和选项类型以 `@moonpgp.*` 的形式导出。
 
-可克隆仓库运行命令行示例：
+仓库里还带一个命令行示例，克隆下来就能跑：
 
 ```bash
 git clone https://github.com/justinwongcn/moonpgp
@@ -36,17 +36,17 @@ moon run cmd/main -- help
 
 ## 功能
 
-- **密钥：** 导入、导出、生成、加锁和解锁 OpenPGP 密钥。支持 RSA、Ed25519（EdDSA legacy）及 Curve25519/X25519 工作流；默认生成 v4 密钥，相关 API 也支持 v6。提供能力、过期和吊销状态检查。
-- **消息：** 公钥与口令加密；分离、内联和明文签名；会话密钥操作；可选 ZIP/ZLIB 压缩。生成消息使用 AES；CAST5 和 3DES 仅用于解密。
-- **现代格式：** 支持 v6 密钥与消息，包括 v6 PKESK/SKESK 及采用 OCB、EAX 或 GCM AEAD 的 v2 SEIPD。标准 v4 收件人和口令工作流默认使用 v1 SEIPD。
-- **口令保护：** 支持迭代加盐 S2K、Argon2 S2K，以及相应支持的 AEAD 私钥保护格式。
-- **邮件：** `mime` 解析并验证 PGP/MIME 邮件；`mail` 组装 RFC 5322 邮件，包括 PGP/MIME 签名与加密。SMTP/IMAP 客户端位于 `example/`，属于示例而非库 API，且仅支持 native。
+- **密钥：** 生成、导入、导出、口令加锁和解锁。支持 RSA、Ed25519（旧版 EdDSA）和 Curve25519/X25519；新建密钥默认 v4，v6 也能用。附带能力、过期、吊销状态的检查函数。
+- **消息：** 公钥或口令加密，分离/内联/明文签名，会话密钥操作，可选 ZIP/ZLIB 压缩。本库加密输出一律用 AES；CAST5 和 3DES 只用于解密。
+- **v6 消息：** v6 PKESK/SKESK 和 v2 SEIPD（OCB、EAX、GCM 三种 AEAD）端到端支持；常规 v4 收件人和口令流程默认走 v1 SEIPD。
+- **口令保护：** 迭代加盐 S2K 和 Argon2，包括配套的 AEAD 私钥保护格式。
+- **邮件：** `mime` 解析并验证 PGP/MIME；`mail` 组装 RFC 5322 邮件，含签名和加密的 PGP/MIME。`example/` 下的 SMTP/IMAP 客户端只是示例，不算库 API，而且只能在 native 上跑。
 
-## 互操作与检查
+## 互操作与本地检查
 
-测试套件包含与 GnuPG、OpenSSL 和 go-crypto 的部分互操作流程，以及 RFC 测试向量。GnuPG 互操作检查见 [`scripts/interop_check.sh`](./scripts/interop_check.sh)。
+测试覆盖了部分与 GnuPG、OpenSSL、go-crypto 的互操作流程，另有 RFC 测试向量。GnuPG 检查脚本在 [`scripts/interop_check.sh`](./scripts/interop_check.sh)。
 
-本地检查命令：
+本地检查：
 
 ```bash
 moon check --target all --deny-warn
@@ -55,18 +55,18 @@ moon test --target native
 moon fmt --check
 ```
 
-CI 会构建并测试 native、wasm 和 js 目标；native 是首选目标。生成密钥或随机值的操作需要平台熵源，实际可用性取决于运行环境。
+CI 覆盖 native、wasm、js 三个目标，日常开发建议直接用 native。生成密钥这类依赖随机数的操作需要平台熵源，不是每个运行环境都有。
 
 ## 安全与限制
 
-- 导入时会验证当前支持的密钥签名，包括 User ID 认证、子钥绑定和 v6 直接密钥签名。这不等于身份或第三方信任验证；应用仍需自行建立对密钥的信任。
-- Ed25519 和 X25519 的域运算基于 `@bigint`，不是常数时间实现。垃圾回收运行时也无法保证私钥内存被清零。
-- 解密不可信的 Argon2 保护数据时，默认内存上限为 256 MiB。超过上限的请求会在分配前拒绝；API 允许时可由调用方选择其他上限。
-- v2 SEIPD 加密 API 不添加填充，因此消息会泄露明文长度的大致范围。
-- 不提供平台时钟的目标会关闭过期时间检查，且无法判断吊销日期；吊销签名仍会进行密码学验证。示例 SMTP/IMAP 传输仅支持 native。
+- 导入时会校验它认识的签名（User ID 认证、子钥绑定、v6 直接签名），但校验签名不等于建立信任：密钥是否真的属于某个人，要由应用自己判断。
+- Ed25519 和 X25519 的域运算基于 `@bigint`，不是常数时间实现；GC 环境下也无法保证私钥内存被清零。
+- 解密不可信的 Argon2 数据默认限 256 MiB 内存，超限请求在分配前就会被拒绝；部分 API 允许设置其他上限。
+- 加密 API 不给 v2 SEIPD 加填充，密文长度会大致暴露明文长度。
+- 没有平台时钟的目标上，过期检查不可用，吊销日期也无法判断；吊销签名本身仍会做密码学验证。
 
 依赖与归属声明见 [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)。
 
 ## 许可证
 
-Apache-2.0。详见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE) 与 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
+Apache-2.0，详见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE) 与 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。

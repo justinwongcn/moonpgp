@@ -200,14 +200,23 @@ fn decompress_payload(
     0 => comp.data
     1 => @compress.zip_decompress_capped(comp.data.exact_view(), max_out)
     2 => @compress.zlib_decompress_capped(comp.data.exact_view(), max_out)
-    _ => @error.fail("api: unsupported compression algorithm \{comp.algo}")
+    // BZip2 (algorithm 3, which gpg can emit when configured) has no codec
+    // in this pure-MoonBit implementation, for reading or writing; the
+    // registry's bzip2 package is a native libbz2 binding this library
+    // deliberately does not depend on. Fail with an explicit message
+    // instead of a generic one (consolidation fix: the old comment claimed
+    // "BZip2 is decode-only", which was never true).
+    _ =>
+      @error.fail(
+        "api: unsupported compression algorithm \{comp.algo} (BZip2 is not implemented)",
+      )
   }
 }
 
 ///|
 /// Optionally wrap an inner packet stream in a Compressed packet (M4).
-/// Only ZIP/ZLIB have codecs here — BZip2 is decode-only and
-/// `Uncompressed` means the caller passed something odd.
+/// Only ZIP/ZLIB have codecs here; BZip2 is unsupported in both directions
+/// and `Uncompressed` means the caller passed something odd.
 fn maybe_compress_inner(
   inner : BytesView,
   compress? : @compress.CompressedAlgo,
@@ -233,7 +242,7 @@ fn maybe_compress_inner(
           )
         _ =>
           @error.fail(
-            "api: unsupported output compression algorithm (BZip2 is decode-only)",
+            "api: unsupported output compression algorithm \{algo.number()} (BZip2 is not implemented)",
           )
       }
   }

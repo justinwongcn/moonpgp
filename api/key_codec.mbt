@@ -32,6 +32,14 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
       ).exact_view(),
     )
   }
+  // Primary-key revocations (consolidation fix: these were silently
+  // dropped on re-export, so a round-tripped certificate lost its
+  // revocation status).
+  for r in self.revocations {
+    w.bytes(
+      @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+    )
+  }
   for c in self.subkeys {
     w.bytes(
       @packet.serialize_packet(
@@ -126,6 +134,12 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
         @packet.Signature,
         binding.self_signature.to_body().exact_view(),
       ).exact_view(),
+    )
+  }
+  // Primary-key revocations (see PrivateKey::to_bytes).
+  for r in self.revocations {
+    w.bytes(
+      @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
     )
   }
   for c in self.subkeys {

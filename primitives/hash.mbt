@@ -128,3 +128,100 @@ pub extend HashId with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 pub extend HashId with Eq::{not_equal, equal}
+
+///|
+/// One streaming hash instance over the algorithms that expose one
+/// (SHA-1/SHA-384 have no streaming form and take the materialize
+/// fallback in `hash_repetition`).
+priv enum Hasher {
+  Sha256(@xcrypto.SHA256)
+  Sha512(@xcrypto.SHA512)
+  Md5(@xcrypto.MD5)
+  Sha224(@xcrypto.SHA224)
+  Ripemd160(@xcrypto.RIPEMD160)
+}
+
+///|
+fn hasher_of(id : HashId) -> Hasher? {
+  match id {
+    Sha256 => Some(Hasher::Sha256(@xcrypto.SHA256::new()))
+    Sha512 => Some(Hasher::Sha512(@xcrypto.SHA512::new()))
+    Md5 => Some(Hasher::Md5(@xcrypto.MD5::new()))
+    Sha224 => Some(Hasher::Sha224(@xcrypto.SHA224::new()))
+    Ripemd160 => Some(Hasher::Ripemd160(@xcrypto.RIPEMD160::new()))
+    Sha1 | Sha384 => None
+  }
+}
+
+///|
+fn hasher_update(h : Hasher, data : FixedArray[Byte]) -> Unit {
+  match h {
+    Sha256(s) => s.update(data)
+    Sha512(s) => s.update(data)
+    Md5(s) => s.update(data)
+    Sha224(s) => s.update(data)
+    Ripemd160(s) => s.update(data)
+  }
+}
+
+///|
+fn hasher_final(h : Hasher) -> Bytes {
+  let out : FixedArray[Byte] = match h {
+    Sha256(s) => s.finalize()
+    Sha512(s) => s.finalize()
+    Md5(s) => s.finalize()
+    Sha224(s) => s.finalize()
+    Ripemd160(s) => s.finalize()
+  }
+  Bytes::from_iter(out.iter())
+}
+
+///|
+/// Digest `prefix || block*reps || rem` without materializing the
+/// repetition: the iterated S2K's octet count is ~54 MiB at gpg's default,
+/// and building that byte string dominated derivation time (measured 4s
+/// per derivation dropped materially once the allocation went away).
+/// SHA-1 and SHA-384 have no streaming form here and fall back to a
+/// materializing digest.
+pub fn hash_repetition(
+  id : HashId,
+  prefix : BytesView,
+  block : BytesView,
+  reps : Int32,
+  rem : BytesView,
+) -> Bytes raise {
+  guard block.length() > 0 else {
+    @error.fail("primitives: hash_repetition needs a non-empty block")
+  }
+  guard reps >= 0 else { @error.fail("primitives: negative repetition") }
+  match hasher_of(id) {
+    Some(h) => {
+      hasher_update(h, FixedArray::from_iter(prefix.iter()))
+      let block_fa = FixedArray::from_iter(block.iter())
+      let rem_fa = FixedArray::from_iter(rem.iter())
+      for _ in 0..<reps {
+        hasher_update(h, block_fa)
+      }
+      hasher_update(h, rem_fa)
+      hasher_final(h)
+    }
+    None => {
+      // Fallback: build the byte string once and digest it whole.
+      let out : Array[Byte] = Array(
+        capacity=prefix.length() + block.length() * reps + rem.length(),
+      )
+      for b in prefix {
+        out.push(b)
+      }
+      for _ in 0..<reps {
+        for b in block {
+          out.push(b)
+        }
+      }
+      for b in rem {
+        out.push(b)
+      }
+      id.digest(Bytes::from_array(out).exact_view())
+    }
+  }
+}

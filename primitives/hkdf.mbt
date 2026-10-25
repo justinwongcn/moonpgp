@@ -10,7 +10,7 @@
 /// as `HashLen` zero octets, which is exactly what HMAC's zero-padding of a
 /// short key already produces.
 fn hkdf_sha256_extract(ikm : BytesView, salt : BytesView) -> Bytes {
-  Sha256.hmac(salt, ikm)
+  HashId::Sha256.hmac(salt, ikm)
 }
 
 ///|
@@ -49,7 +49,7 @@ pub fn hkdf_sha256(
   let mut counter = 1
   while out.length() < out_len {
     let input = concat3(block, info, Bytes::from_array([counter.to_byte()]))
-    block = Sha256.hmac(prk, input)
+    block = HashId::Sha256.hmac(prk, input)
     for b in block {
       if out.length() < out_len {
         out.push(b)

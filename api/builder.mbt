@@ -14,6 +14,10 @@ pub struct Pgp {}
 /// `Pgp::encryption` and evolve through the chain methods.
 pub struct EncryptionBuilder {
   priv passwords : Array[String]
+  /// v6-shape passphrase recipients (task 3): each gets its own v6 SKESK
+  /// under the shared session key. Mutually exclusive with `passwords`
+  /// (one message cannot mix ESK generations).
+  priv passwords_v6 : Array[V6Password]
   priv recipients : Array[PublicKey]
   priv signer : PrivateKey?
   priv file_name : String
@@ -25,6 +29,7 @@ pub struct EncryptionBuilder {
 pub fn Pgp::encryption(_self : Pgp) -> EncryptionBuilder {
   EncryptionBuilder::{
     passwords: [],
+    passwords_v6: [],
     recipients: [],
     signer: None,
     file_name: "message.txt",
@@ -51,6 +56,32 @@ pub fn EncryptionBuilder::password(
   let passwords = self.passwords.copy()
   passwords.push(pass)
   { ..self, passwords, }
+}
+
+///|
+/// Add a passphrase recipient in the RFC 9580 v6 shape (v6 SKESK + v2
+/// SEIPD; task 3): Argon2id S2K by default — set `argon2=false` for the
+/// cheaper iterated+salted SHA-256. Cannot be combined with `password`
+/// (v4 shape) in one message.
+pub fn EncryptionBuilder::password_v6(
+  self : EncryptionBuilder,
+  pass : String,
+  aead~ : @cipher.AeadMode = @cipher.Ocb,
+  argon2~ : Bool = true,
+  passes~ : Int32 = 3,
+  parallelism~ : Int32 = 4,
+  memory_exp~ : Int32 = 16,
+) -> EncryptionBuilder {
+  let passwords_v6 = self.passwords_v6.copy()
+  passwords_v6.push(V6Password::{
+    passphrase: pass,
+    aead,
+    argon2,
+    passes,
+    parallelism,
+    memory_exp,
+  })
+  { ..self, passwords_v6, }
 }
 
 ///|
@@ -86,6 +117,7 @@ pub fn EncryptionBuilder::finish(
   self : EncryptionBuilder,
 ) -> (BytesView) -> String raise {
   let passwords = self.passwords
+  let passwords_v6 = self.passwords_v6
   let recipients = self.recipients
   let signer = self.signer
   let file_name = self.file_name
@@ -100,6 +132,19 @@ pub fn EncryptionBuilder::finish(
         None => encrypt_to_recipients(data, recipients, file_name~, compress?)
       }
       return armored
+    }
+    if !passwords_v6.is_empty() {
+      guard passwords.is_empty() else {
+        @error.fail(
+          "api: cannot mix v4 and v6 passphrase shapes in one message",
+        )
+      }
+      return seal_skesks_v6_with_passwords(
+        data,
+        passwords_v6,
+        file_name~,
+        compress?,
+      )
     }
     if !passwords.is_empty() {
       // Every supplied passphrase gets its own SKESK over one shared

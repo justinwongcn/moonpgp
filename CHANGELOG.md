@@ -9,6 +9,27 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added / Changed — task 3 of the Jev-prioritized plan (2026-10-26)
+
+- **v6 password shape in the encryption builder**: `.password_v6(pass)`
+  adds a passphrase recipient as a v6 SKESK (AEAD + HKDF key separation)
+  over a shared session key with a single v2 SEIPD payload — multiple
+  passphrases get one SKESK each, options mirror
+  `encrypt_with_password_v6` (`aead`, `argon2`, `passes`, `parallelism`,
+  `memory_exp`; Argon2id by default). Mixing v4 (`.password`) and v6
+  (`.password_v6`) shapes in one message is rejected. Under the hood
+  `encrypt_with_password_v6` now delegates to the shared multi-recipient
+  sealer (`seal_skesks_v6_with_passwords`).
+- **Iterated S2K derivation streams instead of materializing** the
+  ~54 MiB salt‖passphrase repetition: `primitives.hash_repetition` feeds
+  the repetition through the streaming SHA-256/SHA-512/MD5/SHA-224/
+  RIPEMD-160 forms (SHA-1/SHA-384 fall back to materializing). Measured
+  on this machine: one 56 MB derivation 4s → ~1.8s, the two heaviest
+  password tests 38.6s → 18.4s and 35.2s → 15.8s (≈2.2×); the remaining
+  cost is the SHA-256 compression itself. RSA-2048 keygen (≈9.5s) and
+  Argon2 64 MiB (≈6.6s) are bigint/BLAKE2-bound and unchanged — the
+  recorded baselines for future optimization.
+
 ### Added — signing-subkey signing, closing the multi-subkey loop (2026-10-26, task 2b)
 
 - Document signatures (`sign_detached` / `sign_inline` / `sign_and_encrypt`

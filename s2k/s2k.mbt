@@ -259,14 +259,30 @@ pub fn S2k::derive_key_capped(
       if count < combined.length() {
         count = combined.length()
       }
-      // Repeat salt‖passphrase until `count` octets, then truncate.
-      let data : Array[Byte] = Array(capacity=count)
-      while data.length() < count {
-        for b in combined {
-          data.push(b)
+      // Repeat salt‖passphrase to `count` octets STREAMING (task 3): the
+      // count is ~54 MiB at gpg's default and materializing it dominated
+      // derivation wall time. Output block j prefixes j zero octets
+      // (RFC 9580 §3.7.1), exactly what hash_repetition's prefix is for.
+      let reps = count / combined.length()
+      let rem_n = count % combined.length()
+      let out : Array[Byte] = Array(capacity=key_len)
+      let mut j = 0
+      while out.length() < key_len {
+        let digest = @primitives.hash_repetition(
+          hash_id,
+          Bytes::make(j, b'\x00').exact_view(),
+          combined.exact_view(),
+          reps,
+          combined.exact_view()[0:rem_n],
+        )
+        for b in digest {
+          if out.length() < key_len {
+            out.push(b)
+          }
         }
+        j = j + 1
       }
-      derive_hash_key(hash_id, Bytes::from_array(data[0:count]), key_len)
+      Bytes::from_array(out)
     }
   }
 }

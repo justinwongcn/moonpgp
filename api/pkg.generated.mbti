@@ -98,6 +98,7 @@ pub fn EncryptionBuilder::compress(Self, @compress.CompressedAlgo) -> Self
 pub fn EncryptionBuilder::file_name(Self, String) -> Self
 pub fn EncryptionBuilder::finish(Self) -> (BytesView) -> String raise
 pub fn EncryptionBuilder::password(Self, String) -> Self
+pub fn EncryptionBuilder::password_v6(Self, String, aead? : @cipher.AeadMode, argon2? : Bool, passes? : Int32, parallelism? : Int32, memory_exp? : Int32) -> Self
 pub fn EncryptionBuilder::recipient(Self, PublicKey) -> Self
 pub fn EncryptionBuilder::sign_with(Self, PrivateKey) -> Self
 
@@ -220,6 +221,15 @@ pub(all) struct UserIdBinding {
   self_signature : @packet.SignaturePacket
 } derive(@debug.Debug)
 pub fn UserIdBinding::to_repr(Self) -> @debug.Repr
+
+pub(all) struct V6Password {
+  passphrase : String
+  aead : @cipher.AeadMode
+  argon2 : Bool
+  passes : Int32
+  parallelism : Int32
+  memory_exp : Int32
+}
 
 pub(all) enum VerifyStatus {
   Ok

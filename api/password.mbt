@@ -76,21 +76,48 @@ pub fn encrypt_with_password_v6(
   memory_exp~ : Int32 = 16,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
-  let algo = @primitives.Aes256
-  let s2k : @s2k.S2k = if argon2 {
-    @s2k.Argon2(
-      @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE),
-      passes,
-      parallelism,
-      memory_exp,
-    )
-  } else {
-    @s2k.Iterated(
-      @primitives.Sha256,
-      @primitives.random_bytes(@s2k.SALT_SIZE),
-      @s2k.encode_count(S2K_COUNT_TARGET),
-    )
+  seal_skesks_v6_with_passwords(
+    plaintext,
+    [V6Password::{ passphrase, aead, argon2, passes, parallelism, memory_exp, }],
+    file_name?,
+    compress?,
+  )
+}
+
+///|
+/// One v6 password recipient with its AEAD/S2K options (task 3: the
+/// builder's v6 password path; each passphrase gets its own SKESK under
+/// the shared session key).
+pub(all) struct V6Password {
+  passphrase : String
+  aead : @cipher.AeadMode
+  argon2 : Bool
+  passes : Int32
+  parallelism : Int32
+  memory_exp : Int32
+}
+
+///|
+/// Seal to SEVERAL passphrases in the v6 shape: one session key, one v6
+/// SKESK per passphrase (each with its own salt and S2K options), one v2
+/// SEIPD payload.
+fn seal_skesks_v6_with_passwords(
+  plaintext : BytesView,
+  entries : Array[V6Password],
+  file_name? : String,
+  compress? : @compress.CompressedAlgo,
+) -> String raise {
+  guard !entries.is_empty() else {
+    @error.fail("api: encryption requires at least one passphrase")
   }
+  // The payload's AEAD mode is one per message (v2 SEIPD); every SKESK's
+  // associated data must name the same pair.
+  for e in entries {
+    guard e.aead.number() == entries[0].aead.number() else {
+      @error.fail("api: all v6 passphrase recipients must share one AEAD mode")
+    }
+  }
+  let algo = @primitives.Aes256
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let literal_wire = @packet.serialize_packet(
@@ -99,45 +126,61 @@ pub fn encrypt_with_password_v6(
   )
   let seipd = seal_seipd_v2(
     algo,
-    aead,
+    entries[0].aead,
     SEIPD_V2_CHUNK_OCTET,
     session_key,
     maybe_compress_inner(literal_wire, compress?).exact_view(),
   )
-  let cipher_algo = algo.number()
-  let aead_algo = aead.number()
-  let ad = Bytes::from_array([
-    0xC3,
-    6,
-    cipher_algo.to_byte(),
-    aead_algo.to_byte(),
-  ])
-  let kek = s2k.derive_key(
-    @primitives.utf8_bytes(passphrase).exact_view(),
-    algo.key_size(),
-  )
-  let dek = @primitives.hkdf_sha256(kek, Bytes::new(0), ad, algo.key_size())
-  let bc = @primitives.new_block_cipher(algo, dek.exact_view())
-  let nonce = @primitives.random_bytes(aead.iv_length())
-  let esk = aead_seal_session_key(
-    bc,
-    aead,
-    nonce.exact_view(),
-    ad.exact_view(),
-    session_key.exact_view(),
-  )
-  let skesk : @packet.SkeskPacket = {
-    version: 6,
-    cipher_algo,
-    aead_algo,
-    s2k,
-    iv: nonce,
-    encrypted_session_key: esk,
-  }
   let w = @packet.Writer::new()
-  w.bytes(
-    @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
-  )
+  for e in entries {
+    let s2k : @s2k.S2k = if e.argon2 {
+      @s2k.Argon2(
+        @primitives.random_bytes(@s2k.ARGON2_SALT_SIZE),
+        e.passes,
+        e.parallelism,
+        e.memory_exp,
+      )
+    } else {
+      @s2k.Iterated(
+        @primitives.Sha256,
+        @primitives.random_bytes(@s2k.SALT_SIZE),
+        @s2k.encode_count(S2K_COUNT_TARGET),
+      )
+    }
+    let cipher_algo = algo.number()
+    let aead_algo = e.aead.number()
+    let ad = Bytes::from_array([
+      0xC3,
+      6,
+      cipher_algo.to_byte(),
+      aead_algo.to_byte(),
+    ])
+    let kek = s2k.derive_key(
+      @primitives.utf8_bytes(e.passphrase).exact_view(),
+      algo.key_size(),
+    )
+    let dek = @primitives.hkdf_sha256(kek, Bytes::new(0), ad, algo.key_size())
+    let bc = @primitives.new_block_cipher(algo, dek.exact_view())
+    let nonce = @primitives.random_bytes(e.aead.iv_length())
+    let esk = aead_seal_session_key(
+      bc,
+      e.aead,
+      nonce.exact_view(),
+      ad.exact_view(),
+      session_key.exact_view(),
+    )
+    let skesk : @packet.SkeskPacket = {
+      version: 6,
+      cipher_algo,
+      aead_algo,
+      s2k,
+      iv: nonce,
+      encrypted_session_key: esk,
+    }
+    w.bytes(
+      @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
+    )
+  }
   w.bytes(
     @packet.serialize_packet(@packet.Seipd, seipd.to_body().exact_view()).exact_view(),
   )

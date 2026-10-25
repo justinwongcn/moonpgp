@@ -32,6 +32,8 @@ pub fn from_hex(String) -> Bytes raise
 
 pub fn hash_id_of_number(Int32) -> HashId?
 
+pub fn hash_repetition(HashId, BytesView, BytesView, Int32, BytesView) -> Bytes raise
+
 pub fn hkdf_sha256(BytesView, BytesView, BytesView, Int32) -> Bytes raise
 
 pub fn new_aes(BytesView) -> &BlockCipher raise

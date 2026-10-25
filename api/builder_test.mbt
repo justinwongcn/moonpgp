@@ -40,3 +40,45 @@ test "encryption builder branches do not share mutable state" {
   }
   assert_true(wrong_one)
 }
+
+///|
+/// Task 3: the encryption builder's v6 password path (v6 SKESK + v2 SEIPD,
+/// cheap iterated S2K for test speed — the Argon2 form is exercised by the
+/// argon2/interop suites).
+test "builder: v6 password encryption and decryption" {
+  let data = @primitives.utf8_bytes("v6 builder payload")
+  let encrypt = @api.pgp()
+    .encryption()
+    .password_v6("alpha", argon2=false)
+    .password_v6("beta", argon2=false)
+    .finish()
+  let armored = encrypt(data)
+  // Both passphrases open the message (one SKESK each, shared session key).
+  assert_eq(@api.decrypt_with_password(armored, "alpha"), data)
+  assert_eq(@api.decrypt_with_password(armored, "beta"), data)
+  // The builder's password-decrypt path handles v6 too.
+  let decrypt = @api.pgp().decryption().password("beta").finish()
+  match decrypt(armored) {
+    Data(d) => assert_eq(d, data)
+    _ => fail("expected Data")
+  }
+}
+
+///|
+test "builder: mixing v4 and v6 password shapes is rejected" {
+  let encrypt = @api.pgp()
+    .encryption()
+    .password("v4-shape")
+    .password_v6("v6-shape", argon2=false)
+    .finish()
+  let raised = try {
+    let _ = encrypt(@primitives.utf8_bytes("x"))
+    false
+  } catch {
+    e => {
+      assert_true(e.to_string().contains("cannot mix v4 and v6"))
+      true
+    }
+  }
+  assert_true(raised)
+}

@@ -87,7 +87,12 @@ fn issuer_fingerprint_subpacket(
 /// signatures (and their one-pass forms) may be subkey-issued.
 ///
 /// A revoked or expired primary refuses to sign at all — signatures from
-/// it would verify as KeyRevoked / Expired anyway.
+/// it would verify as KeyRevoked / Expired anyway. A candidate subkey is
+/// skipped when it is revoked (mirroring `encryption_packet_at` — a
+/// revoked component must not issue new signatures) or when its binding
+/// lacks a verifying embedded Primary Key Binding: gpg refuses signatures
+/// from a subkey that is not cross-certified, so issuing one here would
+/// only produce a signature no major verifier accepts.
 fn signing_packet(key : PrivateKey) -> @packet.SecretKeyPacket raise {
   let now = @primitives.unix_now()
   let pub_half = key.to_public()
@@ -107,7 +112,14 @@ fn signing_packet(key : PrivateKey) -> @packet.SecretKeyPacket raise {
   }
   let mut chosen : @packet.SecretKeyPacket? = None
   for c in key.subkeys {
-    if component_usable(c.secret.public, Some(c.binding), FLAG_SIGN, now) {
+    if !subkey_revoked_at(
+        c.revocation,
+        key.primary.public,
+        c.secret.public,
+        now,
+      ) &&
+      component_usable(c.secret.public, Some(c.binding), FLAG_SIGN, now) &&
+      subkey_cross_certified(c.binding, key.primary.public, c.secret.public) {
       chosen = Some(c.secret)
     }
   }

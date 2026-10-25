@@ -334,22 +334,47 @@ fn make_primary_key_binding(
   subkey_pub : @packet.PublicKeyPacket,
   now : Int32,
 ) -> @packet.SignaturePacket raise {
-  let sig : @packet.SignaturePacket = {
-    version: 4,
-    sig_type: @packet.PrimaryKeyBinding,
-    pub_algo: subkey_secret.public.algo(),
-    hash_algo: @primitives.Sha256.number(),
-    hashed_subpackets: [creation_subpacket(now)],
-    unhashed_subpackets: [
+  // The embedded signature is a self-signature of the SUBKEY, so a v6
+  // subkey must issue a v6 signature (RFC 9580 §10.1.1: every
+  // self-signature made by a version 6 key MUST be a version 6
+  // signature) — salt and Issuer Fingerprint in the hashed area, no
+  // Issuer Key ID. v4 keeps the issuer-key-id shape.
+  let v6 = subkey_pub.version() >= 6
+  let hashed : Array[@packet.SigSubpacket] = [creation_subpacket(now)]
+  if v6 {
+    hashed.push(issuer_fingerprint_subpacket(subkey_pub))
+  }
+  let unhashed : Array[@packet.SigSubpacket] = if v6 {
+    []
+  } else {
+    [
       {
         critical: false,
         sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
         body: subkey_secret.public.key_id(),
       },
-    ],
+    ]
+  }
+  let sig : @packet.SignaturePacket = {
+    version: if v6 {
+      6
+    } else {
+      4
+    },
+    sig_type: @packet.PrimaryKeyBinding,
+    pub_algo: subkey_secret.public.algo(),
+    hash_algo: @primitives.Sha256.number(),
+    hashed_subpackets: hashed,
+    unhashed_subpackets: unhashed,
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: if v6 {
+      @primitives.random_bytes(
+        @packet.salt_size_of_hash(@primitives.Sha256.number()),
+      )
+    } else {
+      Bytes::new(0)
+    },
     sig_params: [],
   }
   // A PrimaryKeyBinding hashes BOTH framed key packets, primary first —
@@ -545,6 +570,37 @@ pub fn verify_key_signature(
   ) catch {
     _ => false
   }
+}
+
+///|
+/// True when the subkey binding carries an embedded Primary Key Binding
+/// (RFC 9580 §5.2.3.26) that cryptographically verifies: the subkey's
+/// signed acceptance of the primary. gpg carries it in the unhashed area;
+/// a hashed-area copy is equally valid, so both are accepted.
+fn subkey_cross_certified(
+  binding : @packet.SignaturePacket,
+  primary_pub : @packet.PublicKeyPacket,
+  subkey_pub : @packet.PublicKeyPacket,
+) -> Bool raise {
+  let body = match
+    @packet.find_subpacket(
+      binding.unhashed_subpackets,
+      @packet.SIGSUB_EMBEDDED_SIGNATURE,
+    ) {
+    Some(b) => b
+    None =>
+      match
+        @packet.find_subpacket(
+          binding.hashed_subpackets,
+          @packet.SIGSUB_EMBEDDED_SIGNATURE,
+        ) {
+        Some(b) => b
+        None => return false
+      }
+  }
+  let embedded = @packet.SignaturePacket::parse(body.exact_view())
+  guard embedded.sig_type() == @packet.PrimaryKeyBinding else { return false }
+  verify_key_signature(embedded, subkey_pub, primary_pub)
 }
 
 ///|

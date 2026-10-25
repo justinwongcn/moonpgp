@@ -1,7 +1,7 @@
 ///|
-/// Serialize to binary packets: SecretKey || [DirectKeySig] ||
-/// [UserID || cert] || [SecretSubkey || binding ]. A v6 key without a
-/// User ID writes only the Direct Key signature.
+/// Serialize to binary packets: SecretKey || [revocation] ||
+/// [DirectKeySig] || [UserID || cert] || [SecretSubkey || binding ]. A v6
+/// key without a User ID writes only the Direct Key signature.
 pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
   let w = @packet.Writer::new()
   w.bytes(
@@ -10,6 +10,15 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
       self.primary.to_body().exact_view(),
     ).exact_view(),
   )
+  // Primary-key revocations sit straight after the primary key, before
+  // any Direct Key signature or User ID (RFC 9580 §10.1.1/§10.1.3;
+  // consolidation fix: these were silently dropped on re-export, so a
+  // round-tripped certificate lost its revocation status).
+  for r in self.revocations {
+    w.bytes(
+      @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+    )
+  }
   match self.direct_signature {
     Some(b) =>
       w.bytes(
@@ -30,14 +39,6 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
         @packet.Signature,
         binding.self_signature.to_body().exact_view(),
       ).exact_view(),
-    )
-  }
-  // Primary-key revocations (consolidation fix: these were silently
-  // dropped on re-export, so a round-tripped certificate lost its
-  // revocation status).
-  for r in self.revocations {
-    w.bytes(
-      @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
     )
   }
   for c in self.subkeys {
@@ -114,6 +115,13 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
       self.primary.to_body().exact_view(),
     ).exact_view(),
   )
+  // Primary-key revocations sit straight after the primary key (see
+  // PrivateKey::to_bytes).
+  for r in self.revocations {
+    w.bytes(
+      @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+    )
+  }
   match self.direct_signature {
     Some(b) =>
       w.bytes(
@@ -134,12 +142,6 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
         @packet.Signature,
         binding.self_signature.to_body().exact_view(),
       ).exact_view(),
-    )
-  }
-  // Primary-key revocations (see PrivateKey::to_bytes).
-  for r in self.revocations {
-    w.bytes(
-      @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
     )
   }
   for c in self.subkeys {

@@ -326,3 +326,63 @@ test "recover_session_key_with_key on a v6 message" {
   assert_eq(sk.algo, @primitives.Aes256)
   assert_eq(sk.key.length(), 32)
 }
+
+///|
+/// The private-key decrypt path opens a 4880bis tag-20 AEAD container
+/// (the shape gpg 2.4 emits with --force-aead for AEAD-feature
+/// recipients) with the PKESK session key, mirroring the password path's
+/// lenient GnuPG interop handling.
+test "private key decrypt opens a tag-20 aead container" {
+  let key = generate_key("T20 <t20@example.com>")
+  let session = @primitives.random_bytes(32)
+  let data = @primitives.utf8_bytes("tag-20 private-key payload")
+  let inner = @packet.serialize_packet(
+    @packet.Literal,
+    @packet.LiteralPacket::binary(data).to_body().exact_view(),
+  )
+  let cipher_algo = @primitives.Aes256.number()
+  let aead_algo = @cipher.Ocb.number()
+  let chunk_octet = 14
+  let header5 = Bytes::from_array([
+    0xD4,
+    1,
+    cipher_algo.to_byte(),
+    aead_algo.to_byte(),
+    chunk_octet.to_byte(),
+  ])
+  let bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    session.exact_view(),
+  )
+  let iv = @primitives.random_bytes(15)
+  let body = @cipher.aead_seal(
+    bc,
+    @cipher.Ocb,
+    header5.exact_view(),
+    iv.exact_view(),
+    chunk_octet,
+    inner.exact_view(),
+  )
+  let aead : @packet.AeadPacket = {
+    version: 1,
+    cipher_algo,
+    aead_algo,
+    chunk_octet,
+    iv,
+    ciphertext: body,
+  }
+  let pkesk = create_pkesk(
+    key.primary.public,
+    session.exact_view(),
+    @primitives.Aes256,
+  )
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(@packet.Pkesk, pkesk.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(@packet.AeadEncData, aead.to_body().exact_view()).exact_view(),
+  )
+  let back = decrypt_binary_with_private_key(w.to_bytes().exact_view(), key)
+  assert_eq(@utf8.decode_lossy(back.exact_view()), "tag-20 private-key payload")
+}

@@ -86,7 +86,7 @@ test "argon2 SKESK rejects the wrong passphrase" {
 /// A key locked with Argon2id + AES-256/OCB (usage 253) unlocks again, and
 /// the packet really carries the AEAD protection.
 test "argon2 AEAD secret key lock/unlock round trip" {
-  let key = @api.generate_key("Argon2 <a2@example.com>", bits=1024)
+  let key = @api.generate_key("Argon2 <a2@example.com>", bits=2048)
   let locked = key.lock_argon2(
     "passphrase",
     passes=1,
@@ -112,7 +112,7 @@ test "argon2 AEAD secret key lock/unlock round trip" {
 test "argon2 specifier is rejected with S2K usage 254/255" {
   let salt = Bytes::make(@s2k.ARGON2_SALT_SIZE, b'\x01')
   let spec = @s2k.Argon2(salt, 1, 1, 5).encode()
-  let public = @api.generate_key("X <x@example.com>", bits=1024).primary.public
+  let public = @api.generate_key("X <x@example.com>", bits=2048).primary.public
   for usage in [254, 255] {
     let key : @packet.SecretKeyPacket = {
       public,
@@ -287,7 +287,7 @@ fn argon2_skesk_with_memory(memory_exp : Int32) -> Bytes {
 
 ///|
 /// The S2K parameters are attacker-controlled and the derivation runs before
-/// any authentication, so the *default* 256 MiB policy must refuse a 2 GiB
+/// any authentication, so the *default* 64 MiB policy must refuse a 2 GiB
 /// request before allocating anything. (The packet is built by hand, so this
 /// test never allocates the 2 GiB it is refusing.)
 test "the default Argon2 memory policy refuses a 2 GiB request" {
@@ -295,7 +295,7 @@ test "the default Argon2 memory policy refuses a 2 GiB request" {
   try @api.decrypt_binary_with_password(wire, "pw") catch {
     @error.PgpError(msg~) => {
       assert_true(msg.contains("exceeds the cap"))
-      assert_true(msg.contains("262144"))
+      assert_true(msg.contains("65536"))
     }
     _ => fail("expected a PgpError for the oversized request")
   } noraise {
@@ -305,7 +305,7 @@ test "the default Argon2 memory policy refuses a 2 GiB request" {
 
 ///|
 /// The cap is a caller-visible policy: a 1 MiB request passes the default
-/// 256 MiB policy (what fails afterwards is the bogus wrapped session key),
+/// 64 MiB policy (what fails afterwards is the bogus wrapped session key),
 /// while an explicit 512 KiB cap stops the very same packet. Widening beyond
 /// the default is what the RFC Appendix A.5/A.12 `slow:*` vectors do.
 test "an explicit Argon2 memory cap is enforced before allocating" {

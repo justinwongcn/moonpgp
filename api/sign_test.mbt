@@ -2,7 +2,7 @@
 test "stress: repeated keygen with verification" {
   for i in 0..<6 {
     try {
-      let key = @api.generate_key("Stress <s\{i}@example.com>", bits=1024)
+      let key = @api.generate_key("Stress <s\{i}@example.com>", bits=2048)
       let ok1 = @api.verify_key_signature(
         key.self_signature(),
         key.primary.public,
@@ -27,7 +27,7 @@ test "stress: repeated keygen with verification" {
 
 ///|
 test "detached signature roundtrip" {
-  let key = @api.generate_key("Signer <s@example.com>", bits=1024)
+  let key = @api.generate_key("Signer <s@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("document body\nsecond line\n")
   let sig = @api.sign_detached(data, key)
   assert_eq(@api.verify_detached(data, sig, key.to_public()), @api.Ok)
@@ -38,7 +38,7 @@ test "detached signature roundtrip" {
 
 ///|
 test "text mode signature canonicalizes newlines" {
-  let key = @api.generate_key("Signer <s@example.com>", bits=1024)
+  let key = @api.generate_key("Signer <s@example.com>", bits=2048)
   // Data with bare LFs; verifier presents CRLF form — same canonical hash.
   let data = @primitives.utf8_bytes("line one\nline two\n")
   let sig = @api.sign_detached(data, key, text_mode=true)
@@ -51,7 +51,7 @@ test "text mode signature canonicalizes newlines" {
 
 ///|
 test "inline signature roundtrip" {
-  let key = @api.generate_key("Signer <s@example.com>", bits=1024)
+  let key = @api.generate_key("Signer <s@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("signed payload")
   let armored = @api.sign_inline(data, key)
   let (extracted, status) = @api.verify_inline(armored, key.to_public())
@@ -61,8 +61,8 @@ test "inline signature roundtrip" {
 
 ///|
 test "sign and encrypt, then decrypt and verify" {
-  let signer = @api.generate_key("Sender <from@example.com>", bits=1024)
-  let recipient = @api.generate_key("Recipient <to@example.com>", bits=1024)
+  let signer = @api.generate_key("Sender <from@example.com>", bits=2048)
+  let recipient = @api.generate_key("Recipient <to@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("confidential and authenticated")
   let armored = @api.sign_and_encrypt(data, signer, [recipient.to_public()])
   let (extracted, status) = @api.decrypt_and_verify(
@@ -76,7 +76,7 @@ test "sign and encrypt, then decrypt and verify" {
 
 ///|
 test "keyring lookup by key id" {
-  let alice = @api.generate_key("Alice <a@example.com>", bits=1024)
+  let alice = @api.generate_key("Alice <a@example.com>", bits=2048)
   let ring = @api.KeyRing::new()
   ring.add_public(alice.to_public())
   assert_eq(ring.public_count(), 1)
@@ -105,8 +105,8 @@ test "builder: password encryption and decryption" {
 
 ///|
 test "builder: public key path with signature verification" {
-  let signer = @api.generate_key("S <s@example.com>", bits=1024)
-  let recipient = @api.generate_key("R <r@example.com>", bits=1024)
+  let signer = @api.generate_key("S <s@example.com>", bits=2048)
+  let recipient = @api.generate_key("R <r@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("builder pk payload")
   let encrypt = @api.pgp()
     .encryption()
@@ -130,7 +130,7 @@ test "builder: key generation" {
   let key = @api.pgp()
     .key_generation()
     .add_user_id("B <b@example.com>")
-    .rsa_bits(1024)
+    .rsa_bits(2048)
     .generate()
   assert_eq(key.user_id(), "B <b@example.com>")
   assert_eq(key.fingerprint().length(), 20)
@@ -143,7 +143,7 @@ test "detached signature with a fixed creation time is reproducible" {
   let data = @primitives.utf8_bytes("document body\n")
   for
     key in [
-      @api.generate_key("Signer <s@example.com>", bits=1024),
+      @api.generate_key("Signer <s@example.com>", bits=2048),
       @api.generate_ed25519_key("Signer <s@example.com>"),
     ] {
     let a = @api.sign_detached(data, key, created=1700000000)

@@ -192,6 +192,9 @@ pub fn DecryptionBuilder::finish(
       return match status {
         Ok => Verified(d)
         Failed => SignatureError(d)
+        // A valid-but-rejected signature (revoked or expired key) is still
+        // a signature error, not a missing signature.
+        KeyRevoked | Expired => SignatureError(d)
         // No verifier matched, or the message carried no signature.
         NoVerifier | NotSigned => Data(d)
       }

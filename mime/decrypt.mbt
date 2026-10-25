@@ -12,11 +12,12 @@ pub(open) trait MimeCallbacks {
 ///|
 /// Severity ranking for merging signature statuses (gopenpgp
 /// prioritizeSignatureErrors: FAILED > NO_VERIFIER > NOT_SIGNED > OK).
+/// KeyRevoked/Expired are verification rejections, ranked with FAILED.
 fn severity(status : @api.VerifyStatus) -> Int32 {
   match status {
     @api.NotSigned => 1
     @api.NoVerifier => 2
-    @api.Failed => 3
+    @api.Failed | @api.KeyRevoked | @api.Expired => 3
     @api.Ok => 0
   }
 }
@@ -49,6 +50,8 @@ fn status_message(status : @api.VerifyStatus) -> String {
     @api.NotSigned => "mime: missing signature"
     @api.NoVerifier => "mime: no matching signature"
     @api.Failed => "mime: invalid signature"
+    @api.KeyRevoked => "mime: signing key revoked"
+    @api.Expired => "mime: signing key or signature expired"
     @api.Ok => "mime: signature ok"
   }
 }

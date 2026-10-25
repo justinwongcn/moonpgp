@@ -71,7 +71,7 @@ test "multipart/mixed: attachments are base64 with disposition" {
 
 ///|
 test "signed entity: verifies and round-trips the exact bytes" {
-  let key = @api.generate_key("Mail Build <mb@example.com>", bits=1024)
+  let key = @api.generate_key("Mail Build <mb@example.com>", bits=2048)
   let entity = "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\nsigned entity body\r\n"
   let signed = @mail.build_pgp_mime_signed_entity(entity, key)
   let extracted = @mime.extract_pgp_signed(signed)
@@ -86,7 +86,7 @@ test "signed entity: verifies and round-trips the exact bytes" {
 
 ///|
 test "encrypted mail: one-shot compose then decrypt_mime roundtrip" {
-  let key = @api.generate_key("Mail Build <mb@example.com>", bits=1024)
+  let key = @api.generate_key("Mail Build <mb@example.com>", bits=2048)
   let att : @mail.MailAttachment = {
     filename: "note.txt",
     content_type: "text/plain",
@@ -134,7 +134,7 @@ test "encrypted mail: one-shot compose then decrypt_mime roundtrip" {
 
 ///|
 test "encrypted mail: non-ascii subject is RFC 2047 encoded" {
-  let key = @api.generate_key("Mail Build <mb@example.com>", bits=1024)
+  let key = @api.generate_key("Mail Build <mb@example.com>", bits=2048)
   let mail_text = @mail.build_encrypted_mail(
     { display_name: "", addr: "a@b.example", },
     [{ display_name: "", addr: "c@d.example", }],

@@ -152,40 +152,64 @@ pub fn recover_session_key_with_key(
   for p in packets {
     if p.tag() == @packet.Pkesk {
       let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
+      // Hidden recipient (S13): an all-zero v3 key id matches no key by
+      // id, so every candidate is tried; a failing candidate is just not
+      // the recipient.
+      if pkesk_is_anonymous(pkesk) {
+        for sk in candidates {
+          let recovered : SessionKey? = Some(
+            recover_pkesk_session(packets, pkesk, sk),
+          ) catch {
+            _ => None
+          }
+          if recovered is Some(s) {
+            return s
+          }
+        }
+        continue
+      }
       for sk in candidates {
         if pkesk_addresses(pkesk, sk) {
-          let (algo_id, session) = unwrap_pkesk(pkesk, sk)
-          if pkesk.version() == 6 {
-            // A v6 PKESK carries no cipher octet; the v2 SEIPD names it.
-            for q in packets {
-              if q.tag() == @packet.Seipd {
-                let seipd = @packet.SeipdPacket::parse(q.body().exact_view())
-                guard seipd.version == 2 else {
-                  @error.fail(
-                    "api: v6 PKESK must precede a v2 SEIPD (RFC 9580 §10.3.2.1)",
-                  )
-                }
-                let algo = match
-                  @primitives.cipher_algo_of_number(seipd.cipher_algo) {
-                  Some(a) => a
-                  None =>
-                    @error.fail(
-                      "api: unsupported session cipher \{seipd.cipher_algo}",
-                    )
-                }
-                return SessionKey::new(session, algo)
-              }
-            }
-            @error.fail("api: no SEIPD packet found")
-          }
-          let algo = match @primitives.cipher_algo_of_number(algo_id) {
-            Some(a) => a
-            None => @error.fail("api: unsupported session cipher \{algo_id}")
-          }
-          return SessionKey::new(session, algo)
+          return recover_pkesk_session(packets, pkesk, sk)
         }
       }
     }
   }
   @error.fail("api: message is not encrypted to this key")
+}
+
+///|
+/// Unwrap one PKESK into a session key: the algorithm id comes from the
+/// PKESK payload for the v3 shape and from the SEIPD v2 header for v6.
+fn recover_pkesk_session(
+  packets : Array[@packet.RawPacket],
+  pkesk : @packet.PkeskPacket,
+  sk : @packet.SecretKeyPacket,
+) -> SessionKey raise {
+  let (algo_id, session) = unwrap_pkesk(pkesk, sk)
+  if pkesk.version() == 6 {
+    // A v6 PKESK carries no cipher octet; the v2 SEIPD names it.
+    for q in packets {
+      if q.tag() == @packet.Seipd {
+        let seipd = @packet.SeipdPacket::parse(q.body().exact_view())
+        guard seipd.version == 2 else {
+          @error.fail(
+            "api: v6 PKESK must precede a v2 SEIPD (RFC 9580 §10.3.2.1)",
+          )
+        }
+        let algo = match @primitives.cipher_algo_of_number(seipd.cipher_algo) {
+          Some(a) => a
+          None =>
+            @error.fail("api: unsupported session cipher \{seipd.cipher_algo}")
+        }
+        return SessionKey::new(session, algo)
+      }
+    }
+    @error.fail("api: no SEIPD packet found")
+  }
+  let algo = match @primitives.cipher_algo_of_number(algo_id) {
+    Some(a) => a
+    None => @error.fail("api: unsupported session cipher \{algo_id}")
+  }
+  SessionKey::new(session, algo)
 }

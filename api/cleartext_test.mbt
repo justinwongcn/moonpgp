@@ -1,6 +1,6 @@
 ///|
 test "cleartext sign/verify roundtrip" {
-  let key = @api.generate_key("CT <ct@example.com>", bits=1024)
+  let key = @api.generate_key("CT <ct@example.com>", bits=2048)
   let text = "hello cleartext\nsecond line\n"
   let message = @api.sign_cleartext(text, key)
   assert_true(
@@ -14,7 +14,7 @@ test "cleartext sign/verify roundtrip" {
 
 ///|
 test "cleartext dash-escaping" {
-  let key = @api.generate_key("CT <ct@example.com>", bits=1024)
+  let key = @api.generate_key("CT <ct@example.com>", bits=2048)
   let text = "normal\n- starts with dash\nFrom me\n- continued -\n"
   let message = @api.sign_cleartext(text, key)
   // Display form escapes dashes; the signature covers the de-escaped text.
@@ -29,7 +29,7 @@ test "cleartext dash-escaping" {
 
 ///|
 test "cleartext trailing whitespace is trimmed before signing" {
-  let key = @api.generate_key("CT <ct@example.com>", bits=1024)
+  let key = @api.generate_key("CT <ct@example.com>", bits=2048)
   // Signed with trailing spaces on every line.
   let message = @api.sign_cleartext("word \nother\t\n", key)
   // Verify text without the trailing whitespace: same canonical form.
@@ -39,7 +39,7 @@ test "cleartext trailing whitespace is trimmed before signing" {
 
 ///|
 test "cleartext tampering is detected" {
-  let key = @api.generate_key("CT <ct@example.com>", bits=1024)
+  let key = @api.generate_key("CT <ct@example.com>", bits=2048)
   let message = @api.sign_cleartext("sign this line\n", key)
   // Alter the visible text (drop the escape, change a word) while keeping
   // the signature: signature must fail.
@@ -50,8 +50,8 @@ test "cleartext tampering is detected" {
 
 ///|
 test "cleartext wrong verifier fails" {
-  let signer = @api.generate_key("S <s@example.com>", bits=1024)
-  let other = @api.generate_key("O <o@example.com>", bits=1024)
+  let signer = @api.generate_key("S <s@example.com>", bits=2048)
+  let other = @api.generate_key("O <o@example.com>", bits=2048)
   let message = @api.sign_cleartext("who signed me?\n", signer)
   // A key that is not the signer yields NoVerifier (cannot even attempt);
   // Failed is reserved for a matching key whose verification failed.
@@ -61,7 +61,7 @@ test "cleartext wrong verifier fails" {
 
 ///|
 test "cleartext with missing trailing newline" {
-  let key = @api.generate_key("CT <ct@example.com>", bits=1024)
+  let key = @api.generate_key("CT <ct@example.com>", bits=2048)
   let text = "no trailing newline"
   let message = @api.sign_cleartext(text, key)
   let (recovered, status) = @api.verify_cleartext(message, key.to_public())

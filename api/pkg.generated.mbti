@@ -48,15 +48,15 @@ pub fn recover_session_key_with_key(String, PrivateKey) -> SessionKey raise
 
 pub fn recover_session_key_with_password(String, String, argon2_max_memory_kib? : Int32) -> SessionKey raise
 
-pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo) -> String raise
+pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo, created? : Int32) -> String raise
 
-pub fn sign_cleartext(String, PrivateKey) -> String raise
+pub fn sign_cleartext(String, PrivateKey, created? : Int32) -> String raise
 
-pub fn sign_cleartext_with(String, PrivateKey, @primitives.HashId) -> String raise
+pub fn sign_cleartext_with(String, PrivateKey, @primitives.HashId, created? : Int32) -> String raise
 
 pub fn sign_detached(BytesView, PrivateKey, text_mode? : Bool, created? : Int32) -> String raise
 
-pub fn sign_inline(BytesView, PrivateKey, text_mode? : Bool) -> String raise
+pub fn sign_inline(BytesView, PrivateKey, text_mode? : Bool, created? : Int32) -> String raise
 
 pub fn verify_cleartext(String, PublicKey) -> (String, VerifyStatus) raise
 
@@ -197,6 +197,8 @@ pub(all) enum VerifyStatus {
   NotSigned
   NoVerifier
   Failed
+  KeyRevoked
+  Expired
 } derive(Eq, @debug.Debug)
 pub fn VerifyStatus::equal(Self, Self) -> Bool
 pub fn VerifyStatus::not_equal(Self, Self) -> Bool

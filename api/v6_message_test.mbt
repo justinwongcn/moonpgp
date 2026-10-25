@@ -269,7 +269,7 @@ test "the Argon2 memory policy is enforced before allocating" {
 
 ///|
 test "the secret-key Argon2 memory policy is enforced" {
-  let key = @api.generate_key("Policy <p@example.com>", bits=1024).lock_argon2(
+  let key = @api.generate_key("Policy <p@example.com>", bits=2048).lock_argon2(
     "pw",
     passes=1,
     parallelism=1,
@@ -318,7 +318,7 @@ test "v6 keys advertise v2 SEIPD and their AEAD preferences" {
   assert_true(key.to_public().supports_seipd_v2())
   assert_eq(key.to_public().preferred_aead(), [(9, 2), (9, 3), (7, 2)])
   // v4 keys keep the old Features octet and advertise no AEAD list.
-  let v4 = @api.generate_key("V4 <v4@example.com>", bits=1024)
+  let v4 = @api.generate_key("V4 <v4@example.com>", bits=2048)
   assert_false(v4.to_public().supports_seipd_v2())
   assert_eq(v4.to_public().preferred_aead().length(), 0)
 }

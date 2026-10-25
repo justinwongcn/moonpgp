@@ -1,6 +1,6 @@
 ///|
 test "pgp/mime signed roundtrip" {
-  let key = @api.generate_key("Mime <m@example.com>", bits=1024)
+  let key = @api.generate_key("Mime <m@example.com>", bits=2048)
   let text = "PGP/MIME signed body\nsecond line\n"
   let message = @mime.build_pgp_mime_signed(text, key)
   assert_true(message.contains("multipart/signed"))
@@ -17,7 +17,7 @@ test "pgp/mime signed roundtrip" {
 
 ///|
 test "pgp/mime signed tampering detected" {
-  let key = @api.generate_key("Mime <m@example.com>", bits=1024)
+  let key = @api.generate_key("Mime <m@example.com>", bits=2048)
   let message = @mime.build_pgp_mime_signed("authentic body\n", key)
   let tampered = message.replace(old="authentic body", new="tampered body")
   let (_, status) = @mime.verify_pgp_mime_signed(tampered, key.to_public())
@@ -29,7 +29,7 @@ test "pgp/mime signed roundtrip without trailing newline" {
   // F04: the builder used to sign the entity without the trailing CRLF
   // that extract_pgp_signed restores, so text without a trailing newline
   // failed its own verification.
-  let key = @api.generate_key("Mime <m@example.com>", bits=1024)
+  let key = @api.generate_key("Mime <m@example.com>", bits=2048)
   let message = @mime.build_pgp_mime_signed(
     "body without trailing newline", key,
   )
@@ -43,7 +43,7 @@ test "pgp/mime signed roundtrip without trailing newline" {
 
 ///|
 test "pgp/mime encrypted roundtrip" {
-  let key = @api.generate_key("Mime <m@example.com>", bits=1024)
+  let key = @api.generate_key("Mime <m@example.com>", bits=2048)
   let plaintext = @primitives.utf8_bytes("encrypted mime payload\n")
   let armored = @api.encrypt_to_recipients(plaintext, [key.to_public()])
   let message = @mime.build_pgp_mime_encrypted(armored)

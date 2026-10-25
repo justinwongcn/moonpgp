@@ -11,6 +11,8 @@ pub const FEATURE_SEIPD_V1 : Int32 = 0x01
 
 pub const FEATURE_SEIPD_V2 : Int32 = 0x08
 
+pub const MAX_MPI_BITS : Int32 = 16384
+
 pub const SIGSUB_CREATION_TIME : Int32 = 2
 
 pub const SIGSUB_EMBEDDED_SIGNATURE : Int32 = 32
@@ -60,6 +62,8 @@ pub const SIGSUB_SIG_EXPIRATION_TIME : Int32 = 3
 pub const SIGSUB_TRUST_SIGNATURE : Int32 = 5
 
 pub fn find_subpacket(Array[SigSubpacket], Int32) -> Bytes?
+
+pub fn is_known_sigsub_type(Int32) -> Bool
 
 pub fn parse_packets(BytesView) -> Array[RawPacket] raise
 
@@ -325,6 +329,7 @@ pub(all) struct SignaturePacket {
 pub fn SignaturePacket::creation_time(Self) -> Int32?
 pub fn SignaturePacket::fast_hash(Self) -> Int32
 pub fn SignaturePacket::features(Self) -> Bytes?
+pub fn SignaturePacket::has_unknown_critical_subpacket(Self) -> Bool
 pub fn SignaturePacket::hash_algo(Self) -> Int32
 pub fn SignaturePacket::hash_prefix(Self) -> Bytes
 pub fn SignaturePacket::hashed_subpackets(Self) -> Array[SigSubpacket]

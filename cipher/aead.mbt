@@ -272,7 +272,7 @@ pub fn aead_open(
   }
   // Final tag.
   let total : Array[Byte] = Array(capacity=8)
-  let total_i64 : Int64 = out.to_bytes().length().to_int64()
+  let total_i64 : Int64 = out.length().to_int64()
   for i in 0..<8 {
     let shift = (7 - i) * 8
     total.push(((total_i64 >> shift) & 0xFFL).to_int().to_byte())

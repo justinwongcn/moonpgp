@@ -113,7 +113,7 @@ test "format_address encodes non-ASCII display names" {
 ///|
 test "build_encrypted_mail encodes a Chinese subject end-to-end" {
   // Minimal RSA key pair (1024-bit keeps the test fast).
-  let key = @api.generate_key("测试者 <t@example.com>", bits=1024)
+  let key = @api.generate_key("测试者 <t@example.com>", bits=2048)
   let mail_text = @mail.build_encrypted_mail(
     { display_name: "王小明", addr: "alice@example.com", },
     [{ display_name: "Bob", addr: "bob@example.com", }],

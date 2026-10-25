@@ -56,7 +56,7 @@ fn cast5_protected(key : PrivateKey, passphrase : String) -> PrivateKey raise {
 
 ///|
 test "unlock a secret key protected with CAST5 S2K" {
-  let fresh = generate_key("CAST5 Holder <c@example.com>", bits=1024)
+  let fresh = generate_key("CAST5 Holder <c@example.com>", bits=2048)
   let key = cast5_protected(fresh, "cast5keypass")
   assert_true(key.is_locked())
   let unlocked = key.unlock("cast5keypass")
@@ -77,7 +77,7 @@ test "unlock a secret key protected with CAST5 S2K" {
 
 ///|
 test "wrong passphrase on a CAST5-protected key fails" {
-  let fresh = generate_key("CAST5 Holder <c@example.com>", bits=1024)
+  let fresh = generate_key("CAST5 Holder <c@example.com>", bits=2048)
   let key = cast5_protected(fresh, "cast5keypass")
   let raised = try {
     let _ = key.unlock("nope")

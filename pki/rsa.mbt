@@ -1,4 +1,16 @@
 ///|
+/// RSA (RFC 8017) for OpenPGP. Threat model (S05): every private-key
+/// operation is plain big-integer modular exponentiation — CRT without
+/// blinding, non-constant-time compare-free arithmetic — so per-operation
+/// timing varies with the secret exponents. Remote attackers observe only
+/// whole-operation latency over a network; the realistic exposure is a
+/// LOCAL attacker sharing the host and measuring the process. MoonBit
+/// core has no constant-time bignum, so this is a documented tradeoff.
+/// This file is the replacement seam (same contract as `x25519.mbt`): a
+/// hardened bignum (CRT blinding, constant-time Montgomery ladder) drops
+/// in by rewriting `raw_decrypt` and `pkcs1_v15_sign` bodies only.
+
+///|
 /// RSA public key: modulus and public exponent. Value carrier,
 /// deliberately `pub(all)` (policy note, HANDOFF 2026-10-06): the api
 /// layer assembles these from parsed/generated wire material; the guarded,
@@ -114,7 +126,6 @@ pub fn RsaPrivateKey::pkcs1_v15_decrypt(
       sep = i
       break
     }
-    guard em[i] != b'\x00' else { abort("unreachable") }
   }
   guard sep >= 10 else { @error.fail("rsa: malformed PKCS#1 padding") }
   em[sep + 1:k].to_owned()
@@ -185,8 +196,11 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
 /// exponent 65537. Primality uses Miller-Rabin with 40 random bases per
 /// candidate after trial division.
 pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise {
-  guard bits >= 1024 else {
-    @error.fail("rsa: refusing to generate keys under 1024 bits")
+  // RFC 9580 §12.4: an implementation MUST NOT generate keys below 3072
+  // bits and MUST NOT encrypt, sign or verify below 2048; 2048 is the
+  // absolute floor we accept for explicit opt-in (S12).
+  guard bits >= 2048 else {
+    @error.fail("rsa: refusing to generate keys under 2048 bits")
   }
   guard bits % 2 == 0 else { @error.fail("rsa: bit count must be even") }
   let e = BigInt::from_int(65537)

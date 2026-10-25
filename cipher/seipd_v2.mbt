@@ -192,7 +192,7 @@ pub fn seipd_v2_open(
     pos = pos + want + mode.tag_length()
     index = index + 1L
   }
-  let total : Int64 = out.to_bytes().length().to_int64()
+  let total : Int64 = out.length().to_int64()
   let final_ad = seipd_v2_final_ad(header5, total)
   let final_nonce = seipd_v2_nonce(iv, index)
   let opened = match mode {

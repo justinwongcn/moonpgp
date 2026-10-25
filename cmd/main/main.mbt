@@ -125,6 +125,14 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
           println("Bad signature")
           abort("verification failed")
         }
+        @api.KeyRevoked => {
+          println("Signing key is revoked")
+          abort("verification failed")
+        }
+        @api.Expired => {
+          println("Signing key or signature is expired")
+          abort("verification failed")
+        }
       }
     }
     _ => usage()

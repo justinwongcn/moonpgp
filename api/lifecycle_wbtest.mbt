@@ -7,7 +7,7 @@
 
 ///|
 test "a fresh key is alive and capable" {
-  let key = generate_key("Life <life@example.com>", bits=1024)
+  let key = generate_key("Life <life@example.com>", bits=2048)
   // now = 0 disables the time checks entirely.
   assert_false(key.is_expired(0L))
   assert_false(key.is_revoked(0L))
@@ -37,14 +37,14 @@ test "v4 Ed25519 and v6 keys are alive and capable" {
 test "a far-future timestamp expires nothing that has no lifetime" {
   // Generated keys carry no Key Expiration Time and no Signature
   // Expiration Time, so even an absurdly late `now` finds nothing expired.
-  let key = generate_key("Eternal <e@example.com>", bits=1024)
+  let key = generate_key("Eternal <e@example.com>", bits=2048)
   assert_false(key.is_expired(4_102_444_800L)) // 2100-01-01
   assert_true(key.can_encrypt(4_102_444_800L))
 }
 
 ///|
 test "tampered user id fails import (certification must verify)" {
-  let key = generate_key("Honest <h@example.com>", bits=1024)
+  let key = generate_key("Honest <h@example.com>", bits=2048)
   let tampered : PrivateKey = {
     ..key,
     user_ids: [
@@ -65,8 +65,8 @@ test "tampered user id fails import (certification must verify)" {
 
 ///|
 test "swapped subkey fails import (binding must verify)" {
-  let key = generate_key("A <a@example.com>", bits=1024)
-  let other = generate_key("B <b@example.com>", bits=1024)
+  let key = generate_key("A <a@example.com>", bits=2048)
+  let other = generate_key("B <b@example.com>", bits=2048)
   let mixed : PrivateKey = {
     ..key,
     encryption_subkey: other.encryption_subkey,
@@ -114,7 +114,7 @@ test "expired subkey binding drops the subkey from encryption selection" {
   // Mutate an existing binding in memory to carry a Key Expiration Time
   // 60 s after the subkey's creation. (Not re-imported: the signature is
   // no longer valid wire data once its hashed area changed.)
-  let key = generate_key("X <x@example.com>", bits=1024)
+  let key = generate_key("X <x@example.com>", bits=2048)
   let created = key.encryption_subkey.unwrap().public.creation_time
   let exp = created + 60
   let expired_binding : @packet.SignaturePacket = {
@@ -153,7 +153,7 @@ test "a swapped certification fails import on a multi-uid key" {
   // Build a two-User-ID key where the second User ID is certified with
   // the FIRST User ID's certification: the signature does not cover that
   // User ID, so strict import rejects (M5 × M1 composition).
-  let key = generate_key("Real <real@example.com>", bits=1024)
+  let key = generate_key("Real <real@example.com>", bits=2048)
   let forged_binding : UserIdBinding = {
     user_id: "Forged <forged@example.net>",
     self_signature: key.self_signature(),
@@ -173,7 +173,7 @@ test "a swapped certification fails import on a multi-uid key" {
 
 ///|
 test "a generated key exposes one binding and stable accessors" {
-  let key = generate_key("Solo <solo@example.com>", bits=1024)
+  let key = generate_key("Solo <solo@example.com>", bits=2048)
   assert_eq(key.user_ids.length(), 1)
   assert_eq(key.user_id(), "Solo <solo@example.com>")
   assert_true(

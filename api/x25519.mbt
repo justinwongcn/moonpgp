@@ -23,7 +23,9 @@ fn x25519_native_public(pub_packet : @packet.PublicKeyPacket) -> Bytes raise {
 }
 
 ///|
-/// The native 32-octet secret key of an unlocked v6 X25519 packet.
+/// The native 32-octet secret key of an unlocked X25519 packet. A v4
+/// secret key packet appends the 2-octet checksum after the 32 native
+/// octets (v6 does not); strip it so both versions yield the raw scalar.
 fn x25519_native_secret(sk : @packet.SecretKeyPacket) -> Bytes raise {
   guard sk.s2k_usage == 0 else {
     @error.fail("api: secret key material is locked; unlock it first")
@@ -31,10 +33,15 @@ fn x25519_native_secret(sk : @packet.SecretKeyPacket) -> Bytes raise {
   guard sk.public.algo() == @packet.X25519 else {
     @error.fail("api: not an X25519 key")
   }
-  guard sk.secret_material.length() == 32 else {
+  let want = if sk.public.version() >= 6 { 32 } else { 34 }
+  guard sk.secret_material.length() == want else {
     @error.fail("api: bad X25519 secret key material")
   }
-  sk.secret_material
+  if want == 32 {
+    sk.secret_material
+  } else {
+    sk.secret_material[0:32].to_owned()
+  }
 }
 
 ///|

@@ -101,8 +101,15 @@ fn make_text_signature(
   key : PrivateKey,
   data : BytesView,
   hash : @primitives.HashId,
+  created? : Int32,
 ) -> @packet.SignaturePacket raise {
-  make_document_signature_with(key, data, @packet.CanonicalTextDocument, hash)
+  make_document_signature_with(
+    key,
+    data,
+    @packet.CanonicalTextDocument,
+    hash,
+    created?,
+  )
 }
 
 ///|
@@ -233,18 +240,35 @@ fn maybe_compress_inner(
 }
 
 ///|
+/// Maximum nested Compressed packet depth on any packet walk (S03). gpg
+/// emits at most one layer; three matches `extract_literal`'s precedent.
+/// Without the cap, an algo-0 Compressed packet costs ~3 wire octets per
+/// layer, so a few MB of untrusted input can drive hundreds of thousands
+/// of recursion levels.
+const MAX_COMPRESSED_DEPTH : Int32 = 3
+
+///|
 /// Walk a packet stream collecting the literal data and the signature,
 /// recursing into compressed packets (they carry either [Literal] or the
 /// [OPS, Literal, Sig] gpg -es shape). Returns the accumulated
-/// (data, sig); unknown tags (e.g. OnePassSig) are skipped.
+/// (data, sig, remaining budget); unknown tags (e.g. OnePassSig) are
+/// skipped.
+///
+/// `budget` is the *cumulative* cap on decompressed output across every
+/// nested layer (S03): each decompression's cap is whatever remains of the
+/// budget, so N nested layers cannot expand to N x `max_decompressed`.
+/// Algo-0 packets perform no expansion and consume no budget.
 fn collect_data_sig(
   packets : Array[@packet.RawPacket],
   data0 : Bytes?,
   sig0 : @packet.SignaturePacket?,
   max_decompressed : Int32,
-) -> (Bytes?, @packet.SignaturePacket?) raise {
+  budget : Int32,
+  depth : Int32,
+) -> (Bytes?, @packet.SignaturePacket?, Int32) raise {
   let mut data = data0
   let mut sig = sig0
+  let mut remaining = budget
   for p in packets {
     match p.tag() {
       @packet.Literal =>
@@ -252,23 +276,41 @@ fn collect_data_sig(
       @packet.Signature =>
         sig = Some(@packet.SignaturePacket::parse(p.body().exact_view()))
       @packet.Compressed => {
-        let inner = decompress_payload(
-          @packet.CompressedPacket::parse(p.body().exact_view()),
-          max_decompressed,
-        )
-        let (d2, s2) = collect_data_sig(
+        guard depth < MAX_COMPRESSED_DEPTH else {
+          @error.fail(
+            "api: compressed packets nested more than \{MAX_COMPRESSED_DEPTH} levels deep",
+          )
+        }
+        let comp = @packet.CompressedPacket::parse(p.body().exact_view())
+        let inner : Bytes = match comp.algo {
+          0 => comp.data
+          _ => {
+            let cap = if remaining < max_decompressed {
+              remaining
+            } else {
+              max_decompressed
+            }
+            let out = decompress_payload(comp, cap)
+            remaining = remaining - out.length()
+            out
+          }
+        }
+        let (d2, s2, rem2) = collect_data_sig(
           @packet.parse_packets(inner.exact_view()),
           data,
           sig,
           max_decompressed,
+          remaining,
+          depth + 1,
         )
         data = d2
         sig = s2
+        remaining = rem2
       }
       _ => ()
     }
   }
-  (data, sig)
+  (data, sig, remaining)
 }
 
 ///|
@@ -313,7 +355,8 @@ pub fn sign_detached(
 
 ///|
 /// Verification outcome, mirroring gopenpgp's status codes
-/// (OK / NOT_SIGNED / NO_VERIFIER / FAILED).
+/// (OK / NOT_SIGNED / NO_VERIFIER / FAILED) plus the lifecycle outcomes
+/// gopenpgp v3 folds into a rejected signature.
 pub(all) enum VerifyStatus {
   /// Signature verified against the given key.
   Ok
@@ -323,6 +366,13 @@ pub(all) enum VerifyStatus {
   NoVerifier
   /// A matching key was present but verification failed.
   Failed
+  /// The signature is cryptographically valid but the signing key (or the
+  /// signing subkey) is revoked — never `Ok` (S02; gopenpgp v3 rejects
+  /// signatures from revoked keys).
+  KeyRevoked
+  /// The signature is cryptographically valid but the signing key or the
+  /// signature itself has expired.
+  Expired
 } derive(Eq, Debug)
 
 ///|
@@ -358,6 +408,11 @@ fn verify_signature_packet(
   data : BytesView,
   verifier : PublicKey,
 ) -> VerifyStatus raise {
+  // RFC 9580 §5.2.3.6 (S01): an unrecognized subpacket marked critical
+  // puts the whole signature in error — before any cryptography runs.
+  if sig.has_unknown_critical_subpacket() {
+    return Failed
+  }
   // Which key of the transferable key issued this signature?
   let issuer = sig.issuer_key_id()
   let primary_id = verifier.primary.key_id()
@@ -381,6 +436,9 @@ fn verify_signature_packet(
   match signer {
     None => NoVerifier
     Some(signer_pk) => {
+      let signed_by_subkey = sub_id is Some(sid) &&
+        issuer is Some(id) &&
+        sid.equal(id)
       let digest = document_hash(sig, data, sig.sig_type())
       // RFC 9580 §5.2.4: a v6 verifier MUST reject the signature when the
       // left 16 bits of the digest do not match the stored hash tag.
@@ -403,12 +461,54 @@ fn verify_signature_packet(
         _ => false
       }
       if verified {
-        Ok
+        lifecycle_status(sig, verifier, signed_by_subkey)
       } else {
         Failed
       }
     }
   }
+}
+
+///|
+/// Lifecycle gate after a cryptographically valid signature (S02): a
+/// signature from a revoked or expired key is not `Ok`. With `now = 0`
+/// (clock-less targets) the expiry checks are skipped but revocation
+/// signatures are still cryptographically validated — the same degradation
+/// `is_revoked` itself documents.
+fn lifecycle_status(
+  sig : @packet.SignaturePacket,
+  verifier : PublicKey,
+  signed_by_subkey : Bool,
+) -> VerifyStatus {
+  let now = @primitives.unix_now()
+  if verifier.is_revoked(now) {
+    return KeyRevoked
+  }
+  if signed_by_subkey {
+    match verifier.encryption_subkey {
+      Some(sk) => {
+        if subkey_revoked_at(
+            verifier.subkey_revocation,
+            verifier.primary,
+            sk,
+            now,
+          ) {
+          return KeyRevoked
+        }
+        if packet_expired_at(sk, verifier.subkey_binding, now) ||
+          sig_expired_opt(verifier.subkey_binding, now) {
+          return Expired
+        }
+      }
+      None => ()
+    }
+  } else if verifier.is_expired(now) {
+    return Expired
+  }
+  if sig_expired_at(sig, now) {
+    return Expired
+  }
+  Ok
 }
 
 ///|
@@ -453,13 +553,18 @@ fn one_pass_sig_for(
 ///|
 /// Create an inline-signed, armored message: One-Pass-Signature ||
 /// Literal || Signature.
+///
+/// `created` is the signature creation time in seconds since 1970; without
+/// it the current time is used (see `sign_detached` — deterministic for
+/// RSA/Ed25519 keys, so the message becomes reproducible).
 pub fn sign_inline(
   data : BytesView,
   key : PrivateKey,
   text_mode? : Bool,
+  created? : Int32,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
-  let sig = make_document_signature(key, data, sig_type)
+  let sig = make_document_signature(key, data, sig_type, created?)
   let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
   let ops = one_pass_sig_for(key, sig, @primitives.Sha256)
   let w = @packet.Writer::new()
@@ -485,21 +590,32 @@ pub fn verify_inline(
 ) -> (Bytes, VerifyStatus) raise {
   let block = @armor.decode(message)
   let packets = @packet.parse_packets(block.data().exact_view())
-  let (data, sig) = collect_data_sig(packets, None, None, max_decompressed)
+  let (data, sig, _budget) = collect_data_sig(
+    packets,
+    None,
+    None,
+    max_decompressed,
+    max_decompressed,
+    0,
+  )
   finish_inline_verify(data, sig, Some(verifier))
 }
 
 ///|
 /// Sign and encrypt in one step (inline signature inside SEIPD).
+///
+/// `created` is the signature creation time in seconds since 1970; without
+/// it the current time is used (see `sign_detached`).
 pub fn sign_and_encrypt(
   data : BytesView,
   signer : PrivateKey,
   recipients : Array[PublicKey],
   text_mode? : Bool,
   compress? : @compress.CompressedAlgo,
+  created? : Int32,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
-  let sig = make_document_signature(signer, data, sig_type)
+  let sig = make_document_signature(signer, data, sig_type, created?)
   let literal = @packet.LiteralPacket::binary(data, file_name="message.txt")
   let ops = one_pass_sig_for(signer, sig, @primitives.Sha256)
   let inner = @packet.Writer::new()
@@ -554,11 +670,13 @@ pub fn decrypt_and_verify(
   }
   // Walk inner packets: OPS? literal | compressed; trailing sig.
   let inner_packets = @packet.parse_packets(inner.exact_view())
-  let (data, sig) = collect_data_sig(
+  let (data, sig, _budget) = collect_data_sig(
     inner_packets,
     None,
     None,
     max_decompressed,
+    max_decompressed,
+    0,
   )
   finish_inline_verify(data, sig, verifier)
 }

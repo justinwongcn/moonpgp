@@ -10,7 +10,7 @@ pub const ARGON2_MAX_MEMORY_KIB : Int32 = 2097152
 
 pub const BLOCK_SIZE : Int32 = 16
 
-pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int32 = 262144
+pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int32 = 65536
 
 pub fn argon2id(BytesView, BytesView, Int32, Int32, Int32, Int32, max_memory_kib? : Int32) -> Bytes raise
 

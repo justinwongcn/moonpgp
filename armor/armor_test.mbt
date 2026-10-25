@@ -111,3 +111,19 @@ test "malformed CRC line raises instead of being skipped" {
   }
   assert_true(raised)
 }
+
+///|
+test "S08: a BEGIN marker with trailing garbage is not an armor block" {
+  let text = "-----BEGIN PGP MESSAGE-----EVIL\n\naGVsbG8=\n-----END PGP MESSAGE-----\n"
+  let raised = try {
+    let _ = @armor.decode(text)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+  // Trailing whitespace on the marker line remains tolerated.
+  let tolerant = "-----BEGIN PGP MESSAGE-----  \n\naGVsbG8=\n-----END PGP MESSAGE-----\n"
+  let block = @armor.decode(tolerant)
+  assert_eq(@armor.ArmorBlock::data(block), b"hello")
+}

@@ -79,7 +79,7 @@ test "ed25519 primary with ecdh subkey encrypt/decrypt" {
 ///|
 test "ed25519 sign and encrypt combined" {
   let signer = @api.generate_ed25519_key("S <s@example.com>")
-  let recipient = @api.generate_key("R <r@example.com>", bits=1024)
+  let recipient = @api.generate_key("R <r@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("ed25519 signed + rsa encrypted")
   let armored = @api.sign_and_encrypt(data, signer, [recipient.to_public()])
   let (extracted, status) = @api.decrypt_and_verify(

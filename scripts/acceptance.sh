@@ -6,7 +6,7 @@
 # which are `#skip` in the default suite because each derivation allocates
 # 2 GiB. They are the only RFC-vector coverage of the Argon2 S2K path, so
 # they belong in the release gate rather than in the default `moon test`.
-# The public decrypt entry points default to a 256 MiB Argon2 policy; these
+# The public decrypt entry points default to a 64 MiB Argon2 policy; these
 # tests pass `argon2_max_memory_kib=ARGON2_MAX_MEMORY_KIB` (2 GiB)
 # explicitly, which is exactly the documented way to open such a message.
 set -e

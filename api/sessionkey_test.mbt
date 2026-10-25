@@ -73,13 +73,13 @@ test "recover the session key of a password-encrypted message" {
 
 ///|
 test "recover the session key of a public-key-encrypted message" {
-  let recipient = @api.generate_key("R <r@example.com>", bits=1024)
+  let recipient = @api.generate_key("R <r@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("pk recovery payload")
   let msg = @api.encrypt_to_recipients(data, [recipient.to_public()])
   let sk = @api.recover_session_key_with_key(msg, recipient)
   assert_eq(@api.decrypt_to_session_key(msg, sk), data)
   // A different key finds no PKESK addressed to it.
-  let other = @api.generate_key("O <o@example.com>", bits=1024)
+  let other = @api.generate_key("O <o@example.com>", bits=2048)
   let raised = try {
     let _ = @api.recover_session_key_with_key(msg, other)
     false
@@ -91,7 +91,7 @@ test "recover the session key of a public-key-encrypted message" {
 
 ///|
 test "decrypt_to_session_key also opens a normal public-key message" {
-  let recipient = @api.generate_key("R2 <r2@example.com>", bits=1024)
+  let recipient = @api.generate_key("R2 <r2@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("known key payload")
   let msg = @api.encrypt_to_recipients(data, [recipient.to_public()])
   let sk = @api.recover_session_key_with_key(msg, recipient)

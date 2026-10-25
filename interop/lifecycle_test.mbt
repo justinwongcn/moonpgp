@@ -46,7 +46,7 @@ test "revoked key is detected at a fixed now and refuses encryption" {
 ///|
 test "encrypting to a revoked recipient is refused" {
   let revoked = @api.PublicKey::from_armored(read_testdata("key_revoked"))
-  let healthy = @api.generate_key("H <h@example.com>", bits=1024)
+  let healthy = @api.generate_key("H <h@example.com>", bits=2048)
   let raised = try {
     let _ = @api.encrypt_to_recipients(@primitives.utf8_bytes("x"), [revoked])
     false

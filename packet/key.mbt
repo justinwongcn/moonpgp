@@ -130,6 +130,12 @@ fn read_public_fields(
         params.push(r.read_mpi())
         params.push(r.read_mpi())
       }
+      Ed25519 | X25519 =>
+        // The native algorithms are the same 32 raw octets in v4 keys:
+        // §5.5.2.2 defers the material to §5.5.5, which defines 32 native
+        // octets with no version restriction — only the v6 4-octet count
+        // (and the MPI framing of EdDsaLegacy/Ecdh below) is v4-absent.
+        params.push(r.read_bytes(32))
       EdDsaLegacy => {
         // First param: the length-prefixed curve OID, kept verbatim
         // (leading octet is the OID length). Second: the MPI point.
@@ -188,6 +194,11 @@ pub fn PublicKeyPacket::to_body(self : PublicKeyPacket) -> Bytes {
     w.bytes(mb.exact_view())
   } else {
     match self.algo {
+      Ed25519 | X25519 =>
+        // v4 native keys carry the 32 raw octets, no MPI framing.
+        for p in self.params {
+          w.bytes(p.exact_view())
+        }
       EdDsaLegacy => {
         // First param carries the length-prefixed OID verbatim.
         w.bytes(self.params[0].exact_view())

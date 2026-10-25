@@ -50,23 +50,30 @@ fn eddsa_secret_parts(
 }
 
 ///|
-/// v6 Ed25519 secret parts: the secret material is 32 raw octets (no
-/// MPI, no checksum — RFC 9580 §5.5.5.9) and the public point is the
-/// single 32-octet native parameter.
-fn ed25519_v6_secret_parts(
+/// Native Ed25519 secret parts: the secret material is 32 raw octets (no
+/// MPI, no framing — RFC 9580 §5.5.5.9) and the public point is the
+/// single 32-octet native parameter. A v4 secret key packet appends the
+/// 2-octet checksum after the raw octets (v6 does not); strip it.
+fn ed25519_native_secret_parts(
   p : @packet.SecretKeyPacket,
 ) -> @pki.Ed25519SecretKey raise {
   guard p.s2k_usage == 0 else {
     @error.fail("api: secret key material is locked; unlock it first")
   }
-  guard p.secret_material.length() == 32 else {
-    @error.fail("api: bad v6 Ed25519 secret key length")
+  let want = if p.public.version() >= 6 { 32 } else { 34 }
+  guard p.secret_material.length() == want else {
+    @error.fail("api: bad Ed25519 secret key length")
+  }
+  let seed = if want == 32 {
+    p.secret_material
+  } else {
+    p.secret_material[0:32].to_owned()
   }
   let params = p.public.params()
   guard params.length() == 1 && params[0].length() == 32 else {
-    @error.fail("api: bad v6 Ed25519 public key")
+    @error.fail("api: bad Ed25519 public key")
   }
-  @pki.Ed25519SecretKey::{ seed: p.secret_material, public: params[0], }
+  @pki.Ed25519SecretKey::{ seed, public: params[0], }
 }
 
 ///|
@@ -85,7 +92,7 @@ fn sign_digest_with_key(
       [sig64[0:32].to_owned(), sig64[32:64].to_owned()]
     }
     @packet.Ed25519 => {
-      let ed = ed25519_v6_secret_parts(secret_packet)
+      let ed = ed25519_native_secret_parts(secret_packet)
       [ed.sign(digest)]
     }
     _ => {
@@ -439,6 +446,13 @@ pub fn verify_key_signature(
   user_id? : String,
   direct~ : Bool = false,
 ) -> Bool raise {
+  // Same critical rule as document verification (S01): a certification,
+  // binding or revocation carrying an unrecognized critical subpacket is
+  // in error. For revocations this is the safe direction — an invalid
+  // revocation cannot disable a key.
+  if sig.has_unknown_critical_subpacket() {
+    return false
+  }
   let digest : Bytes = if direct {
     hash_direct_key(sig, certified_pub)
   } else {

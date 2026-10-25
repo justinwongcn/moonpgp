@@ -424,6 +424,62 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
 }
 
 ///|
+/// The signature subpacket types this implementation recognizes: exactly
+/// the set with constants defined above. RFC 9580 §5.2.3.6: an evaluator
+/// that encounters an unknown subpacket marked critical SHOULD consider
+/// the whole signature in error (the bit is honored in both the hashed
+/// and the unhashed area), so verifiers consult this set via
+/// `SignaturePacket::has_unknown_critical_subpacket`.
+pub fn is_known_sigsub_type(t : Int32) -> Bool {
+  t == SIGSUB_CREATION_TIME ||
+  t == SIGSUB_SIG_EXPIRATION_TIME ||
+  t == SIGSUB_EXPORTABLE_CERTIFICATION ||
+  t == SIGSUB_TRUST_SIGNATURE ||
+  t == SIGSUB_REGULAR_EXPRESSION ||
+  t == SIGSUB_REVOCABLE ||
+  t == SIGSUB_KEY_EXPIRATION_TIME ||
+  t == SIGSUB_PREFERRED_SYM_ALGOS ||
+  t == SIGSUB_ISSUER_KEY_ID ||
+  t == SIGSUB_NOTATION_DATA ||
+  t == SIGSUB_PREFERRED_HASH_ALGOS ||
+  t == SIGSUB_PREFERRED_COMP_ALGOS ||
+  t == SIGSUB_KEY_SERVER_PREFERENCES ||
+  t == SIGSUB_PREFERRED_KEY_SERVER ||
+  t == SIGSUB_PRIMARY_USER_ID ||
+  t == SIGSUB_POLICY_URI ||
+  t == SIGSUB_KEY_FLAGS ||
+  t == SIGSUB_SIGNER_USER_ID ||
+  t == SIGSUB_REVOCATION_REASON ||
+  t == SIGSUB_FEATURES ||
+  t == SIGSUB_SIGNATURE_TARGET ||
+  t == SIGSUB_EMBEDDED_SIGNATURE ||
+  t == SIGSUB_ISSUER_FINGERPRINT ||
+  t == SIGSUB_PREFERRED_AEAD
+}
+
+///|
+/// True when any hashed or unhashed subpacket is marked critical but not
+/// in the recognized set — the signature MUST be treated as in error.
+pub fn SignaturePacket::has_unknown_critical_subpacket(
+  self : SignaturePacket,
+) -> Bool {
+  let unknown_critical = fn(sp : SigSubpacket) -> Bool {
+    sp.critical && !is_known_sigsub_type(sp.sub_type)
+  }
+  for sp in self.hashed_subpackets {
+    if unknown_critical(sp) {
+      return true
+    }
+  }
+  for sp in self.unhashed_subpackets {
+    if unknown_critical(sp) {
+      return true
+    }
+  }
+  false
+}
+
+///|
 /// First subpacket body of the given type from `subs`.
 pub fn find_subpacket(subs : Array[SigSubpacket], t : Int32) -> Bytes? {
   for sp in subs {

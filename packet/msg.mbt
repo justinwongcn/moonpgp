@@ -453,7 +453,10 @@ pub fn LiteralPacket::parse(body : BytesView) -> LiteralPacket raise {
     0x6c => 'b'
     _ => 'b'
   }
-  let name : String = @utf8.decode(name_bytes.exact_view()) catch { _ => "" }
+  // Lossy on purpose (S10): the file name is attacker-controlled wire
+  // data; invalid UTF-8 becomes U+FFFD rather than a silent "" that
+  // would quietly drop the name on import/export round-trips.
+  let name : String = @utf8.decode_lossy(name_bytes.exact_view())
   LiteralPacket::{ format, file_name: name, date, data, }
 }
 

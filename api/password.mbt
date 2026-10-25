@@ -593,9 +593,11 @@ fn seal_aead_with_password(
 ///|
 /// Walk a decrypted packet stream to the literal data, decompressing on
 /// the way. Trailing signature packets (one-pass) are consumed by later
-/// layers.
+/// layers. Decompressed output draws from a cumulative budget (S03): the
+/// iteration cap bounds nesting depth, the budget bounds total expansion.
 fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
   let mut stream = inner
+  let mut budget = max_decompressed
   // At most two nesting levels: SEIPD -> compressed -> literal. A
   // one-pass signature packet may precede the data.
   for _ in 0..<3 {
@@ -623,7 +625,19 @@ fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
     }
     if tag == @packet.Compressed {
       let comp = @packet.CompressedPacket::parse(ps[0].body().exact_view())
-      stream = decompress_payload(comp, max_decompressed).exact_view()
+      match comp.algo {
+        0 => stream = comp.data.exact_view()
+        _ => {
+          let cap = if budget < max_decompressed {
+            budget
+          } else {
+            max_decompressed
+          }
+          let out = decompress_payload(comp, cap)
+          budget = budget - out.length()
+          stream = out.exact_view()
+        }
+      }
       continue
     }
     @error.fail(

@@ -9,7 +9,14 @@ fn create_pkesk(
   match enc_key.algo() {
     @packet.X25519 => {
       // §5.1.6: native 32-octet ephemeral key, no algorithm octet and no
-      // session-key checksum (the v2 SEIPD names the cipher).
+      // session-key checksum (the v2 SEIPD names the cipher). The X25519
+      // PKESK shape is v6-only: it must precede a v2 SEIPD, so a v4
+      // recipient with an X25519 key cannot be encrypted to here.
+      guard enc_key.version() >= 6 else {
+        @error.fail(
+          "api: X25519 encryption requires a v6 key (v4 X25519 keys are import/verify only)",
+        )
+      }
       let (eph, wrapped) = x25519_wrap_session_key(enc_key, session_key)
       {
         version: 6,
@@ -261,12 +268,44 @@ fn pkesk_addresses(
 }
 
 ///|
+/// True for a v3 PKESK whose key id is all zero — a hidden recipient
+/// (S13): it matches no key by id, so every candidate secret key must be
+/// tried, like go-crypto's KeyDecryption with a zero key id.
+fn pkesk_is_anonymous(pkesk : @packet.PkeskPacket) -> Bool {
+  if pkesk.version() == 6 {
+    return false
+  }
+  let id = pkesk.key_id()
+  let mut all_zero = id.length() == 8
+  for b in id {
+    if b != b'\x00' {
+      all_zero = false
+    }
+  }
+  all_zero
+}
+
+///|
+/// Unwrap `pkesk` with `sk` and open the SEIPD container in `packets`.
+/// Shared by both PKESK-consuming flows; raises on any failure.
+fn decrypt_with_pkesk(
+  packets : Array[@packet.RawPacket],
+  pkesk : @packet.PkeskPacket,
+  sk : @packet.SecretKeyPacket,
+) -> Bytes raise {
+  let (algo, session) = unwrap_pkesk(pkesk, sk)
+  unwrap_seipd_inner(packets, algo, session, pkesk.version())
+}
+
+///|
 /// Match a PKESK in `packets` against `key` — v6 by fingerprint, v3 by key
 /// id, over the primary key and the encryption subkey — recover the session
 /// key and return the raw inner packet stream of the SEIPD container. `None`
 /// means no PKESK belongs to this key; a matched packet that cannot be
-/// decrypted raises. Shared by `decrypt_binary_with_private_key` and the
-/// sign/decrypt pipeline in `sign.mbt`, so both accept the same messages.
+/// decrypted raises. A v3 PKESK with an all-zero key id (hidden recipient)
+/// is tried against every candidate: a candidate that fails to unwrap is
+/// simply not the recipient. Shared by `decrypt_binary_with_private_key` and
+/// the sign/decrypt pipeline in `sign.mbt`, so both accept the same messages.
 fn decrypt_inner_with_key(
   packets : Array[@packet.RawPacket],
   key : PrivateKey,
@@ -279,12 +318,20 @@ fn decrypt_inner_with_key(
   for p in packets {
     if p.tag() == @packet.Pkesk {
       let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
+      if pkesk_is_anonymous(pkesk) {
+        for sk in candidates {
+          let inner : Bytes? = Some(decrypt_with_pkesk(packets, pkesk, sk)) catch {
+            _ => None
+          }
+          if inner is Some(b) {
+            return Some(b)
+          }
+        }
+        continue
+      }
       for sk in candidates {
         if pkesk_addresses(pkesk, sk) {
-          let (algo, session) = unwrap_pkesk(pkesk, sk)
-          return Some(
-            unwrap_seipd_inner(packets, algo, session, pkesk.version()),
-          )
+          return Some(decrypt_with_pkesk(packets, pkesk, sk))
         }
       }
     }
@@ -298,34 +345,57 @@ fn decrypt_inner_with_key(
 /// carried inside the PKCS#1 payload (RFC 9580 §5.1.3), so it must be
 /// handed back rather than assumed — GnuPG happily encrypts with
 /// `--cipher-algo AES128`, and a v1 SEIPD names no cipher of its own.
+///
+/// Bleichenbacher countermeasure (S04): any failure inside the checked
+/// path — modulus mismatch, PKCS#1 framing, payload shape, checksum —
+/// yields a RANDOM session key instead of an error, mirroring Go's
+/// `rsa.DecryptPKCS1v15SessionKey` as used by go-crypto. The wrong key
+/// then fails uniformly inside the SEIPD integrity check, so an attacker
+/// with a decryption oracle cannot distinguish where unwrapping went
+/// wrong.
 fn rsa_unwrap_session_key(
   pkesk : @packet.PkeskPacket,
   sk : @packet.SecretKeyPacket,
 ) -> (Int32, Bytes) raise {
+  match rsa_unwrap_checked(pkesk, sk) {
+    Some(pair) => pair
+    None => {
+      // A random AES-256 key of the correct length: the following SEIPD
+      // v1 CFB/MDC (or v2 AEAD) open fails identically to any other
+      // wrong-session-key decryption.
+      let algo = @primitives.Aes256
+      (algo.number(), @primitives.random_bytes(algo.key_size()))
+    }
+  }
+}
+
+///|
+/// The real RSA PKESK unwrap; `None` marks every rejection that must be
+/// masked by the random-key fallback above.
+fn rsa_unwrap_checked(
+  pkesk : @packet.PkeskPacket,
+  sk : @packet.SecretKeyPacket,
+) -> (Int32, Bytes)? raise {
   let rsa = rsa_secret_parts(sk)
   let k = rsa.public.octet_length()
-  guard pkesk.encrypted().length() <= k else {
-    @error.fail("api: PKESK size mismatch")
-  }
+  guard pkesk.encrypted().length() <= k else { return None }
   // The wire MPI may have lost a leading zero octet; os2ip restores the
   // integer value either way.
   let padded = @primitives.pad_left(pkesk.encrypted().exact_view(), k)
-  let payload = rsa.pkcs1_v15_decrypt(padded.exact_view())
-  guard payload.length() >= 3 + 16 else {
-    @error.fail("api: session key payload too short")
+  let payload = rsa.pkcs1_v15_decrypt(padded.exact_view()) catch {
+    _ => return None
   }
+  guard payload.length() >= 3 + 16 else { return None }
   let algo = payload[0].to_int()
-  guard @primitives.cipher_algo_of_number(algo) is Some(_) else {
-    @error.fail("api: unexpected session key cipher \{algo}")
-  }
+  guard @primitives.cipher_algo_of_number(algo) is Some(_) else { return None }
   let key_len = payload.length() - 3
   let key = payload[1:1 + key_len]
   let want = (payload[payload.length() - 2].to_int() << 8) |
     payload[payload.length() - 1].to_int()
   guard @packet.session_key_checksum(key.exact_view()) == want else {
-    @error.fail("api: session key checksum mismatch")
+    return None
   }
-  (algo, key.to_owned())
+  Some((algo, key.to_owned()))
 }
 
 ///|

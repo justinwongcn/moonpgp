@@ -4,7 +4,7 @@
 
 ///|
 test "compressed output round-trips through our own reader (zlib)" {
-  let key = @api.generate_key("C <c@example.com>", bits=1024)
+  let key = @api.generate_key("C <c@example.com>", bits=2048)
   // Highly compressible payload: the wire form must be smaller than the
   // plaintext, proving the Compressed packet actually wrapped it.
   let data = @primitives.utf8_bytes("zlib payload ".repeat(2000))
@@ -21,7 +21,7 @@ test "compressed output round-trips through our own reader (zlib)" {
 
 ///|
 test "compressed output round-trips (zip) and the builder honors compress" {
-  let key = @api.generate_key("C2 <c2@example.com>", bits=1024)
+  let key = @api.generate_key("C2 <c2@example.com>", bits=2048)
   let data = @primitives.utf8_bytes("zip payload ".repeat(2000))
   let encrypt = @api.pgp()
     .encryption()
@@ -78,7 +78,7 @@ test "decompressed payload is capped (negative gate)" {
 
 ///|
 test "decrypt entry points enforce the decompression ceiling" {
-  let key = @api.generate_key("Bomb <b@example.com>", bits=1024)
+  let key = @api.generate_key("Bomb <b@example.com>", bits=2048)
   let data = Bytes::make(65536, b'\x00')
   let msg = @api.encrypt_to_recipients(
     data,

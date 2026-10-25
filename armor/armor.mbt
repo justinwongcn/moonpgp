@@ -31,14 +31,31 @@ pub fn ArmorType::end_marker(self : ArmorType) -> String {
 }
 
 ///|
+/// True when `line` is exactly the marker, modulo trailing spaces/tabs.
+/// Whole-line equality (S8): a BEGIN marker with trailing garbage on the
+/// line ("-----BEGIN PGP MESSAGE-----ANYTHING") is not an armor block.
+fn line_is_marker(line : StringView, marker : String) -> Bool {
+  let mut end = line.length()
+  while end > 0 {
+    let c = line[end - 1]
+    if c == ' ' || c == '\t' {
+      end = end - 1
+    } else {
+      break
+    }
+  }
+  line[0:end].to_owned() == marker
+}
+
+///|
 fn armor_type_of_begin(line : StringView) -> ArmorType? {
-  if line.has_prefix("-----BEGIN PGP MESSAGE-----") {
+  if line_is_marker(line, "-----BEGIN PGP MESSAGE-----") {
     Some(Message)
-  } else if line.has_prefix("-----BEGIN PGP PUBLIC KEY BLOCK-----") {
+  } else if line_is_marker(line, "-----BEGIN PGP PUBLIC KEY BLOCK-----") {
     Some(PublicKey)
-  } else if line.has_prefix("-----BEGIN PGP PRIVATE KEY BLOCK-----") {
+  } else if line_is_marker(line, "-----BEGIN PGP PRIVATE KEY BLOCK-----") {
     Some(PrivateKey)
-  } else if line.has_prefix("-----BEGIN PGP SIGNATURE-----") {
+  } else if line_is_marker(line, "-----BEGIN PGP SIGNATURE-----") {
     Some(Signature)
   } else {
     None

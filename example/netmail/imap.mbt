@@ -328,6 +328,8 @@ pub fn status_names(status : Array[@api.VerifyStatus]) -> String {
         @api.NotSigned => "NotSigned"
         @api.NoVerifier => "NoVerifier"
         @api.Failed => "Failed"
+        @api.KeyRevoked => "KeyRevoked"
+        @api.Expired => "Expired"
       },
     )
   }

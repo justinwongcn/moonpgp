@@ -60,7 +60,7 @@ fn trim_trailing_ws(line : StringView) -> StringView {
 /// Dash-escape for display: lines starting with "-" (and, per RFC 9580
 /// §7.2 SHOULD, "From ") get a "- " prefix.
 fn dash_escape_display(canonical : Bytes) -> String {
-  let text = @utf8.decode(canonical.exact_view()) catch { _ => "" }
+  let text = @utf8.decode_lossy(canonical.exact_view())
   let normalized = text.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = normalized.split("\n").collect()
   let buf = StringBuilder()
@@ -81,8 +81,15 @@ fn dash_escape_display(canonical : Bytes) -> String {
 ///|
 /// Create a cleartext signed message (RFC 9580 §7) over UTF-8 text with
 /// the default SHA-256 signature of the primary key.
-pub fn sign_cleartext(text : String, key : PrivateKey) -> String raise {
-  sign_cleartext_with(text, key, @primitives.Sha256)
+///
+/// `created` is the signature creation time in seconds since 1970; without
+/// it the current time is used (see `sign_detached`).
+pub fn sign_cleartext(
+  text : String,
+  key : PrivateKey,
+  created? : Int32,
+) -> String raise {
+  sign_cleartext_with(text, key, @primitives.Sha256, created?)
 }
 
 ///|
@@ -91,9 +98,10 @@ pub fn sign_cleartext_with(
   text : String,
   key : PrivateKey,
   hash : @primitives.HashId,
+  created? : Int32,
 ) -> String raise {
   let canonical = canonicalize_cleartext(text)
-  let sig = make_text_signature(key, canonical, hash)
+  let sig = make_text_signature(key, canonical, hash, created?)
   let sig_armor = @armor.Signature.encode(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
@@ -186,7 +194,12 @@ pub fn verify_cleartext(
   match sig {
     Some(s) => {
       let status = verify_signature_packet(s, canonical, verifier)
-      let text = @utf8.decode(canonical.exact_view()) catch { _ => "" }
+      // Lossy on purpose (S9): `canonical` is assembled from String
+      // pieces via @utf8.encode, which never emits invalid UTF-8 — decode
+      // cannot fail, and a silent "" fallback would desync the returned
+      // text from the verified bytes. Lossy makes that invariant explicit
+      // instead of trapping.
+      let text = @utf8.decode_lossy(canonical.exact_view())
       (text, status)
     }
     None => @error.fail("api: no signature packet in cleartext message")

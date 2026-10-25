@@ -48,9 +48,10 @@ pub fn Reader::read_u16(self : Reader) -> Int32 raise {
 ///|
 /// Read a big-endian u32 into a 32-bit Int (F09, documented convention):
 /// values ≥ 2³¹ arrive NEGATIVE. Length paths fail safe through the
-/// `n >= 0` checks in `read_bytes` (with a misleading "want -N" message);
-/// timestamp paths carry the correct two's-complement wire value, which
-/// `Writer::u32` reproduces byte-exactly on re-serialization.
+/// `n >= 0` check in `read_bytes`, which reports the negative value as
+/// an invalid length; timestamp paths carry the correct two's-complement
+/// wire value, which `Writer::u32` reproduces byte-exactly on
+/// re-serialization.
 pub fn Reader::read_u32(self : Reader) -> Int32 raise {
   guard self.remaining() >= 4 else {
     @error.fail("packet: unexpected end of data (u32)")
@@ -65,7 +66,12 @@ pub fn Reader::read_u32(self : Reader) -> Int32 raise {
 
 ///|
 pub fn Reader::read_bytes(self : Reader, n : Int32) -> Bytes raise {
-  guard n >= 0 && self.remaining() >= n else {
+  guard n >= 0 else {
+    // A negative length is a malformed packet (often a u32 length ≥ 2^31
+    // read through the F09 two's-complement convention), not a shortfall.
+    @error.fail("packet: invalid negative length \{n}")
+  }
+  guard self.remaining() >= n else {
     @error.fail("packet: unexpected end of data (bytes, want \{n})")
   }
   let out = self.buf[self.pos:self.pos + n].to_owned()
@@ -79,9 +85,23 @@ pub fn Reader::read_rest(self : Reader) -> Bytes raise {
 }
 
 ///|
+/// Defensive ceiling on an MPI's bit length (S16). RFC 9580 §3.2 imposes
+/// no per-algorithm maximum on parsers (its only MUST — the length
+/// consistency check — applies to v6 packets), so this is hardening
+/// beyond the RFC: no defined OpenPGP algorithm carries MPIs wider than
+/// 16384 bits, and capping here rejects malformed packets at the parse
+/// layer instead of letting oversized MPIs flow into semantic code.
+pub const MAX_MPI_BITS : Int32 = 16384
+
+///|
 /// Read an OpenPGP multiprecision integer (RFC 9580 §3.2).
 pub fn Reader::read_mpi(self : Reader) -> Bytes raise {
   let bits = self.read_u16()
+  guard bits <= MAX_MPI_BITS else {
+    @error.fail(
+      "packet: MPI bit length \{bits} exceeds the implementation maximum \{MAX_MPI_BITS}",
+    )
+  }
   let nbytes = (bits + 7) / 8
   self.read_bytes(nbytes)
 }

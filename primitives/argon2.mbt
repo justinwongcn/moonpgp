@@ -17,25 +17,25 @@ pub const ARGON2_MAX_MEMORY_KIB : Int32 = 2097152
 
 ///|
 /// Default Argon2 memory policy (KiB) for the public decrypt entry points:
-/// 2^18 KiB = 256 MiB.
+/// 2^16 KiB = 64 MiB (S7).
 ///
 /// An Argon2 S2K specifier is attacker-controlled and the derivation runs
 /// *before* any authentication, so the cap decides how much memory one
-/// unauthenticated message can cost. 256 MiB is 4x the 64 MiB profile every
-/// mainstream writer defaults to (go-crypto/gopenpgp, OpenPGP.js) and 8x
-/// below the implementation ceiling, while GnuPG cannot produce an Argon2
-/// S2K at all — so it covers every message seen in practice.
+/// unauthenticated message can cost — and a malicious SKESK may pair the
+/// full cap with up to 255 passes, multiplying both memory and CPU. The
+/// 64 MiB default matches the profile every mainstream writer defaults to
+/// (go-crypto/gopenpgp, OpenPGP.js), so ordinary interop never needs to
+/// raise it, while GnuPG cannot produce an Argon2 S2K at all.
 ///
-/// It is deliberately below RFC 9106's first recommended option (2 GiB,
-/// `ARGON2_MAX_MEMORY_KIB`), which RFC 9580 Appendix A.5/A.12 use. Those
-/// samples — or any message that genuinely asks for the ceiling — must pass
-/// the wider policy explicitly:
+/// Messages that genuinely ask for more — RFC 9580 Appendix A.5/A.12 use
+/// the RFC 9106 first recommended option (2 GiB, `ARGON2_MAX_MEMORY_KIB`)
+/// — must pass the wider policy explicitly:
 ///
 ///   decrypt_with_password(msg, pass, argon2_max_memory_kib=@primitives.ARGON2_MAX_MEMORY_KIB)
 ///
 /// `scripts/acceptance.sh` and the `slow:*` tests do exactly that, so the
 /// widened call is exercised by the release gate.
-pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int32 = 262144
+pub const DEFAULT_ARGON2_MAX_MEMORY_KIB : Int32 = 65536
 
 ///|
 /// Argon2 version pinned by RFC 9580 (the current 1.3 version).

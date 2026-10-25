@@ -230,3 +230,65 @@ test "literal to_body rejects over-long file names instead of aborting" {
   }
   assert_true(raised)
 }
+
+///|
+test "S06: v4 native X25519/Ed25519 public keys parse and round-trip" {
+  // RFC 9580 §5.5.2.2 defers the material to §5.5.5: 32 native octets,
+  // no MPI framing, no v6 count — legal in v4 keys as well.
+  for algo_num in [25, 27] {
+    let w = @packet.Writer::new()
+    w.u8(4)
+    w.u32(1_700_000_000)
+    w.u8(algo_num)
+    w.bytes(Bytes::make(32, b'\x42').exact_view())
+    let body = w.to_bytes()
+    let k = @packet.PublicKeyPacket::parse(body.exact_view())
+    assert_eq(k.algo().number(), algo_num)
+    assert_eq(k.params().length(), 1)
+    assert_eq(k.params()[0].length(), 32)
+    assert_eq(k.to_body(), body)
+    // The v4 fingerprint path works over the native material too.
+    assert_eq(k.key_id().length(), 8)
+  }
+}
+
+///|
+test "S10: a literal file name that is not UTF-8 decodes lossily" {
+  let w = @packet.Writer::new()
+  w.u8(0x62) // 'b'
+  w.u8(2)
+  w.bytes(Bytes::from_array([0xFF, b'A']).exact_view()) // invalid UTF-8 + 'A'
+  w.u32(0)
+  w.bytes(b"payload".exact_view())
+  let lit = @packet.LiteralPacket::parse(w.to_bytes().exact_view())
+  // U+FFFD + 'A' — not the silent empty string the old fallback produced.
+  assert_eq(lit.file_name().length(), 2)
+  assert_true(lit.file_name()[1] == 'A')
+}
+
+///|
+test "S15: a negative read_bytes length reports an invalid length" {
+  let r = @packet.Reader::new(b"".exact_view())
+  let err = try {
+    let _ = @packet.Reader::read_bytes(r, -5)
+    ""
+  } catch {
+    e => "\{e}"
+  }
+  assert_true(err.contains("invalid negative length -5"))
+}
+
+///|
+test "S16: an MPI beyond the implementation ceiling is rejected" {
+  // bits = 20000 (0x4E20) > MAX_MPI_BITS = 16384.
+  let r = @packet.Reader::new(
+    Bytes::from_array([0x4E, 0x20, 0x01]).exact_view(),
+  )
+  let err = try {
+    let _ = @packet.Reader::read_mpi(r)
+    ""
+  } catch {
+    e => "\{e}"
+  }
+  assert_true(err.contains("16384"))
+}

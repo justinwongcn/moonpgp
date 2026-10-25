@@ -79,32 +79,57 @@ fn issuer_fingerprint_subpacket(
 }
 
 ///|
-/// Build a v4 document signature with the given type and default hash.
-fn make_document_signature(
-  key : PrivateKey,
-  data : BytesView,
-  sig_type : @packet.SigType,
-  created? : Int32,
-) -> @packet.SignaturePacket raise {
-  make_document_signature_with(
-    key,
-    data,
-    sig_type,
-    @primitives.Sha256,
-    created?,
-  )
+/// The component that issues document signatures (task 2b): the primary
+/// when it may sign, else the last sign-capable bound subkey in wire
+/// order — mirroring how a cert-only GnuPG primary delegates document
+/// signing to its signing subkey. Certifications, bindings and revocations
+/// always come from the primary (RFC 9580 §5.2.1); only document-class
+/// signatures (and their one-pass forms) may be subkey-issued.
+///
+/// A revoked or expired primary refuses to sign at all — signatures from
+/// it would verify as KeyRevoked / Expired anyway.
+fn signing_packet(key : PrivateKey) -> @packet.SecretKeyPacket raise {
+  let now = @primitives.unix_now()
+  let pub_half = key.to_public()
+  guard !pub_half.is_revoked(now) else {
+    @error.fail("api: refusing to sign with a revoked key")
+  }
+  guard !pub_half.is_expired(now) else {
+    @error.fail("api: refusing to sign with an expired primary key")
+  }
+  let primary_may_sign = match governing_flags(Some(key.self_signature())) {
+    Some(f) => (f & FLAG_SIGN) != 0
+    // Absent key flags mean "assume every capability" (the legacy rule).
+    None => true
+  }
+  if primary_may_sign {
+    return key.primary
+  }
+  let mut chosen : @packet.SecretKeyPacket? = None
+  for c in key.subkeys {
+    if component_usable(c.secret.public, Some(c.binding), FLAG_SIGN, now) {
+      chosen = Some(c.secret)
+    }
+  }
+  match chosen {
+    Some(sk) => sk
+    None =>
+      @error.fail(
+        "api: no component of this key may sign (primary is cert-only and no signing subkey is usable)",
+      )
+  }
 }
 
 ///|
 /// Build a v4 text signature with an explicit hash algorithm.
 fn make_text_signature(
-  key : PrivateKey,
+  signer : @packet.SecretKeyPacket,
   data : BytesView,
   hash : @primitives.HashId,
   created? : Int32,
 ) -> @packet.SignaturePacket raise {
   make_document_signature_with(
-    key,
+    signer,
     data,
     @packet.CanonicalTextDocument,
     hash,
@@ -113,8 +138,24 @@ fn make_text_signature(
 }
 
 ///|
+fn make_document_signature(
+  signer : @packet.SecretKeyPacket,
+  data : BytesView,
+  sig_type : @packet.SigType,
+  created? : Int32,
+) -> @packet.SignaturePacket raise {
+  make_document_signature_with(
+    signer,
+    data,
+    sig_type,
+    @primitives.Sha256,
+    created?,
+  )
+}
+
+///|
 fn make_document_signature_with(
-  key : PrivateKey,
+  signer : @packet.SecretKeyPacket,
   data : BytesView,
   sig_type : @packet.SigType,
   hash : @primitives.HashId,
@@ -124,13 +165,13 @@ fn make_document_signature_with(
     Some(t) => t
     None => @primitives.unix_now().to_int()
   }
-  let v6 = key.primary.public.version() >= 6
+  let v6 = signer.public.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
     key_flags_subpacket(0x02),
   ]
   if v6 {
-    hashed.push(issuer_fingerprint_subpacket(key.primary.public))
+    hashed.push(issuer_fingerprint_subpacket(signer.public))
   }
   let unhashed : Array[@packet.SigSubpacket] = if v6 {
     // §5.2.3.12: no Issuer Key ID subpacket on v6 signatures; the
@@ -143,7 +184,7 @@ fn make_document_signature_with(
         sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
         // No catch: a key whose id cannot be computed must fail the signing
         // loudly, not emit a signature with an empty issuer (F15).
-        body: key.primary.public.key_id(),
+        body: signer.public.key_id(),
       },
     ]
   }
@@ -159,7 +200,7 @@ fn make_document_signature_with(
       4
     },
     sig_type,
-    pub_algo: key.primary.public.algo(),
+    pub_algo: signer.public.algo(),
     hash_algo: hash.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: unhashed,
@@ -169,7 +210,7 @@ fn make_document_signature_with(
     sig_params: [],
   }
   let digest = document_hash(sig, data, sig_type)
-  finish_signature(sig, key.primary, hash, digest.exact_view())
+  finish_signature(sig, signer, hash, digest.exact_view())
 }
 
 ///|
@@ -356,7 +397,8 @@ pub fn sign_detached(
   created? : Int32,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
-  let sig = make_document_signature(key, data, sig_type, created?)
+  let signer = signing_packet(key)
+  let sig = make_document_signature(signer, data, sig_type, created?)
   @armor.Signature.encode(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
@@ -525,11 +567,11 @@ fn lifecycle_status(
 /// the same hash salt as its Signature packet and the 32-octet signing
 /// key fingerprint (in place of the v3 8-octet key id).
 fn one_pass_sig_for(
-  key : PrivateKey,
+  signer : @packet.SecretKeyPacket,
   sig : @packet.SignaturePacket,
   hash : @primitives.HashId,
 ) -> @packet.OnePassSigPacket raise {
-  let v6 = key.primary.public.version() >= 6
+  let v6 = signer.public.version() >= 6
   {
     version: if v6 {
       6
@@ -538,11 +580,11 @@ fn one_pass_sig_for(
     },
     sig_type: sig.sig_type(),
     hash_algo: hash.number(),
-    pub_algo: key.primary.public.algo(),
+    pub_algo: signer.public.algo(),
     key_id: if v6 {
       Bytes::new(0)
     } else {
-      key.primary.public.key_id()
+      signer.public.key_id()
     },
     salt: if v6 {
       sig.salt()
@@ -550,7 +592,7 @@ fn one_pass_sig_for(
       Bytes::new(0)
     },
     fingerprint: if v6 {
-      key.primary.public.fingerprint()
+      signer.public.fingerprint()
     } else {
       Bytes::new(0)
     },
@@ -574,12 +616,13 @@ pub fn sign_inline(
   file_name? : String,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
-  let sig = make_document_signature(key, data, sig_type, created?)
+  let signer = signing_packet(key)
+  let sig = make_document_signature(signer, data, sig_type, created?)
   let literal = @packet.LiteralPacket::binary(
     data,
     file_name=file_name.unwrap_or("message.txt"),
   )
-  let ops = one_pass_sig_for(key, sig, @primitives.Sha256)
+  let ops = one_pass_sig_for(signer, sig, @primitives.Sha256)
   let w = @packet.Writer::new()
   w.bytes(
     @packet.serialize_packet(@packet.OnePassSig, ops.to_body().exact_view()).exact_view(),
@@ -630,12 +673,13 @@ pub fn sign_and_encrypt(
   file_name? : String,
 ) -> String raise {
   let sig_type = sig_type_of(text_mode)
-  let sig = make_document_signature(signer, data, sig_type, created?)
+  let signing_component = signing_packet(signer)
+  let sig = make_document_signature(signing_component, data, sig_type, created?)
   let literal = @packet.LiteralPacket::binary(
     data,
     file_name=file_name.unwrap_or("message.txt"),
   )
-  let ops = one_pass_sig_for(signer, sig, @primitives.Sha256)
+  let ops = one_pass_sig_for(signing_component, sig, @primitives.Sha256)
   let inner = @packet.Writer::new()
   inner.bytes(
     @packet.serialize_packet(@packet.OnePassSig, ops.to_body().exact_view()).exact_view(),

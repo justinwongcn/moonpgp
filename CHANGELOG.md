@@ -9,6 +9,30 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — signing-subkey signing, closing the multi-subkey loop (2026-10-26, task 2b)
+
+- Document signatures (`sign_detached` / `sign_inline` / `sign_and_encrypt`
+  / `sign_cleartext*`) now choose their issuing component by certificate
+  capability: a sign-capable primary keeps signing itself; a cert-only
+  primary delegates to the last sign-capable bound subkey in wire order —
+  the dual-subkey GnuPG shape this library can now both VERIFY (since N2)
+  and PRODUCE. Certifications, bindings and revocations remain
+  primary-issued (RFC 9580 §5.2.1). Revoked or expired primaries refuse
+  to sign (their signatures would verify as rejected anyway).
+- **Signing-subkey bindings embed the cross-certification** gpg requires:
+  an Embedded Signature (subpacket 32) carrying the subkey's
+  PrimaryKeyBinding (0x19) over the primary, carried in the unhashed area
+  like gpg itself. Without it gpg refuses every signature from the subkey
+  ("signing subkey is not cross-certified"). The PrimaryKeyBinding hash
+  covers BOTH framed key packets (primary first) — the binding shape, not
+  the direct-key shape; pinned empirically against gpg 2.4.5 and now by a
+  fixture test that verifies gpg's own embedded signature.
+- gpg 2.4.5 cross-verified in both directions: our subkey-issued detached
+  signature imports and verifies as "Good signature", and we verify gpg's
+  subkey-issued fixture signatures.
+- `make_self_signature` gained a `key_flags` parameter (genuinely signed
+  certify-only primaries, replacing in-memory flag surgery in tests).
+
 ### Added — revocation certificate generation (2026-10-26, task 2a of the Jev-prioritized plan)
 
 - `revoke_key` / `revoke_subkey`: generate a primary-key (0x20) or subkey

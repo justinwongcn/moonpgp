@@ -100,6 +100,7 @@ test "N2: multiple subkeys are kept, paired, and role-selected" {
     signing.public,
     created,
     key_flags=0x02,
+    subkey_secret=signing,
   )
   let multi : PrivateKey = {
     ..a,

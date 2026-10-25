@@ -131,3 +131,22 @@ test "our subkey revocation rejects gpg's subkey-issued signature" {
     @api.KeyRevoked,
   )
 }
+
+///|
+test "gpg's embedded cross-certification verifies with our code" {
+  let key = @api.PublicKey::from_armored(
+    read_testdata("interop_gpg_dualsub_pub.asc"),
+  )
+  let signing = key.subkeys[1]
+  // The binding of the signing subkey carries the embedded PrimaryKeyBinding
+  // (subpacket 32) in its unhashed area.
+  let mut embedded : @packet.SignaturePacket? = None
+  for sp in signing.binding.unhashed_subpackets() {
+    if sp.sub_type() == @packet.SIGSUB_EMBEDDED_SIGNATURE {
+      embedded = Some(@packet.SignaturePacket::parse(sp.body().exact_view()))
+    }
+  }
+  let emb = embedded.unwrap()
+  assert_eq(emb.sig_type(), @packet.PrimaryKeyBinding)
+  assert_true(@api.verify_key_signature(emb, signing.key, key.primary))
+}

@@ -229,11 +229,12 @@ fn make_self_signature(
   user_id : String,
   now : Int32,
   cert_type~ : @packet.SigType = @packet.PositiveCertification,
+  key_flags~ : Int32 = 0x03,
 ) -> @packet.SignaturePacket raise {
   let v6 = pub_packet.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
     creation_subpacket(now),
-    key_flags_subpacket(0x03),
+    key_flags_subpacket(key_flags),
     ..preferred_subpackets(v6),
   ]
   if v6 {
@@ -320,12 +321,52 @@ fn make_direct_key_signature(
 /// `key_flags` states the subkey's capabilities (default encrypt-only,
 /// 0x0C — what this library generates; N2 tests bind signing subkeys
 /// with 0x02).
+
+///|
+/// The Embedded Signature (RFC 9580 §5.2.3.26): a PrimaryKeyBinding
+/// (0x19) signature by the SUBKEY over the primary. gpg refuses to verify
+/// anything signed by a subkey whose binding lacks it ("signing subkey is
+/// not cross-certified") — it is the subkey's proof that its holder
+/// accepted this primary.
+fn make_primary_key_binding(
+  subkey_secret : @packet.SecretKeyPacket,
+  primary_pub : @packet.PublicKeyPacket,
+  subkey_pub : @packet.PublicKeyPacket,
+  now : Int32,
+) -> @packet.SignaturePacket raise {
+  let sig : @packet.SignaturePacket = {
+    version: 4,
+    sig_type: @packet.PrimaryKeyBinding,
+    pub_algo: subkey_secret.public.algo(),
+    hash_algo: @primitives.Sha256.number(),
+    hashed_subpackets: [creation_subpacket(now)],
+    unhashed_subpackets: [
+      {
+        critical: false,
+        sub_type: @packet.SIGSUB_ISSUER_KEY_ID,
+        body: subkey_secret.public.key_id(),
+      },
+    ],
+    raw_hashed_area: Bytes::new(0),
+    fast_hash: 0,
+    salt: Bytes::new(0),
+    sig_params: [],
+  }
+  // A PrimaryKeyBinding hashes BOTH framed key packets, primary first —
+  // the same input shape as the SubkeyBinding it rides in (empirically
+  // pinned against gpg: the direct-key shape fails verification).
+  let digest = hash_binding(sig, primary_pub, subkey_pub)
+  finish_signature(sig, subkey_secret, @primitives.Sha256, digest.exact_view())
+}
+
+///|
 fn make_binding_signature(
   secret_packet : @packet.SecretKeyPacket,
   primary_pub : @packet.PublicKeyPacket,
   subkey_pub : @packet.PublicKeyPacket,
   now : Int32,
   key_flags~ : Int32 = 0x0C,
+  subkey_secret? : @packet.SecretKeyPacket,
 ) -> @packet.SignaturePacket raise {
   let v6 = primary_pub.version() >= 6
   guard !v6 || subkey_pub.version() >= 6 else {
@@ -336,6 +377,26 @@ fn make_binding_signature(
     key_flags_subpacket(key_flags),
     ..preferred_subpackets(v6),
   ]
+  let unhashed_embedded : Array[@packet.SigSubpacket] = []
+  if (key_flags & 0x02) != 0 {
+    // Cross-certification (RFC 9580 §5.2.3.26): a sign-capable subkey
+    // binds itself to the primary with an embedded PrimaryKeyBinding —
+    // gpg refuses to verify signatures from a subkey without it. gpg
+    // carries the embedded signature in the UNHASHED area; match that
+    // shape for interoperability.
+    let sub_secret = match subkey_secret {
+      Some(sk) => sk
+      None =>
+        @error.fail(
+          "api: binding a signing subkey requires its secret key for cross-certification",
+        )
+    }
+    unhashed_embedded.push({
+      critical: false,
+      sub_type: @packet.SIGSUB_EMBEDDED_SIGNATURE,
+      body: make_primary_key_binding(sub_secret, primary_pub, subkey_pub, now).to_body(),
+    })
+  }
   if v6 {
     hashed.push(issuer_fingerprint_subpacket(primary_pub))
   }
@@ -367,7 +428,7 @@ fn make_binding_signature(
     pub_algo: secret_packet.public.algo(),
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
-    unhashed_subpackets: unhashed,
+    unhashed_subpackets: [..unhashed, ..unhashed_embedded],
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0,
     sig_params: [],
@@ -461,6 +522,11 @@ pub fn verify_key_signature(
   }
   let digest : Bytes = if direct {
     hash_direct_key(sig, certified_pub)
+  } else if sig.sig_type() == @packet.PrimaryKeyBinding {
+    // An embedded PrimaryKeyBinding is signed by the SUBKEY (the signer
+    // argument) over the pair primary-then-subkey, matching the binding
+    // shape — the caller passes signer = subkey, certified = primary.
+    hash_binding(sig, certified_pub, signer_pub)
   } else {
     match user_id {
       Some(uid) => hash_certification(sig, certified_pub, uid)

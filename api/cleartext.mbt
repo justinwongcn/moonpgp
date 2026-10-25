@@ -101,7 +101,8 @@ pub fn sign_cleartext_with(
   created? : Int32,
 ) -> String raise {
   let canonical = canonicalize_cleartext(text)
-  let sig = make_text_signature(key, canonical, hash, created?)
+  let signer = signing_packet(key)
+  let sig = make_text_signature(signer, canonical, hash, created?)
   let sig_armor = @armor.Signature.encode(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )

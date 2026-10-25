@@ -227,13 +227,13 @@ test "v6 password encryption round-trips" {
 test "literal walk handles ops and compressed chains" {
   let key = generate_ed25519_key("W <w@example.com>")
   let data = @primitives.utf8_bytes("walk me")
-  let sig = make_document_signature(key, data, @packet.BinaryDocument)
+  let sig = make_document_signature(key.primary, data, @packet.BinaryDocument)
   let literal = @packet.LiteralPacket::binary(data)
   let literal_wire = @packet.serialize_packet(
     @packet.Literal,
     literal.to_body().exact_view(),
   )
-  let ops = one_pass_sig_for(key, sig, @primitives.Sha256)
+  let ops = one_pass_sig_for(key.primary, sig, @primitives.Sha256)
   let sk = SessionKey::new(@primitives.random_bytes(32), @primitives.Aes256)
   // 1. OPS first.
   let w1 = @packet.Writer::new()

@@ -9,6 +9,27 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — revocation certificate generation (2026-10-26, task 2a of the Jev-prioritized plan)
+
+- `revoke_key` / `revoke_subkey`: generate a primary-key (0x20) or subkey
+  (0x28) revocation signature over the owner's key and return a revoked
+  copy — every existing lifecycle gate (`is_revoked`, `can_encrypt`,
+  `can_verify`, signature verification → `KeyRevoked`) sees it immediately,
+  the revocation survives export/import, and decryption of pre-revocation
+  mail keeps working.
+- `generate_revocation_certificate`: the standalone armored `.rev` form
+  (PUBLIC KEY BLOCK armor holding the signature, the shape gpg
+  `--gen-revoke` emits); `PrivateKey::apply_revocation_certificate` /
+  `PublicKey::apply_revocation_certificate` validate one cryptographically
+  before applying — wrong-key or non-revocation certificates are rejected.
+- `RevocationReason` (NoReason / Superseded / Compromised / Retired) with
+  the reason + message subpacket (RFC 9580 §5.2.3.31).
+- Cross-checked against gpg 2.4.5 in both directions during development:
+  gpg imports our revoked certificate (marks the key revoked) and applies
+  our standalone certificate; two interop tests pin gpg's own .rev file
+  and a real gpg subkey-issued signature verifying as `KeyRevoked` after
+  our subkey revocation.
+
 ### Fixed / Added — consolidation round (2026-10-26, task 1 of the Jev-prioritized plan)
 
 - **Tag-20 AEAD containers decrypt on the private-key path** (found by the

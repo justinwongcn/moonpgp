@@ -40,6 +40,8 @@ pub fn generate_ed25519_v6_key(String) -> PrivateKey raise
 
 pub fn generate_key(String, bits? : Int32) -> PrivateKey raise
 
+pub fn generate_revocation_certificate(PrivateKey, reason? : RevocationReason, message? : String, created? : Int32) -> String raise
+
 pub fn generate_session_key(algo? : @primitives.CipherAlgo) -> SessionKey raise
 
 pub fn pgp() -> Pgp
@@ -47,6 +49,10 @@ pub fn pgp() -> Pgp
 pub fn recover_session_key_with_key(String, PrivateKey) -> SessionKey raise
 
 pub fn recover_session_key_with_password(String, String, argon2_max_memory_kib? : Int32) -> SessionKey raise
+
+pub fn revoke_key(PrivateKey, reason? : RevocationReason, message? : String, created? : Int32) -> PrivateKey raise
+
+pub fn revoke_subkey(PrivateKey, BytesView, reason? : RevocationReason, message? : String, created? : Int32) -> PrivateKey raise
 
 pub fn sign_and_encrypt(BytesView, PrivateKey, Array[PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo, created? : Int32, file_name? : String) -> String raise
 
@@ -128,6 +134,7 @@ pub struct PrivateKey {
   subkeys : Array[SecretSubkeyCert]
   revocations : Array[@packet.SignaturePacket]
 } derive(@debug.Debug)
+pub fn PrivateKey::apply_revocation_certificate(Self, String) -> Self raise
 pub fn PrivateKey::can_encrypt(Self, Int64) -> Bool
 pub fn PrivateKey::can_verify(Self, Int64) -> Bool
 pub fn PrivateKey::fingerprint(Self) -> Bytes raise
@@ -155,6 +162,7 @@ pub struct PublicKey {
   subkeys : Array[SubkeyCert]
   revocations : Array[@packet.SignaturePacket]
 } derive(@debug.Debug)
+pub fn PublicKey::apply_revocation_certificate(Self, String) -> Self raise
 pub fn PublicKey::can_encrypt(Self, Int64) -> Bool
 pub fn PublicKey::can_verify(Self, Int64) -> Bool
 pub fn PublicKey::encryption_key(Self) -> @packet.PublicKeyPacket?
@@ -172,6 +180,17 @@ pub fn PublicKey::to_armored(Self) -> String
 pub fn PublicKey::to_bytes(Self) -> Bytes
 pub fn PublicKey::to_repr(Self) -> @debug.Repr
 pub fn PublicKey::user_id(Self) -> String
+
+pub(all) enum RevocationReason {
+  NoReason
+  Superseded
+  Compromised
+  Retired
+} derive(Eq, @debug.Debug)
+pub fn RevocationReason::equal(Self, Self) -> Bool
+pub fn RevocationReason::not_equal(Self, Self) -> Bool
+pub fn RevocationReason::number(Self) -> Int32
+pub fn RevocationReason::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SecretSubkeyCert {
   secret : @packet.SecretKeyPacket

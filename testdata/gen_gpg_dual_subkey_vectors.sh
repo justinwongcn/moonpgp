@@ -30,6 +30,10 @@ gpg --batch --passphrase '' --quick-add-key "$FPR" ed25519 sign 0
 # Two subkeys on the certificate, in a known order (encr first, sign last).
 gpg --list-keys --with-colons | grep -c '^sub' | grep -q '^2$'
 
+# gpg's auto-generated revocation certificate for the primary (the .rev
+# file, with the safety colon stripped so it imports as-is).
+sed 's/^://' "$GNUPGHOME/openpgp-revocs.d/$FPR.rev" > testdata/interop_gpg_dualsub_revcert.asc
+
 gpg --batch --armor --export-secret-keys > testdata/interop_gpg_dualsub_key.asc
 gpg --batch --armor --export > testdata/interop_gpg_dualsub_pub.asc
 
@@ -37,14 +41,14 @@ printf 'dual subkey interop payload\nline two\n' > testdata/interop_gpg_dualsub_
 
 # The signing subkey issues the detached signature (cert-only primary).
 gpg --batch --pinentry-mode loopback --passphrase '' \
-  --detach-sign --armor --output testdata/interop_gpg_dualsub_sig.asc \
+  --detach-sign --armor --yes --output testdata/interop_gpg_dualsub_sig.asc \
   testdata/interop_gpg_dualsub_sig.txt
 gpg --verify testdata/interop_gpg_dualsub_sig.asc testdata/interop_gpg_dualsub_sig.txt \
   2>&1 | grep "Good signature" >/dev/null
 
 # Encrypted to the cv25519 encryption subkey.
 gpg --batch --pinentry-mode loopback --passphrase '' --trust-model always \
-  --encrypt --armor --recipient "dualsub@gpg.test" \
+  --encrypt --armor --yes --recipient "dualsub@gpg.test" \
   --output testdata/interop_gpg_dualsub_message.asc \
   testdata/interop_gpg_dualsub_sig.txt
 

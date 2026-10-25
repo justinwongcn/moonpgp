@@ -40,6 +40,8 @@ pub fn generate_ed25519_v6_key(String) -> @api.PrivateKey raise
 
 pub fn generate_key(String, bits? : Int32) -> @api.PrivateKey raise
 
+pub fn generate_revocation_certificate(@api.PrivateKey, reason? : @api.RevocationReason, message? : String, created? : Int32) -> String raise
+
 pub fn generate_session_key(algo? : @primitives.CipherAlgo) -> @api.SessionKey raise
 
 pub fn pgp() -> @api.Pgp
@@ -47,6 +49,10 @@ pub fn pgp() -> @api.Pgp
 pub fn recover_session_key_with_key(String, @api.PrivateKey) -> @api.SessionKey raise
 
 pub fn recover_session_key_with_password(String, String, argon2_max_memory_kib? : Int32) -> @api.SessionKey raise
+
+pub fn revoke_key(@api.PrivateKey, reason? : @api.RevocationReason, message? : String, created? : Int32) -> @api.PrivateKey raise
+
+pub fn revoke_subkey(@api.PrivateKey, BytesView, reason? : @api.RevocationReason, message? : String, created? : Int32) -> @api.PrivateKey raise
 
 pub fn sign_and_encrypt(BytesView, @api.PrivateKey, Array[@api.PublicKey], text_mode? : Bool, compress? : @compress.CompressedAlgo, created? : Int32, file_name? : String) -> String raise
 
@@ -94,6 +100,8 @@ pub using @api {type Pgp}
 pub using @api {type PrivateKey}
 
 pub using @api {type PublicKey}
+
+pub using @api {type RevocationReason}
 
 pub using @api {type SecretSubkeyCert}
 

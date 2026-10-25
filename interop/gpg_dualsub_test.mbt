@@ -87,3 +87,47 @@ test "our encryption to the dual certificate picks the encryption subkey" {
   // cv25519 subkey proves the flags-aware choice.
   assert_eq(@api.decrypt_with_private_key(armored, secret), data)
 }
+
+///|
+test "a gpg-generated revocation certificate applies to our key model" {
+  let key = @api.PublicKey::from_armored(
+    read_testdata("interop_gpg_dualsub_pub.asc"),
+  )
+  let now = @primitives.unix_now()
+  assert_false(key.is_revoked(now))
+  // The .rev file gpg auto-generates at key creation (text preamble plus
+  // PUBLIC KEY BLOCK armor holding the revocation signature).
+  let revoked = key.apply_revocation_certificate(
+    read_testdata("interop_gpg_dualsub_revcert.asc"),
+  )
+  assert_true(revoked.is_revoked(now))
+}
+
+///|
+test "our subkey revocation rejects gpg's subkey-issued signature" {
+  // Revoke the SIGNING subkey of the gpg certificate (using gpg's own
+  // secret key), then the real gpg signature from the fixture must verify
+  // as KeyRevoked instead of Ok.
+  let secret = @api.PrivateKey::from_armored(
+    read_testdata("interop_gpg_dualsub_key.asc"),
+  )
+  let pub_key = @api.PublicKey::from_armored(
+    read_testdata("interop_gpg_dualsub_pub.asc"),
+  )
+  let signing_sub_id = pub_key.subkeys[1].key.key_id()
+  let revoked = @api.revoke_subkey(
+    secret,
+    signing_sub_id.exact_view(),
+    reason=@api.Compromised,
+    message="signing stick lost",
+  )
+  let revoked_pub = @api.PrivateKey::from_bytes(revoked.to_bytes().exact_view()).to_public()
+  let data = @primitives.utf8_bytes(
+    read_testdata("interop_gpg_dualsub_sig.txt"),
+  )
+  let sig = read_testdata("interop_gpg_dualsub_sig.asc")
+  assert_eq(
+    @api.verify_detached(data.exact_view(), sig, revoked_pub),
+    @api.KeyRevoked,
+  )
+}

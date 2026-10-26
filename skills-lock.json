@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "openwiki-init": {
+      "source": "kinensake/openwiki-skills",
+      "sourceType": "github",
+      "skillPath": "skills/openwiki-init/SKILL.md",
+      "computedHash": "ca6c2d412dc4726276b1097f9550cebb004b4b6f4ae26d39027a3505407b72ff"
+    },
+    "openwiki-update": {
+      "source": "kinensake/openwiki-skills",
+      "sourceType": "github",
+      "skillPath": "skills/openwiki-update/SKILL.md",
+      "computedHash": "a0e204c7cbb70ec6c71fa28b66331ab143a38d5e9f798738ea571eb88f054346"
+    }
+  }
+}

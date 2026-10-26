@@ -4,11 +4,20 @@ package "justinwongcn/moonpgp/error"
 // Values
 pub fn[T] fail(String) -> T raise PgpError
 
+pub fn[T] malformed(String) -> T raise PgpError
+
 pub fn[T] require(T?, String) -> T raise PgpError
+
+pub fn[T] unsupported(String) -> T raise PgpError
+
+pub fn[T] wrong_passphrase(String) -> T raise PgpError
 
 // Errors
 pub(all) suberror PgpError {
   PgpError(msg~ : String)
+  Malformed(msg~ : String)
+  Unsupported(msg~ : String)
+  WrongPassphrase(msg~ : String)
 }
 pub fn PgpError::output(Self, &Logger) -> Unit
 pub fn PgpError::to_string(Self) -> String

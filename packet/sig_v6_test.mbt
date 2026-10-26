@@ -36,7 +36,7 @@ test "a v6 signature rejects Ed25519Legacy and a wrong Ed25519 length" {
       v6_signature_body(22, Bytes::new(0).exact_view()).exact_view(),
     )
   catch {
-    @error.PgpError(msg~) => assert_true(msg.contains("EdDsaLegacy"))
+    @error.Malformed(msg~) => assert_true(msg.contains("EdDsaLegacy"))
     _ => fail("expected a PgpError for EdDsaLegacy in a v6 signature")
   } noraise {
     _ => fail("a v6 signature with EdDsaLegacy was accepted")
@@ -48,7 +48,7 @@ test "a v6 signature rejects Ed25519Legacy and a wrong Ed25519 length" {
         v6_signature_body(27, Bytes::make(n, b'\x08').exact_view()).exact_view(),
       )
     catch {
-      @error.PgpError(msg~) => assert_true(msg.contains("64 octets"))
+      @error.Malformed(msg~) => assert_true(msg.contains("64 octets"))
       _ => fail("expected a PgpError for the Ed25519 length")
     } noraise {
       _ => fail("a v6 Ed25519 signature of \{n} octets was accepted")

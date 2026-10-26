@@ -25,7 +25,24 @@ pub struct EncryptionBuilder {
 }
 
 ///|
-/// Start building an encryption (password or public-key recipients).
+/// Start building an encryption (password or public-key recipients). This
+/// is the recommended entry point for new code: chain `.password`,
+/// `.password_v6`, `.recipient`, `.sign_with`, `.file_name` and `.compress`,
+/// then `finish` returns a reusable sealing closure.
+///
+/// # Example
+///
+/// ```mbt check
+/// test "builder chain seals a payload" {
+///   let seal = @api.pgp()
+///     .encryption()
+///     .password("hunter2")
+///     .file_name("msg.txt")
+///     .finish()
+///   let armored = seal(b"payload")
+///   inspect(armored.has_prefix("-----BEGIN PGP MESSAGE-----"), content="true")
+/// }
+/// ```
 pub fn Pgp::encryption(_self : Pgp) -> EncryptionBuilder {
   EncryptionBuilder::{
     passwords: [],

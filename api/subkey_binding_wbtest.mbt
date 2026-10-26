@@ -1,5 +1,6 @@
 ///|
-/// Regression tests for the 2026-10-25 second review round (N1-N9).
+/// Subkey binding and import validation regressions, introduced by
+/// the 2026-10-25 security review (N1-N9).
 /// Whitebox: they reach the import validator, internal signature
 /// builders and `verify_signature_packet` directly.
 

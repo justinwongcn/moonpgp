@@ -219,7 +219,7 @@ fn ed_encode(pt : EdPoint, ctx : Ed25519Ctx) -> Bytes raise {
 /// on-curve checks). Raises on any malformed encoding.
 fn ed_decode(enc : BytesView, ctx : Ed25519Ctx) -> EdPoint raise {
   guard enc.length() == 32 else {
-    @error.fail("pki: Ed25519 point must be 32 octets")
+    @error.malformed("pki: Ed25519 point must be 32 octets")
   }
   let sign = (enc[31].to_int() >> 7) & 1
   let arr = to_byte_array(enc)
@@ -234,7 +234,9 @@ fn ed_decode(enc : BytesView, ctx : Ed25519Ctx) -> EdPoint raise {
     fe_mul(ctx.d, fe_mul(x2, fe_sq(y, ctx.p), ctx.p), ctx.p),
     ctx.p,
   )
-  guard lhs.equal(rhs) else { @error.fail("pki: Ed25519 point not on curve") }
+  guard lhs.equal(rhs) else {
+    @error.malformed("pki: Ed25519 point not on curve")
+  }
   EdPoint::{ x, y, z: BigInt::from_int(1), t: fe_mul(x, y, ctx.p), }
 }
 
@@ -251,7 +253,7 @@ fn ed_decode_opt(enc : BytesView, ctx : Ed25519Ctx) -> EdPoint? {
 /// prefix h[32..64].
 fn ed_expand_seed(seed : BytesView) -> (BigInt, Bytes) raise {
   guard seed.length() == 32 else {
-    @error.fail("pki: Ed25519 seed must be 32 octets")
+    @error.malformed("pki: Ed25519 seed must be 32 octets")
   }
   let h = @primitives.Sha512.digest(seed)
   let arr = to_byte_array(h[0:32])
@@ -351,7 +353,7 @@ fn le_bytes_to_bigint(le : BytesView) -> BigInt {
 /// point produces.
 fn mont_ladder(k_le : BytesView, u_le : BytesView, p : BigInt) -> BigInt raise {
   guard u_le.length() == 32 && k_le.length() == 32 else {
-    @error.fail("pki: X25519 input must be 32 octets")
+    @error.malformed("pki: X25519 input must be 32 octets")
   }
   let x1 = le_bytes_to_bigint(le_mask_bit255(u_le).exact_view()).mod(p)
   let k = le_bytes_to_bigint(le_mask_bit255(k_le).exact_view())
@@ -401,7 +403,7 @@ fn mont_ladder(k_le : BytesView, u_le : BytesView, p : BigInt) -> BigInt raise {
     z3 = tz
   }
   guard !z2.is_zero() else {
-    @error.fail("pki: X25519 output is all-zero (low-order peer point)")
+    @error.malformed("pki: X25519 output is all-zero (low-order peer point)")
   }
   fe_mul(x2, mod_inverse(z2, p), p)
 }

@@ -462,6 +462,16 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
 ///|
 /// Parse an armored key block (public or private) into a PrivateKey when
 /// it carries secret material.
+///
+/// # Example
+///
+/// ```mbt check
+/// test "armor round trip preserves the fingerprint" {
+///   let key = @api.generate_ed25519_key("A <a@example.com>")
+///   let re = @api.PrivateKey::from_armored(key.to_armored())
+///   assert_eq(re.fingerprint(), key.fingerprint())
+/// }
+/// ```
 pub fn PrivateKey::from_armored(text : String) -> PrivateKey raise {
   let block = @armor.decode(text)
   match block.armor_type() {

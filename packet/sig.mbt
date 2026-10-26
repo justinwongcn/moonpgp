@@ -262,7 +262,7 @@ fn parse_subpackets(view : BytesView) -> Array[SigSubpacket] raise {
     }
     let body = r.read_bytes(len)
     guard body.length() >= 1 else {
-      @error.fail("packet: zero-length signature subpacket")
+      @error.malformed("packet: zero-length signature subpacket")
     }
     let t = body[0].to_int()
     out.push(SigSubpacket::{
@@ -306,7 +306,7 @@ pub fn salt_size_of_hash(hash_id : Int32) -> Int32 raise {
     9 => 24 // SHA-384
     10 | 14 => 32 // SHA-512, SHA3-512
     _ =>
-      @error.fail(
+      @error.unsupported(
         "packet: hash algorithm \{hash_id} has no v6 signature salt size",
       )
   }
@@ -317,7 +317,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 4 || version == 6 else {
-    @error.fail("packet: unsupported signature version \{version}")
+    @error.unsupported("packet: unsupported signature version \{version}")
   }
   let v6 = version == 6
   let sig_type = sig_type_of_number(r.read_u8())
@@ -333,7 +333,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
     let salt_len = r.read_u8()
     let expected = salt_size_of_hash(hash_algo)
     guard salt_len == expected else {
-      @error.fail(
+      @error.malformed(
         "packet: v6 signature salt of \{salt_len} octets does not match the hash algorithm (expected \{expected})",
       )
     }
@@ -348,7 +348,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
       // RFC 9580 §5.2.3.3.1: "Ed25519Legacy MUST NOT be used in Signature
       // packets version 6 or above" — only for reading historic v4 keys.
       guard version < 6 else {
-        @error.fail(
+        @error.malformed(
           "packet: EdDsaLegacy must not be used in a v6 signature packet",
         )
       }
@@ -360,7 +360,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
       // v6 Ed25519 carries 64 raw octets, not MPIs (§5.2.3.4).
       let sig = r.read_rest()
       guard sig.length() == 64 else {
-        @error.fail(
+        @error.malformed(
           "packet: an Ed25519 signature must be 64 octets, got \{sig.length()}",
         )
       }
@@ -701,7 +701,9 @@ pub fn OnePassSigPacket::parse(body : BytesView) -> OnePassSigPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 3 || version == 6 else {
-    @error.fail("packet: unsupported one-pass signature version \{version}")
+    @error.unsupported(
+      "packet: unsupported one-pass signature version \{version}",
+    )
   }
   let sig_type = sig_type_of_number(r.read_u8())
   let hash_algo = r.read_u8()
@@ -715,7 +717,7 @@ pub fn OnePassSigPacket::parse(body : BytesView) -> OnePassSigPacket raise {
     // value (a mismatch is malformed, §5.2.5) — same rule the Signature
     // packet enforces when parsing.
     guard salt_len == salt_size_of_hash(hash_algo) else {
-      @error.fail(
+      @error.malformed(
         "packet: one-pass signature salt size \{salt_len} does not match hash algorithm \{hash_algo}",
       )
     }

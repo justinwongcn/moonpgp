@@ -31,7 +31,7 @@ pub(all) struct X25519SecretKey {
 ///|
 fn x25519_clamp(scalar : BytesView) -> Bytes raise {
   guard scalar.length() == 32 else {
-    @error.fail("pki: X25519 scalar must be 32 octets")
+    @error.malformed("pki: X25519 scalar must be 32 octets")
   }
   let out = to_byte_array(scalar)
   out[0] = (out[0].to_int() & 248).to_byte()
@@ -71,7 +71,7 @@ pub fn x25519_secret_of_wire_mpi(
 ) -> X25519SecretKey raise {
   // Tolerate a stripped leading zero octet (MPI semantics).
   guard mpi_value.length() <= 32 else {
-    @error.fail("pki: Curve25519Legacy secret MPI must be 32 octets")
+    @error.malformed("pki: Curve25519Legacy secret MPI must be 32 octets")
   }
   let full = @primitives.pad_left(mpi_value, 32)
   let le : Array[Byte] = []
@@ -100,7 +100,7 @@ pub fn x25519_shared_secret(
   peer_public : BytesView,
 ) -> Bytes raise {
   guard scalar.length() == 32 && peer_public.length() == 32 else {
-    @error.fail("pki: X25519 inputs must be 32 octets each")
+    @error.malformed("pki: X25519 inputs must be 32 octets each")
   }
   let clamped = x25519_clamp(scalar)
   let z = mont_ladder(clamped.exact_view(), peer_public, c25519_p())

@@ -98,7 +98,7 @@ fn read_public_fields(
   // understands it (fingerprints, PKESK pairing), so reject it at the
   // parse layer instead of accepting a key that fails at first use (N8).
   guard version == 4 || version == 6 else {
-    @error.fail(
+    @error.unsupported(
       "packet: unsupported public key version \{version} (v5 draft keys are not supported)",
     )
   }
@@ -124,10 +124,14 @@ fn read_public_fields(
         // 32 octets of the native X25519 public key (RFC 9580 §5.5.5.7).
         params.push(r.read_bytes(32))
       _ =>
-        @error.fail("packet: v6 public key algorithm \{algo_num} not supported")
+        @error.malformed(
+          "packet: v6 public key algorithm \{algo_num} not supported",
+        )
     }
     guard r.position() - material_start == count else {
-      @error.fail("packet: v6 public key material count does not match body")
+      @error.malformed(
+        "packet: v6 public key material count does not match body",
+      )
     }
   } else {
     match algo {
@@ -161,7 +165,10 @@ fn read_public_fields(
         let kdf = r.read_bytes(kdf_len)
         params.push(Bytes::from_array([kdf_len.to_byte()]).add(kdf))
       }
-      _ => @error.fail("packet: unsupported public key algorithm \{algo_num}")
+      _ =>
+        @error.unsupported(
+          "packet: unsupported public key algorithm \{algo_num}",
+        )
     }
   }
   (version, creation_time, algo, params)
@@ -239,14 +246,14 @@ pub fn PublicKeyPacket::fingerprint(self : PublicKeyPacket) -> Bytes raise {
   } else if self.version == 4 {
     // F09: the u16 length field silently truncates an oversized body.
     guard body.length() <= 0xFFFF else {
-      @error.fail("packet: key packet too large for a v4 fingerprint")
+      @error.malformed("packet: key packet too large for a v4 fingerprint")
     }
     w.u8(0x99)
     w.u16(body.length())
     w.bytes(body.exact_view())
     @primitives.Sha1.digest(w.to_bytes().exact_view())
   } else {
-    @error.fail(
+    @error.unsupported(
       "packet: fingerprint not implemented for version \{self.version}",
     )
   }
@@ -300,11 +307,11 @@ fn read_s2k_specifier(r : Reader, v6 : Bool) -> (@s2k.S2k, Bytes) raise {
     // the field that follows it (usage 253 or 254 only).
     let declared = r.read_u8()
     guard rest_after(r, declared) else {
-      @error.fail("packet: truncated v6 S2K specifier")
+      @error.malformed("packet: truncated v6 S2K specifier")
     }
     let (s2k, used) = @s2k.parse(r.view()[0:declared])
     guard used == declared else {
-      @error.fail("packet: v6 S2K specifier length mismatch")
+      @error.malformed("packet: v6 S2K specifier length mismatch")
     }
     (s2k, r.read_bytes(declared))
   } else {
@@ -344,7 +351,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     if v6 {
       let params_len = r.read_u8()
       guard rest_after(r, params_len) else {
-        @error.fail("packet: truncated v6 AEAD secret key parameters")
+        @error.malformed("packet: truncated v6 AEAD secret key parameters")
       }
       declared_params = Some(params_len)
       params_start = r.position()
@@ -356,7 +363,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     match declared_params {
       Some(n) =>
         if r.position() - params_start != n {
-          @error.fail(
+          @error.malformed(
             "packet: v6 AEAD secret key parameter count \{n} does not match the \{r.position() - params_start} octets read",
           )
         }
@@ -374,14 +381,14 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     }
   } else if usage == 254 || usage == 255 {
     guard !(v6 && usage == 255) else {
-      @error.fail("packet: a v6 secret key must not use S2K usage 255")
+      @error.malformed("packet: a v6 secret key must not use S2K usage 255")
     }
     let mut declared_params : Int32? = None
     let mut params_start = 0
     if v6 {
       let params_len = r.read_u8()
       guard rest_after(r, params_len) else {
-        @error.fail("packet: truncated v6 secret key parameters")
+        @error.malformed("packet: truncated v6 secret key parameters")
       }
       declared_params = Some(params_len)
       params_start = r.position()
@@ -409,7 +416,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     } else {
       let (s2k, spec) = read_s2k_specifier(r, v6)
       guard !s2k.is_argon2() else {
-        @error.fail("packet: using Argon2 S2K without AEAD is not allowed")
+        @error.malformed("packet: using Argon2 S2K without AEAD is not allowed")
       }
       let bs = cipher_block_size(cipher_algo)
       let iv = r.read_bytes(bs)
@@ -419,7 +426,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
       match declared_params {
         Some(n) =>
           if r.position() - params_start != n {
-            @error.fail(
+            @error.malformed(
               "packet: v6 secret key parameter count \{n} does not match the \{r.position() - params_start} octets read",
             )
           }
@@ -441,7 +448,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
     // 4 and earlier keys only; "Version 6 secret keys using these formats
     // MUST be rejected" rather than accepted with an implied Simple/MD5.
     guard !v6 else {
-      @error.fail(
+      @error.malformed(
         "packet: a v6 secret key must not use a legacy cipher-id usage octet \{usage}",
       )
     }
@@ -488,7 +495,7 @@ fn cipher_block_size(algo : Int32) -> Int32 raise {
     1 => 8
     2 | 3 | 4 => 8
     7 | 8 | 9 | 10 | 11 | 12 | 13 => 16
-    _ => @error.fail("packet: unknown cipher algorithm \{algo}")
+    _ => @error.unsupported("packet: unknown cipher algorithm \{algo}")
   }
 }
 

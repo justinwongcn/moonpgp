@@ -192,14 +192,16 @@ fn recover_pkesk_session(
       if q.tag() == @packet.Seipd {
         let seipd = @packet.SeipdPacket::parse(q.body().exact_view())
         guard seipd.version == 2 else {
-          @error.fail(
+          @error.malformed(
             "api: v6 PKESK must precede a v2 SEIPD (RFC 9580 §10.3.2.1)",
           )
         }
         let algo = match @primitives.cipher_algo_of_number(seipd.cipher_algo) {
           Some(a) => a
           None =>
-            @error.fail("api: unsupported session cipher \{seipd.cipher_algo}")
+            @error.unsupported(
+              "api: unsupported session cipher \{seipd.cipher_algo}",
+            )
         }
         return SessionKey::new(session, algo)
       }
@@ -208,7 +210,7 @@ fn recover_pkesk_session(
   }
   let algo = match @primitives.cipher_algo_of_number(algo_id) {
     Some(a) => a
-    None => @error.fail("api: unsupported session cipher \{algo_id}")
+    None => @error.unsupported("api: unsupported session cipher \{algo_id}")
   }
   SessionKey::new(session, algo)
 }

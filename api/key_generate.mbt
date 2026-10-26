@@ -136,6 +136,16 @@ pub fn generate_key(user_id : String, bits~ : Int32 = 3072) -> PrivateKey raise 
 /// signing/certification) and a Curve25519Legacy ECDH encryption
 /// subkey — the gopenpgp "Default" profile shape. EdDSA signatures
 /// require the digest itself as the Ed25519 message (RFC 9580 §5.2.3).
+///
+/// # Example
+///
+/// ```mbt check
+/// test "generate an ed25519 key" {
+///   let key = @api.generate_ed25519_key("A <a@example.com>")
+///   assert_eq(key.user_id(), "A <a@example.com>")
+///   inspect(key.fingerprint().length(), content="20")
+/// }
+/// ```
 pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
   let now = @primitives.unix_now().to_int()
   let seed = @primitives.random_bytes(32)

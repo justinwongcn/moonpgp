@@ -1,4 +1,12 @@
 ///|
+/// Visibility rule for wire-format structs: packets a caller may
+/// legitimately synthesize — encryption and signature carriers — are
+/// `pub(all)` so interop and fuzzing tools can hand-build them; packets
+/// representing extracted payload (`LiteralPacket`, `CompressedPacket`)
+/// are read-only `pub`, produced by `parse` and factories like
+/// `LiteralPacket::binary`. Everything round-trips through
+/// `parse`/`to_body` regardless of visibility.
+///
 /// PKESK packet body, versions 3 (RFC 9580 §5.1.1) and 6 (§5.1.2).
 pub(all) struct PkeskPacket {
   version : Int32
@@ -58,7 +66,7 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 3 || version == 6 else {
-    @error.fail("packet: unsupported PKESK version \{version}")
+    @error.unsupported("packet: unsupported PKESK version \{version}")
   }
   let mut key_id = Bytes::new(0)
   let mut key_version = 0
@@ -79,7 +87,7 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
         _ => 0
       }
       guard fp_len > 0 && size == 1 + fp_len else {
-        @error.fail(
+        @error.malformed(
           "packet: v6 PKESK size \{size} does not match key version \{key_version}",
         )
       }
@@ -233,7 +241,7 @@ fn aead_iv_len(algo : Int32) -> Int32 raise {
     1 => 16
     2 => 15
     3 => 12
-    _ => @error.fail("packet: unknown AEAD algorithm \{algo}")
+    _ => @error.unsupported("packet: unknown AEAD algorithm \{algo}")
   }
 }
 
@@ -242,14 +250,14 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 4 || version == 5 || version == 6 else {
-    @error.fail("packet: unsupported SKESK version \{version}")
+    @error.unsupported("packet: unsupported SKESK version \{version}")
   }
   // §5.3.2: a v6 packet opens with a 1-octet count of the cipher, AEAD
   // mode, S2K-length, specifier and nonce fields.
   let v6_params_len = if version == 6 {
     let n = r.read_u8()
     guard rest_after(r, n) else {
-      @error.fail("packet: truncated v6 SKESK parameters")
+      @error.malformed("packet: truncated v6 SKESK parameters")
     }
     n
   } else {
@@ -260,11 +268,11 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   let (s2k, spec_len) = if version == 6 {
     let declared = r.read_u8()
     guard rest_after(r, declared) else {
-      @error.fail("packet: truncated v6 SKESK S2K specifier")
+      @error.malformed("packet: truncated v6 SKESK S2K specifier")
     }
     let (s2k, used) = @s2k.parse(r.view()[0:declared])
     guard used == declared else {
-      @error.fail("packet: v6 SKESK S2K specifier length mismatch")
+      @error.malformed("packet: v6 SKESK S2K specifier length mismatch")
     }
     ignore(r.read_bytes(declared))
     (s2k, declared)
@@ -280,7 +288,7 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   }
   if version == 6 {
     guard v6_params_len == 3 + spec_len + iv.length() else {
-      @error.fail("packet: v6 SKESK parameter count mismatch")
+      @error.malformed("packet: v6 SKESK parameter count mismatch")
     }
   }
   let esk = r.read_rest()
@@ -301,7 +309,7 @@ pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes raise {
   let spec = self.s2k.encode()
   if self.version != 4 {
     guard self.iv.length() == aead_iv_len(self.aead_algo) else {
-      @error.fail("packet: bad SKESK IV length")
+      @error.malformed("packet: bad SKESK IV length")
     }
   }
   if self.version == 6 {
@@ -372,7 +380,7 @@ pub fn AeadPacket::parse(body : BytesView) -> AeadPacket raise {
   let r = Reader::new(body)
   let version = r.read_u8()
   guard version == 1 else {
-    @error.fail("packet: unsupported AEAD packet version \{version}")
+    @error.unsupported("packet: unsupported AEAD packet version \{version}")
   }
   let cipher_algo = r.read_u8()
   let aead_algo = r.read_u8()
@@ -392,10 +400,12 @@ pub fn AeadPacket::parse(body : BytesView) -> AeadPacket raise {
 ///|
 pub fn AeadPacket::to_body(self : AeadPacket) -> Bytes raise {
   guard self.version == 1 else {
-    @error.fail("packet: unsupported AEAD packet version \{self.version}")
+    @error.unsupported(
+      "packet: unsupported AEAD packet version \{self.version}",
+    )
   }
   guard self.iv.length() == aead_iv_len(self.aead_algo) else {
-    @error.fail("packet: bad AEAD packet IV length")
+    @error.malformed("packet: bad AEAD packet IV length")
   }
   let w = Writer::new()
   w.u8(self.version)
@@ -471,7 +481,7 @@ pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes raise {
   )
   let name = @primitives.utf8_bytes(self.file_name)
   guard name.length() <= 255 else {
-    @error.fail("packet: literal file name too long")
+    @error.malformed("packet: literal file name too long")
   }
   w.u8(name.length())
   w.bytes(name.exact_view())
@@ -593,7 +603,7 @@ pub fn SeipdPacket::parse(body : BytesView) -> SeipdPacket raise {
     let ct = r.read_rest()
     SeipdPacket::v1(ct)
   } else {
-    @error.fail("packet: unsupported SEIPD version \{version}")
+    @error.unsupported("packet: unsupported SEIPD version \{version}")
   }
 }
 

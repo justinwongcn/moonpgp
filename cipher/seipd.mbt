@@ -35,7 +35,7 @@ pub fn seipd_v1_decrypt(
   // ciphertexts whose inner slice inverts to empty for 64-bit ciphers,
   // so the bound follows the block size.
   guard ciphertext.length() >= bs + 2 + 22 else {
-    @error.fail("seipd: ciphertext too short")
+    @error.malformed("seipd: ciphertext too short")
   }
   let zeros = Bytes::make(bs, b'\x00')
   let full = cfb_decrypt(bc, zeros, ciphertext)
@@ -44,17 +44,17 @@ pub fn seipd_v1_decrypt(
   let hashed = full[0:len - 20]
   // The two octets before the MDC must be the 0xD3 0x14 constants.
   guard hashed[len - 22] == b'\xD3' && hashed[len - 21] == b'\x14' else {
-    @error.fail("seipd: missing MDC header octets")
+    @error.malformed("seipd: missing MDC header octets")
   }
   let computed = @primitives.Sha1.digest(hashed.exact_view())
   guard @primitives.ct_equal(computed.exact_view(), stored_mdc.exact_view()) else {
-    @error.fail("seipd: MDC mismatch (message modified)")
+    @error.malformed("seipd: MDC mismatch (message modified)")
   }
   // Quick check: the last two prefix octets repeat after them. (The old
   // hardcoded 16-byte-block offsets silently rejected every 8-byte-block
   // cipher — CAST5/3DES — exposed by the M2 gpg legacy fixtures.)
   guard full[bs - 2] == full[bs] && full[bs - 1] == full[bs + 1] else {
-    @error.fail("seipd: prefix quick check failed (wrong session key?)")
+    @error.malformed("seipd: prefix quick check failed (wrong session key?)")
   }
   hashed[bs + 2:len - 22].to_owned()
 }

@@ -176,6 +176,19 @@ fn make_subkey_revocation_signature(
 /// --import a bare Signature armor block, verified against 2.4.5). The
 /// owner distributes it out of band; anyone can apply it to their copy of
 /// the public key.
+///
+/// # Example
+///
+/// ```mbt check
+/// test "a revocation certificate is armored" {
+///   let key = @api.generate_ed25519_key("A <a@example.com>")
+///   let cert = @api.generate_revocation_certificate(key)
+///   inspect(
+///     cert.has_prefix("-----BEGIN PGP PUBLIC KEY BLOCK-----"),
+///     content="true",
+///   )
+/// }
+/// ```
 pub fn generate_revocation_certificate(
   key : PrivateKey,
   reason~ : RevocationReason = NoReason,
@@ -338,7 +351,7 @@ fn parse_revocation_certificate(
     None => @error.fail("api: no signature packet in armor block")
   }
   guard s.sig_type() == @packet.KeyRevocation else {
-    @error.fail(
+    @error.malformed(
       "api: the certificate is not a key revocation (type \{s.sig_type().number()})",
     )
   }

@@ -73,7 +73,7 @@ fn ecdh_kek(
   let sym = ecdh_kdf_sym_algo(pub_packet)
   let kek_len = match @primitives.cipher_algo_of_number(sym) {
     Some(a) => a.key_size()
-    None => @error.fail("api: unsupported ECDH KEK cipher \{sym}")
+    None => @error.unsupported("api: unsupported ECDH KEK cipher \{sym}")
   }
   @pki.ecdh_kdf_sha256(
     shared,

@@ -49,7 +49,7 @@ test "a v6 PKESK fingerprint size must match its key version" {
         v6_pkesk_body(size, key_version, fp_len).exact_view(),
       )
     catch {
-      @error.PgpError(msg~) =>
+      @error.Malformed(msg~) =>
         assert_true(msg.contains("does not match key version"))
       _ => fail("expected a PgpError for the malformed size")
     } noraise {

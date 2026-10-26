@@ -56,7 +56,7 @@ fn finish_signed_digest(
   )
   match @primitives.hash_id_of_number(sig.hash_algo()) {
     Some(h) => h.digest(w.to_bytes().exact_view())
-    None => @error.fail("api: unknown hash algorithm")
+    None => @error.unsupported("api: unknown hash algorithm")
   }
 }
 
@@ -260,7 +260,7 @@ fn decompress_payload(
     // instead of a generic one (consolidation fix: the old comment claimed
     // "BZip2 is decode-only", which was never true).
     _ =>
-      @error.fail(
+      @error.unsupported(
         "api: unsupported compression algorithm \{comp.algo} (BZip2 is not implemented)",
       )
   }
@@ -294,7 +294,7 @@ fn maybe_compress_inner(
             .exact_view(),
           )
         _ =>
-          @error.fail(
+          @error.unsupported(
             "api: unsupported output compression algorithm \{algo.number()} (BZip2 is not implemented)",
           )
       }
@@ -339,7 +339,7 @@ fn collect_data_sig(
         sig = Some(@packet.SignaturePacket::parse(p.body().exact_view()))
       @packet.Compressed => {
         guard depth < MAX_COMPRESSED_DEPTH else {
-          @error.fail(
+          @error.malformed(
             "api: compressed packets nested more than \{MAX_COMPRESSED_DEPTH} levels deep",
           )
         }
@@ -402,6 +402,21 @@ fn finish_inline_verify(
 /// the current time is used. Passing the time makes the signature
 /// reproducible for RSA PKCS#1 v1.5 and Ed25519 keys, which sign
 /// deterministically (for example for reproducible builds).
+///
+/// # Example
+///
+/// ```mbt check
+/// test "detached signature round trip" {
+///   let key = @api.generate_ed25519_key("A <a@example.com>")
+///   let sig = @api.sign_detached(b"payload", key)
+///   inspect(sig.has_prefix("-----BEGIN PGP SIGNATURE-----"), content="true")
+///   assert_eq(
+///     @api.verify_detached(b"payload", sig, key.to_public()),
+///     @api.VerifyStatus::Ok,
+///   )
+///   assert_true(@api.verify_detached(b"tampered", sig, key.to_public()) is Failed)
+/// }
+/// ```
 pub fn sign_detached(
   data : BytesView,
   key : PrivateKey,

@@ -68,3 +68,9 @@ pub using @compress {type CompressedAlgo}
 
 ///|
 pub using @primitives {type CipherAlgo, type HashId}
+
+///|
+/// The error type raised throughout the module, re-exported so a bare root
+/// import is enough to catch and branch on the failure classes
+/// (`Malformed`, `Unsupported`, `WrongPassphrase`).
+pub using @error {type PgpError}

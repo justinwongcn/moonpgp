@@ -56,7 +56,7 @@ test "eax round trip and tag rejection" {
     )
     false
   } catch {
-    @error.PgpError(msg~) => {
+    @error.Malformed(msg~) => {
       assert_true(msg.contains("tag mismatch"))
       true
     }

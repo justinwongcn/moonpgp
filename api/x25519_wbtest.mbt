@@ -115,7 +115,7 @@ test "a v6 PKESK before a v1 SEIPD is discarded, not mis-decrypted" {
     @packet.serialize_packet(@packet.Seipd, seipd.to_body().exact_view()).exact_view(),
   )
   try decrypt_binary_with_private_key(w.to_bytes().exact_view(), key) catch {
-    @error.PgpError(msg~) => assert_true(msg.contains("does not align"))
+    @error.Malformed(msg~) => assert_true(msg.contains("does not align"))
     _ => fail("expected a PgpError for the mismatched ESK version")
   } noraise {
     _ => fail("a v6 PKESK before a v1 SEIPD was accepted")

@@ -89,7 +89,7 @@ pub fn to_hex(data : BytesView) -> String {
 /// Parse a lowercase/uppercase hex string.
 pub fn from_hex(s : String) -> Bytes raise {
   @hex.decode(s) catch {
-    _ => @error.fail("invalid hex string")
+    _ => @error.malformed("invalid hex string")
   }
 }
 

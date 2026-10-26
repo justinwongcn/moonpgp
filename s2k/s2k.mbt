@@ -27,11 +27,11 @@ pub const ARGON2_SALT_SIZE : Int32 = 16
 /// Parse an S2K specifier from the front of `view`. Returns the specifier
 /// and the number of bytes consumed.
 pub fn parse(view : BytesView) -> (S2k, Int32) raise {
-  guard view.length() >= 2 else { @error.fail("s2k: truncated specifier") }
+  guard view.length() >= 2 else { @error.malformed("s2k: truncated specifier") }
   let usage = view[0].to_int()
   if usage == 4 {
     guard view.length() >= 20 else {
-      @error.fail("s2k: truncated Argon2 specifier")
+      @error.malformed("s2k: truncated Argon2 specifier")
     }
     let salt = view[1:17].to_owned()
     let passes = view[17].to_int()
@@ -42,23 +42,24 @@ pub fn parse(view : BytesView) -> (S2k, Int32) raise {
   }
   let hash_id = match @primitives.hash_id_of_number(view[1].to_int()) {
     Some(h) => h
-    None => @error.fail("s2k: unknown hash algorithm \{view[1].to_int()}")
+    None =>
+      @error.unsupported("s2k: unknown hash algorithm \{view[1].to_int()}")
   }
   match usage {
     0 => (Simple(hash_id), 2)
     1 => {
       guard view.length() >= 10 else {
-        @error.fail("s2k: truncated salted specifier")
+        @error.malformed("s2k: truncated salted specifier")
       }
       (Salted(hash_id, view[2:10].to_owned()), 10)
     }
     3 => {
       guard view.length() >= 11 else {
-        @error.fail("s2k: truncated iterated specifier")
+        @error.malformed("s2k: truncated iterated specifier")
       }
       (Iterated(hash_id, view[2:10].to_owned(), view[10].to_int()), 11)
     }
-    _ => @error.fail("s2k: unsupported usage type \{usage}")
+    _ => @error.unsupported("s2k: unsupported usage type \{usage}")
   }
 }
 

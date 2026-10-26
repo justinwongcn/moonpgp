@@ -315,7 +315,7 @@ pub fn ocb_decrypt(
     sum.exact_view(),
   )
   guard @primitives.ct_equal(tag.exact_view(), stored_tag) else {
-    @error.fail("ocb: authentication tag mismatch")
+    @error.malformed("ocb: authentication tag mismatch")
   }
   out.to_bytes()
 }

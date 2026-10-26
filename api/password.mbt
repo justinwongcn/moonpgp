@@ -2,6 +2,20 @@
 /// Encrypt plaintext to a passphrase. Produces an armored PGP MESSAGE with
 /// a v4 SKESK (iterated+salted S2K, AES-256 session key wrapped in CFB)
 /// followed by a v1 SEIPD packet holding the literal data.
+///
+/// For new code prefer the builder (`pgp().encryption().password(...)`,
+/// which can also mix recipients and a signer) or `encrypt_with_password_v6`
+/// for the RFC 9580 v6 shape; this entry stays for the classic v4 message.
+///
+/// # Example
+///
+/// ```mbt check
+/// test "password encryption round trip" {
+///   let armored = @api.encrypt_with_password(b"Hello, world!", "hunter2")
+///   inspect(armored.has_prefix("-----BEGIN PGP MESSAGE-----"), content="true")
+///   assert_eq(@api.decrypt_with_password(armored, "hunter2"), b"Hello, world!")
+/// }
+/// ```
 pub fn encrypt_with_password(
   plaintext : BytesView,
   passphrase : String,
@@ -45,6 +59,10 @@ pub fn encrypt_with_password(
 /// `memory_exp` is the exponent of the Argon2 memory size in KiB (default
 /// 16 → 64 MiB, go-crypto's default); `passes` and `parallelism` default to
 /// t=3, p=4.
+///
+/// In new code prefer `encrypt_with_password_v6` (Argon2 by default) or the
+/// builder's `.password_v6`; this entry produces the v4 message shape with
+/// an Argon2 specifier.
 pub fn encrypt_with_password_argon2(
   plaintext : BytesView,
   passphrase : String,
@@ -64,7 +82,9 @@ pub fn encrypt_with_password_argon2(
 /// (AEAD + HKDF-SHA256 key separation, §5.3.2) followed by a v2 SEIPD
 /// packet (§5.13.2). `argon2` (default true) selects the Argon2id S2K the
 /// RFC recommends for v6; set it to false for the much cheaper
-/// iterated+salted SHA-256.
+/// iterated+salted SHA-256. This is the recommended passphrase entry point
+/// for new code; to mix in public-key recipients or a signer, use the
+/// builder's `.password_v6` instead.
 pub fn encrypt_with_password_v6(
   plaintext : BytesView,
   passphrase : String,
@@ -269,6 +289,8 @@ fn seal_skesks_with_passwords(
 ///|
 /// Decrypt an (optionally armored) message using a passphrase. Returns the
 /// literal data. Compressed packets are transparently decompressed.
+/// A wrong passphrase raises the typed `WrongPassphrase` error. See
+/// `encrypt_with_password` for a round-trip example.
 pub fn decrypt_with_password(
   message : String,
   passphrase : String,
@@ -299,10 +321,18 @@ pub fn decrypt_binary_with_password(
   max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
   let packets = @packet.parse_packets(data)
-  let mut last_error : String? = None
+  // A definitive passphrase failure frames the final report; any other
+  // error (Argon2 cap, malformed packet) is re-raised unchanged so its
+  // variant survives the retry loop.
+  let mut passphrase_error : String? = None
+  let mut last_error : Error? = None
   for p in packets {
     if p.tag() == @packet.Skesk {
       let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
+      // v5/v6 and the AEAD-protected v4 shape prove the passphrase at
+      // unwrap time; only the checksum-free v4 CFB shape leaves the
+      // payload failure as the wrong-passphrase signal.
+      let unwrap_definitive = skesk.version() >= 5 || skesk.aead_algo() != 0
       let opened : Bytes? = try {
         let (msg_algo, session_key, skesk_version) = unwrap_one_skesk(
           skesk, passphrase, argon2_max_memory_kib,
@@ -313,8 +343,23 @@ pub fn decrypt_binary_with_password(
           ),
         )
       } catch {
+        @error.WrongPassphrase(msg~) => {
+          passphrase_error = Some(msg)
+          None
+        }
+        @error.Malformed(msg~) => {
+          if unwrap_definitive {
+            // The AEAD unwrap already proved the passphrase right; a
+            // payload failure here is corruption, not a passphrase
+            // problem.
+            last_error = Some(@error.Malformed(msg~))
+          } else {
+            passphrase_error = Some(msg)
+          }
+          None
+        }
         e => {
-          last_error = Some(e.to_string())
+          last_error = Some(e)
           None
         }
       }
@@ -323,10 +368,13 @@ pub fn decrypt_binary_with_password(
       }
     }
   }
-  match last_error {
-    Some(msg) =>
-      @error.fail("api: no SKESK in the message matched the passphrase: \{msg}")
-    None => @error.fail("api: no SKESK packet found")
+  match (passphrase_error, last_error) {
+    (Some(msg), _) =>
+      @error.wrong_passphrase(
+        "api: no SKESK in the message matched the passphrase: \{msg}",
+      )
+    (_, Some(e)) => raise e
+    _ => @error.fail("api: no SKESK packet found")
   }
 }
 
@@ -347,13 +395,14 @@ fn open_password_payload(
       let algo = match @primitives.cipher_algo_of_number(aead.cipher_algo()) {
         Some(a) => a
         None =>
-          @error.fail(
+          @error.unsupported(
             "api: unsupported AEAD cipher algorithm \{aead.cipher_algo()}",
           )
       }
       let mode = match @cipher.aead_mode_of_number(aead.aead_algo()) {
         Some(m) => m
-        None => @error.fail("api: unknown AEAD algorithm \{aead.aead_algo()}")
+        None =>
+          @error.unsupported("api: unknown AEAD algorithm \{aead.aead_algo()}")
       }
       guard session_key.length() == algo.key_size() else {
         @error.fail("api: session key length does not match the AEAD cipher")
@@ -384,7 +433,7 @@ fn open_password_payload(
       // discarded. (The tag-20 4880bis AEAD container above is not part of
       // RFC 9580 and keeps its lenient handling for GnuPG interop.)
       guard (seipd.version == 2) == (skesk_version == 6) else {
-        @error.fail(
+        @error.malformed(
           "api: SKESK version \{skesk_version} does not align with SEIPD version \{seipd.version}",
         )
       }
@@ -392,7 +441,7 @@ fn open_password_payload(
         return decrypt_seipd_v2(seipd, session_key, max_decompressed)
       }
       guard seipd.version == 1 else {
-        @error.fail("api: unsupported SEIPD version \{seipd.version}")
+        @error.unsupported("api: unsupported SEIPD version \{seipd.version}")
       }
       // The SEIPD cipher is the one named inside the unwrapped session key,
       // which need not match the SKESK's wrapping cipher (RFC 9580 §5.3.1).
@@ -479,15 +528,20 @@ fn unwrap_skesk(
   passphrase : String,
   argon2_max_memory_kib : Int32,
 ) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
-  let mut last_error : String? = None
+  let mut passphrase_error : String? = None
+  let mut last_error : Error? = None
   for p in packets {
     if p.tag() == @packet.Skesk {
       let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
       let unwrapped : (@primitives.CipherAlgo, Bytes, Int32)? = Some(
         unwrap_one_skesk(skesk, passphrase, argon2_max_memory_kib),
       ) catch {
+        @error.WrongPassphrase(msg~) => {
+          passphrase_error = Some(msg)
+          None
+        }
         e => {
-          last_error = Some(e.to_string())
+          last_error = Some(e)
           None
         }
       }
@@ -496,10 +550,13 @@ fn unwrap_skesk(
       }
     }
   }
-  match last_error {
-    Some(msg) =>
-      @error.fail("api: no SKESK in the message matched the passphrase: \{msg}")
-    None => @error.fail("api: no SKESK packet found")
+  match (passphrase_error, last_error) {
+    (Some(msg), _) =>
+      @error.wrong_passphrase(
+        "api: no SKESK in the message matched the passphrase: \{msg}",
+      )
+    (_, Some(e)) => raise e
+    _ => @error.fail("api: no SKESK packet found")
   }
 }
 
@@ -514,7 +571,9 @@ fn unwrap_one_skesk(
   let algo = match @primitives.cipher_algo_of_number(skesk.cipher_algo()) {
     Some(a) => a
     None =>
-      @error.fail("api: unsupported cipher algorithm \{skesk.cipher_algo()}")
+      @error.unsupported(
+        "api: unsupported cipher algorithm \{skesk.cipher_algo()}",
+      )
   }
   let pass = @primitives.utf8_bytes(passphrase)
   if skesk.version() == 6 {
@@ -531,7 +590,9 @@ fn unwrap_one_skesk(
     let mode = match @cipher.aead_mode_of_number(skesk.aead_algo()) {
       Some(m) => m
       None =>
-        @error.fail("api: unknown SKESK AEAD algorithm \{skesk.aead_algo()}")
+        @error.unsupported(
+          "api: unknown SKESK AEAD algorithm \{skesk.aead_algo()}",
+        )
     }
     let ad = Bytes::from_array([
       0xC3,
@@ -566,7 +627,9 @@ fn unwrap_one_skesk(
     let mode = match @cipher.aead_mode_of_number(skesk.aead_algo()) {
       Some(m) => m
       None =>
-        @error.fail("api: unknown SKESK AEAD algorithm \{skesk.aead_algo()}")
+        @error.unsupported(
+          "api: unknown SKESK AEAD algorithm \{skesk.aead_algo()}",
+        )
     }
     let bc = @primitives.new_block_cipher(algo, kek.exact_view())
     let ad = Bytes::from_array([
@@ -616,16 +679,21 @@ fn unwrap_one_skesk(
     Bytes::make(16, b'\x00').exact_view(),
     skesk.encrypted_session_key().exact_view(),
   )
-  guard wrapped.length() >= 1 else { @error.fail("api: empty session key") }
+  guard wrapped.length() >= 1 else {
+    // Everything past the KDF in this checksum-free shape fires on
+    // garbage from a wrong passphrase (N4); a genuinely corrupt SKESK
+    // reports the same class.
+    @error.wrong_passphrase("api: empty session key")
+  }
   // The wrapped value carries the message cipher algorithm octet, which
   // may differ from the SKESK's own wrapping cipher (RFC 9580 §5.3.1).
   let inner_algo = match
     @primitives.cipher_algo_of_number(wrapped[0].to_int()) {
     Some(a) => a
-    None => @error.fail("api: unsupported inner cipher algorithm")
+    None => @error.wrong_passphrase("api: unsupported inner cipher algorithm")
   }
   guard wrapped.length() - 1 == inner_algo.key_size() else {
-    @error.fail("api: session key length mismatch")
+    @error.wrong_passphrase("api: session key length mismatch")
   }
   return (inner_algo, wrapped[1:wrapped.length()].to_owned(), skesk.version())
 }
@@ -788,7 +856,7 @@ fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
       }
       continue
     }
-    @error.fail(
+    @error.malformed(
       "api: expected literal or compressed packet, got tag \{tag.number()}",
     )
   }
@@ -804,10 +872,18 @@ fn aead_open_session_key(
   ad : BytesView,
   cipher : BytesView,
 ) -> Bytes raise {
-  match mode {
-    @cipher.Ocb => @cipher.ocb_decrypt(bc, nonce, ad, cipher)
-    @cipher.Gcm => @cipher.gcm_decrypt(bc, nonce, ad, cipher)
-    @cipher.Eax => @cipher.eax_decrypt(bc, nonce, ad, cipher)
+  // Only the SKESK unwrap lands here: the AEAD tag over the wrapped
+  // session key is the integrity check on caller-derived key material,
+  // so a tag failure means the passphrase does not match.
+  try {
+    match mode {
+      @cipher.Ocb => @cipher.ocb_decrypt(bc, nonce, ad, cipher)
+      @cipher.Gcm => @cipher.gcm_decrypt(bc, nonce, ad, cipher)
+      @cipher.Eax => @cipher.eax_decrypt(bc, nonce, ad, cipher)
+    }
+  } catch {
+    @error.Malformed(msg~) => @error.wrong_passphrase(msg)
+    e => raise e
   }
 }
 
@@ -871,7 +947,7 @@ fn open_seipd_v2(
     seipd.ciphertext.exact_view(),
   ) catch {
     _ =>
-      @error.fail(
+      @error.malformed(
         "api: SEIPD v2 decryption failed (wrong key or corrupted message)",
       )
   }

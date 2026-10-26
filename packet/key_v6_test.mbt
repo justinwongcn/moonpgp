@@ -52,7 +52,7 @@ test "a v6 secret key must consume exactly its declared S2K parameter count" {
         v6_aead_secret_body(public, delta).exact_view(),
       )
     catch {
-      @error.PgpError(_) => ()
+      @error.Malformed(_) => ()
       _ => fail("expected a PgpError for the wrong parameter count")
     } noraise {
       _ => fail("a v6 secret key with count_delta \{delta} was accepted")

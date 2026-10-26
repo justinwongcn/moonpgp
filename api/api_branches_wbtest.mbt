@@ -1,7 +1,6 @@
 ///|
-/// Targeted tests for paths the coverage report showed unexercised
-/// (consolidation task 1): import-parser branches, password retry error
-/// paths, literal-walk chains and small API branches.
+/// Branch tests for the import parser, password retry error paths,
+/// literal-walk chains and small API branches.
 
 ///|
 /// A PRIVATE certificate may carry a public-only subkey (an export that

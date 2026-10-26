@@ -113,11 +113,11 @@ pub fn RsaPrivateKey::pkcs1_v15_decrypt(
 ) -> Bytes raise {
   let k = self.public.octet_length()
   guard ciphertext.length() == k else {
-    @error.fail("rsa: ciphertext length mismatch")
+    @error.malformed("rsa: ciphertext length mismatch")
   }
   let em = i2osp(self.raw_decrypt(os2ip(ciphertext)), k)
   guard em[0] == b'\x00' && em[1] == b'\x02' else {
-    @error.fail("rsa: bad decryption block type")
+    @error.malformed("rsa: bad decryption block type")
   }
   // Find the 00 separator after at least 8 nonzero padding octets.
   let mut sep = -1
@@ -127,7 +127,7 @@ pub fn RsaPrivateKey::pkcs1_v15_decrypt(
       break
     }
   }
-  guard sep >= 10 else { @error.fail("rsa: malformed PKCS#1 padding") }
+  guard sep >= 10 else { @error.malformed("rsa: malformed PKCS#1 padding") }
   em[sep + 1:k].to_owned()
 }
 

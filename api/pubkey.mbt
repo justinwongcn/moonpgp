@@ -73,7 +73,7 @@ fn unwrap_pkesk(
     @packet.Ecdh => ecdh_unwrap_session_key(pkesk, sk)
     a if a.is_rsa() => rsa_unwrap_session_key(pkesk, sk)
     _ =>
-      @error.fail(
+      @error.unsupported(
         "api: unsupported PKESK algorithm \{pkesk.pub_algo().number()}",
       )
   }
@@ -457,7 +457,7 @@ fn unwrap_seipd_inner(
       // version that does not align with the version of the payload."
       // A v6 PKESK pairs with v2 SEIPD, a v3 PKESK with v1 SEIPD.
       guard (seipd.version == 2) == (esk_version == 6) else {
-        @error.fail(
+        @error.malformed(
           "api: PKESK version \{esk_version} does not align with SEIPD version \{seipd.version}",
         )
       }
@@ -465,11 +465,11 @@ fn unwrap_seipd_inner(
         return open_seipd_v2(seipd, session_key)
       }
       guard seipd.version == 1 else {
-        @error.fail("api: unsupported SEIPD version \{seipd.version}")
+        @error.unsupported("api: unsupported SEIPD version \{seipd.version}")
       }
       let algo = match @primitives.cipher_algo_of_number(algo_id) {
         Some(a) => a
-        None => @error.fail("api: unsupported session cipher \{algo_id}")
+        None => @error.unsupported("api: unsupported session cipher \{algo_id}")
       }
       let bc = @primitives.new_block_cipher(algo, session_key.exact_view())
       return @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())

@@ -65,7 +65,7 @@ test "v6 SKESK + v2 SEIPD reject the wrong passphrase" {
     ignore(@api.decrypt_with_password(A10_OCB_MESSAGE, "wrong"))
     false
   } catch {
-    @error.PgpError(msg~) => {
+    @error.WrongPassphrase(msg~) => {
       assert_true(msg.contains("tag mismatch"))
       true
     }
@@ -87,7 +87,7 @@ test "v2 SEIPD tampering is rejected (chunked AEAD tag)" {
     ignore(@api.decrypt_with_password(tampered, "password"))
     false
   } catch {
-    @error.PgpError(msg~) => {
+    @error.Malformed(msg~) => {
       assert_true(msg.contains("SEIPD v2"))
       true
     }

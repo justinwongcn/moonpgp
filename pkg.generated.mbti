@@ -5,6 +5,7 @@ import {
   "justinwongcn/moonpgp/api",
   "justinwongcn/moonpgp/cipher",
   "justinwongcn/moonpgp/compress",
+  "justinwongcn/moonpgp/error",
   "justinwongcn/moonpgp/packet",
   "justinwongcn/moonpgp/primitives",
 }
@@ -98,6 +99,8 @@ pub using @api {type KeyGenBuilder}
 pub using @api {type KeyRing}
 
 pub using @api {type Pgp}
+
+pub using @error {type PgpError}
 
 pub using @api {type PrivateKey}
 

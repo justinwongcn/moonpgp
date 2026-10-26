@@ -26,13 +26,15 @@ pub fn seipd_v2_kdf(
   header5 : BytesView,
 ) -> (Bytes, Bytes) raise {
   guard salt.length() == 32 else {
-    @error.fail("seipd_v2: the salt must be 32 octets")
+    @error.malformed("seipd_v2: the salt must be 32 octets")
   }
   guard header5.length() == 5 else {
-    @error.fail("seipd_v2: the header must be 5 octets")
+    @error.malformed("seipd_v2: the header must be 5 octets")
   }
   let iv_len = mode.iv_length()
-  guard iv_len >= 8 else { @error.fail("seipd_v2: AEAD nonce shorter than 8") }
+  guard iv_len >= 8 else {
+    @error.malformed("seipd_v2: AEAD nonce shorter than 8")
+  }
   let want = key_len + iv_len - 8
   let okm = @primitives.hkdf_sha256(session_key, salt, header5, want)
   (okm[0:key_len].to_owned(), okm[key_len:want].to_owned())
@@ -42,7 +44,7 @@ pub fn seipd_v2_kdf(
 /// The v2 chunk nonce: `iv || u64be(index)`.
 fn seipd_v2_nonce(iv : BytesView, index : Int64) -> Bytes raise {
   guard iv.length() + 8 <= 16 + 8 else {
-    @error.fail("seipd_v2: bad nonce prefix length")
+    @error.malformed("seipd_v2: bad nonce prefix length")
   }
   let out : Array[Byte] = Array(capacity=iv.length() + 8)
   for b in iv {
@@ -83,15 +85,17 @@ pub fn seipd_v2_seal(
   plain : BytesView,
 ) -> Bytes raise {
   guard header5.length() == 5 else {
-    @error.fail("seipd_v2: the header must be 5 octets")
+    @error.malformed("seipd_v2: the header must be 5 octets")
   }
   guard iv.length() == mode.iv_length() - 8 else {
-    @error.fail("seipd_v2: bad nonce prefix length")
+    @error.malformed("seipd_v2: bad nonce prefix length")
   }
   // RFC 9580 §5.13.2: implementations MUST NOT create a chunk octet above
   // 16 (4 MiB chunks), though they must accept 0..16 when reading.
   guard chunk_octet >= 0 && chunk_octet <= 16 else {
-    @error.fail("seipd_v2: chunk size octet \{chunk_octet} above the 16 limit")
+    @error.malformed(
+      "seipd_v2: chunk size octet \{chunk_octet} above the 16 limit",
+    )
   }
   let chunk_size = aead_chunk_size(chunk_octet)
   let out = Buffer(size_hint=plain.length() + 32)
@@ -137,17 +141,17 @@ pub fn seipd_v2_open(
   cipher : BytesView,
 ) -> Bytes raise {
   guard header5.length() == 5 else {
-    @error.fail("seipd_v2: the header must be 5 octets")
+    @error.malformed("seipd_v2: the header must be 5 octets")
   }
   guard iv.length() == mode.iv_length() - 8 else {
-    @error.fail("seipd_v2: bad nonce prefix length")
+    @error.malformed("seipd_v2: bad nonce prefix length")
   }
   // RFC 9580 §5.13.2: values 0..16 MUST be accepted.
   guard chunk_octet >= 0 && chunk_octet <= 16 else {
-    @error.fail("seipd_v2: chunk size octet \{chunk_octet} out of range")
+    @error.malformed("seipd_v2: chunk size octet \{chunk_octet} out of range")
   }
   guard cipher.length() >= mode.tag_length() else {
-    @error.fail("seipd_v2: payload shorter than the final tag")
+    @error.malformed("seipd_v2: payload shorter than the final tag")
   }
   let chunk_size = aead_chunk_size(chunk_octet)
   let out = Buffer(size_hint=cipher.length())
@@ -219,7 +223,7 @@ pub fn seipd_v2_open(
       )
   }
   guard opened.length() == 0 else {
-    @error.fail("seipd_v2: the final tag covers a non-empty plaintext")
+    @error.malformed("seipd_v2: the final tag covers a non-empty plaintext")
   }
   out.to_bytes()
 }

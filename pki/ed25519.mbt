@@ -34,7 +34,7 @@ pub fn ed25519_generate() -> Ed25519SecretKey raise {
 /// clamped SHA-512 expansion, multiplied by the base point).
 pub fn ed25519_public_of_seed(seed : BytesView) -> Ed25519SecretKey raise {
   guard seed.length() == 32 else {
-    @error.fail("pki: Ed25519 seed must be 32 octets")
+    @error.malformed("pki: Ed25519 seed must be 32 octets")
   }
   let ctx = ed25519_ctx()
   let (a, _prefix) = ed_expand_seed(seed)
@@ -50,7 +50,7 @@ pub fn ed25519_public_of_seed(seed : BytesView) -> Ed25519SecretKey raise {
 /// failing at construction (same contract as the packet layer).
 pub fn ed25519_public_key(bytes : BytesView) -> Ed25519PublicKeyValue raise {
   guard bytes.length() == 32 else {
-    @error.fail("pki: Ed25519 public key must be 32 octets")
+    @error.malformed("pki: Ed25519 public key must be 32 octets")
   }
   Ed25519PublicKeyValue::{ bytes: bytes.to_owned(), }
 }

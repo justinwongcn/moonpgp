@@ -26,6 +26,45 @@ import {
 
 The root package exposes its `@api` functions and option types as `@moonpgp.*`.
 
+## A taste of the API
+
+Generate a key, encrypt to it, open the message again. This block is
+type-checked and run by `moon test`, so it cannot drift from the code:
+
+```mbt check
+///|
+test "a tiny round trip" {
+  let key = @moonpgp.generate_ed25519_key("alice@example.com")
+  let armored = @moonpgp.pgp().encryption().recipient(key.to_public()).finish()(
+    b"hi, from the README",
+  )
+  let open = @moonpgp.pgp().decryption().decryption_key(key).finish()
+  match open(armored) {
+    Data(data) => assert_eq(data, b"hi, from the README")
+    Verified(data) => assert_eq(data, b"hi, from the README")
+    SignatureError(_) => fail("unexpected signature error")
+  }
+}
+```
+
+Failures are typed: a wrong passphrase raises `WrongPassphrase`, unparsable
+input `Malformed`, an unimplemented algorithm `Unsupported` — all reachable
+from the bare root import:
+
+```mbt check
+///|
+test "wrong passphrases are a typed error" {
+  let key = @moonpgp.generate_ed25519_key("alice@example.com").lock("right")
+  try {
+    let _ = key.unlock("wrong")
+    fail("unlocking must fail")
+  } catch {
+    @moonpgp.PgpError::WrongPassphrase(_) => () // the expected failure class
+    _ => fail("expected WrongPassphrase")
+  }
+}
+```
+
 There's also a command-line demo, if you clone the repo:
 
 ```bash

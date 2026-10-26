@@ -99,7 +99,7 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
     }
   }
   guard parts.length() > 0 else {
-    @error.fail("mime: no multipart parts found")
+    @error.malformed("mime: no multipart parts found")
   }
   parts
 }
@@ -129,18 +129,18 @@ pub fn extract_pgp_encrypted(mime_text : String) -> String raise {
   let msg = parse_message(mime_text)
   let content_type = match msg.header("Content-Type") {
     Some(ct) => ct
-    None => @error.fail("mime: missing Content-Type")
+    None => @error.malformed("mime: missing Content-Type")
   }
   guard content_type.to_lower().contains("multipart/encrypted") else {
-    @error.fail("mime: not multipart/encrypted")
+    @error.malformed("mime: not multipart/encrypted")
   }
   let boundary = match content_type_boundary(content_type) {
     Some(b) => b
-    None => @error.fail("mime: missing boundary")
+    None => @error.malformed("mime: missing boundary")
   }
   let parts = split_multipart(msg.body, boundary)
   guard parts.length() >= 2 else {
-    @error.fail("mime: multipart/encrypted needs 2 parts")
+    @error.malformed("mime: multipart/encrypted needs 2 parts")
   }
   let body = strip_leading_headers_keep_body(parts[1])
   if body.has_suffix("\n") {
@@ -165,18 +165,18 @@ pub fn extract_pgp_signed(mime_text : String) -> PgpMimeSigned raise {
   let msg = parse_message(mime_text)
   let content_type = match msg.header("Content-Type") {
     Some(ct) => ct
-    None => @error.fail("mime: missing Content-Type")
+    None => @error.malformed("mime: missing Content-Type")
   }
   guard content_type.to_lower().contains("multipart/signed") else {
-    @error.fail("mime: not multipart/signed")
+    @error.malformed("mime: not multipart/signed")
   }
   let boundary = match content_type_boundary(content_type) {
     Some(b) => b
-    None => @error.fail("mime: missing boundary")
+    None => @error.malformed("mime: missing boundary")
   }
   let parts = split_multipart(msg.body, boundary)
   guard parts.length() >= 2 else {
-    @error.fail("mime: multipart/signed needs 2 parts")
+    @error.malformed("mime: multipart/signed needs 2 parts")
   }
   // The signature part's body (after its blank line) is the armor.
   let sig_armor = strip_leading_headers_keep_body(parts[1])

@@ -40,7 +40,7 @@ pub fn zip_compress(data : BytesView) -> Bytes {
 /// incoming mail may arrive compressed with dynamic Huffman tables.
 pub fn zip_decompress(data : BytesView) -> Bytes raise {
   @flate.inflate_all(data.to_owned()) catch {
-    _ => @error.fail("compress: inflate failed")
+    _ => @error.malformed("compress: inflate failed")
   }
 }
 
@@ -53,7 +53,7 @@ pub fn zlib_compress(data : BytesView) -> Bytes {
 ///|
 pub fn zlib_decompress(data : BytesView) -> Bytes raise {
   @zlib.decompress(data) catch {
-    _ => @error.fail("compress: zlib inflate failed")
+    _ => @error.malformed("compress: zlib inflate failed")
   }
 }
 
@@ -69,7 +69,7 @@ pub extend CompressedAlgo with Eq::{not_equal, equal}
 /// bomb never materializes.
 pub fn zip_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise {
   @flate.inflate_all(data, max_output=max_out) catch {
-    _ => @error.fail("compress: inflate failed (limit \{max_out} octets)")
+    _ => @error.malformed("compress: inflate failed (limit \{max_out} octets)")
   }
 }
 
@@ -90,7 +90,8 @@ pub fn zlib_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise 
       chunk.mut_view(),
       end=true,
     ) catch {
-      ZlibError(_, msg) => @error.fail("compress: zlib inflate failed: \{msg}")
+      ZlibError(_, msg) =>
+        @error.malformed("compress: zlib inflate failed: \{msg}")
     }
     pos = pos + dec.last_consumed()
     let produced = dec.last_produced()
@@ -104,7 +105,7 @@ pub fn zlib_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise 
     }
     match status {
       Done => return Bytes::from_array(out)
-      NeedMoreInput => @error.fail("compress: truncated zlib stream")
+      NeedMoreInput => @error.malformed("compress: truncated zlib stream")
       NeedMoreOutput => continue
     }
   }

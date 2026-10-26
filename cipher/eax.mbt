@@ -178,7 +178,7 @@ pub fn eax_decrypt(
     c.exact_view(),
   )
   guard @primitives.ct_equal(want.exact_view(), tag) else {
-    @error.fail("eax: authentication tag mismatch")
+    @error.malformed("eax: authentication tag mismatch")
   }
   eax_ctr(bc, n.exact_view(), ct)
 }

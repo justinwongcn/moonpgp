@@ -26,6 +26,40 @@ import {
 
 根包把 `@api` 的函数和选项类型以 `@moonpgp.*` 的形式导出。
 
+## 接口速览
+
+生成一把密钥、加密、再解开。下面的代码块会被 `moon test` 编译并执行，不会与代码脱节：
+
+```mbt check
+test "a tiny round trip" {
+  let key = @moonpgp.generate_ed25519_key("alice@example.com")
+  let armored = @moonpgp.pgp().encryption().recipient(key.to_public()).finish()(
+    b"hi, from the README",
+  )
+  let open = @moonpgp.pgp().decryption().decryption_key(key).finish()
+  match open(armored) {
+    Data(data) => assert_eq(data, b"hi, from the README")
+    Verified(data) => assert_eq(data, b"hi, from the README")
+    SignatureError(_) => fail("unexpected signature error")
+  }
+}
+```
+
+错误是带类型的：口令错误抛 `WrongPassphrase`，输入损坏抛 `Malformed`，未实现的算法抛 `Unsupported`——都从根包直接可用：
+
+```mbt check
+test "wrong passphrases are a typed error" {
+  let key = @moonpgp.generate_ed25519_key("alice@example.com").lock("right")
+  try {
+    let _ = key.unlock("wrong")
+    fail("unlocking must fail")
+  } catch {
+    WrongPassphrase(_) => () // 预期的失败类别
+    _ => fail("expected WrongPassphrase")
+  }
+}
+```
+
 仓库里还带一个命令行示例，克隆下来就能跑：
 
 ```bash

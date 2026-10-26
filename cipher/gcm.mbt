@@ -189,7 +189,7 @@ pub fn gcm_decrypt(
     gcm_ghash(h.exact_view(), ad, ct).exact_view(),
   )
   guard @primitives.ct_equal(tag.exact_view(), stored_tag) else {
-    @error.fail("gcm: authentication tag mismatch")
+    @error.malformed("gcm: authentication tag mismatch")
   }
   let out = Buffer(size_hint=ct.length())
   let mut ctr = gcm_inc32(j0.exact_view())

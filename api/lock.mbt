@@ -28,7 +28,7 @@ fn secret_key_aead_mode(
 ) -> @cipher.AeadMode raise {
   match @cipher.aead_mode_of_number(key.aead_algo) {
     Some(m) => m
-    None => @error.fail("api: unknown AEAD algorithm \{key.aead_algo}")
+    None => @error.unsupported("api: unknown AEAD algorithm \{key.aead_algo}")
   }
 }
 
@@ -54,7 +54,7 @@ fn unlock_secret_key(
   // §9.2 MUST 3DES; CAST5 was GnuPG's pre-AES default) — generation
   // still only ever writes AES (see `lock_secret_key`).
   guard @primitives.cipher_algo_of_number(key.cipher_algo) is Some(_) else {
-    @error.fail("api: unsupported protection cipher \{key.cipher_algo}")
+    @error.unsupported("api: unsupported protection cipher \{key.cipher_algo}")
   }
   let algo = @error.require(
     @primitives.cipher_algo_of_number(key.cipher_algo),
@@ -108,7 +108,7 @@ fn unlock_secret_key(
       }
     } catch {
       _ =>
-        @error.fail(
+        @error.wrong_passphrase(
           "api: secret key decryption failed (wrong passphrase or corrupted key)",
         )
     }
@@ -139,7 +139,7 @@ fn unlock_secret_key(
     key.iv.exact_view(),
     key.secret_material.exact_view(),
   ) catch {
-    _ => @error.fail("api: secret key decryption failed")
+    _ => @error.wrong_passphrase("api: secret key decryption failed")
   }
   // Split off the trailing check: 20-byte SHA-1 (usage 254) or 2-byte sum.
   let check_len : Int32 = if key.s2k_usage == 254 { 20 } else { 2 }
@@ -151,13 +151,13 @@ fn unlock_secret_key(
   if key.s2k_usage == 254 {
     let want = @primitives.Sha1.digest(material.exact_view())
     guard @primitives.ct_equal(want.exact_view(), check.exact_view()) else {
-      @error.fail("api: wrong passphrase (SHA-1 check failed)")
+      @error.wrong_passphrase("api: wrong passphrase (SHA-1 check failed)")
     }
   } else {
     let want = @packet.session_key_checksum(material.exact_view())
     let got = (check[0].to_int() << 8) | check[1].to_int()
     guard want == got else {
-      @error.fail("api: wrong passphrase (checksum failed)")
+      @error.wrong_passphrase("api: wrong passphrase (checksum failed)")
     }
   }
   @packet.SecretKeyPacket::{
@@ -273,6 +273,24 @@ fn lock_secret_key_argon2(
 /// Unlock the primary key (and its subkey) of a transferable private key
 /// with a passphrase. Returns a copy with plaintext secret material.
 /// Handles both the CFB (254/255) and the AEAD + Argon2 (253) protections.
+/// A wrong passphrase raises the typed `WrongPassphrase` error (for AEAD
+/// protection the same variant also covers a corrupted key; the message
+/// text tells the two apart).
+///
+/// # Example
+///
+/// ```mbt check
+/// test "unlock raises the typed WrongPassphrase error" {
+///   let key = @api.generate_ed25519_key("A <a@example.com>").lock("correct horse")
+///   try {
+///     let _ = key.unlock("wrong horse")
+///     fail("unlocking with the wrong passphrase must fail")
+///   } catch {
+///     @error.WrongPassphrase(_) => () // the expected failure class
+///     _ => fail("expected WrongPassphrase")
+///   }
+/// }
+/// ```
 pub fn PrivateKey::unlock(
   self : PrivateKey,
   passphrase : String,

@@ -75,10 +75,10 @@ pub fn parse_header_params(
     let key = keybuf.to_string().trim().to_owned().to_lower()
     if i >= n || chars[i] == ';' {
       // Segment without '=': tolerate empty ones, reject named ones.
-      guard key == "" else { @error.fail("mime: parameter without value") }
+      guard key == "" else { @error.malformed("mime: parameter without value") }
       continue
     }
-    guard key != "" else { @error.fail("mime: empty parameter name") }
+    guard key != "" else { @error.malformed("mime: empty parameter name") }
     i = i + 1
     while i < n && (chars[i] == ' ' || chars[i] == '\t') {
       i = i + 1
@@ -130,7 +130,7 @@ fn scan_quoted(
       i = i + 1
     }
   }
-  guard closed else { @error.fail("mime: unterminated quoted string") }
+  guard closed else { @error.malformed("mime: unterminated quoted string") }
   (buf.to_string(), i)
 }
 
@@ -140,7 +140,7 @@ fn scan_quoted(
 pub fn parse_content_type(value : String) -> MediaType raise {
   let (token, params) = parse_header_params(value)
   guard token.contains("/") else {
-    @error.fail("mime: invalid content type \"\{token}\"")
+    @error.malformed("mime: invalid content type \"\{token}\"")
   }
   let slash = match token.find("/") {
     Some(k) => k
@@ -149,7 +149,7 @@ pub fn parse_content_type(value : String) -> MediaType raise {
   let main_type = token[0:slash].to_owned()
   let sub_type = token[slash + 1:token.length()].to_owned()
   guard main_type != "" && sub_type != "" else {
-    @error.fail("mime: invalid content type \"\{token}\"")
+    @error.malformed("mime: invalid content type \"\{token}\"")
   }
   MediaType::{ main_type, sub_type, params, }
 }

@@ -28,7 +28,7 @@ pub fn Reader::view(self : Reader) -> BytesView {
 ///|
 pub fn Reader::read_u8(self : Reader) -> Int32 raise {
   guard self.remaining() >= 1 else {
-    @error.fail("packet: unexpected end of data (u8)")
+    @error.malformed("packet: unexpected end of data (u8)")
   }
   let b = self.buf[self.pos].to_int()
   self.pos = self.pos + 1
@@ -38,7 +38,7 @@ pub fn Reader::read_u8(self : Reader) -> Int32 raise {
 ///|
 pub fn Reader::read_u16(self : Reader) -> Int32 raise {
   guard self.remaining() >= 2 else {
-    @error.fail("packet: unexpected end of data (u16)")
+    @error.malformed("packet: unexpected end of data (u16)")
   }
   let v = (self.buf[self.pos].to_int() << 8) | self.buf[self.pos + 1].to_int()
   self.pos = self.pos + 2
@@ -54,7 +54,7 @@ pub fn Reader::read_u16(self : Reader) -> Int32 raise {
 /// re-serialization.
 pub fn Reader::read_u32(self : Reader) -> Int32 raise {
   guard self.remaining() >= 4 else {
-    @error.fail("packet: unexpected end of data (u32)")
+    @error.malformed("packet: unexpected end of data (u32)")
   }
   let v = (self.buf[self.pos].to_int() << 24) |
     (self.buf[self.pos + 1].to_int() << 16) |
@@ -69,10 +69,10 @@ pub fn Reader::read_bytes(self : Reader, n : Int32) -> Bytes raise {
   guard n >= 0 else {
     // A negative length is a malformed packet (often a u32 length ≥ 2^31
     // read through the F09 two's-complement convention), not a shortfall.
-    @error.fail("packet: invalid negative length \{n}")
+    @error.malformed("packet: invalid negative length \{n}")
   }
   guard self.remaining() >= n else {
-    @error.fail("packet: unexpected end of data (bytes, want \{n})")
+    @error.malformed("packet: unexpected end of data (bytes, want \{n})")
   }
   let out = self.buf[self.pos:self.pos + n].to_owned()
   self.pos = self.pos + n
@@ -98,7 +98,7 @@ pub const MAX_MPI_BITS : Int32 = 16384
 pub fn Reader::read_mpi(self : Reader) -> Bytes raise {
   let bits = self.read_u16()
   guard bits <= MAX_MPI_BITS else {
-    @error.fail(
+    @error.malformed(
       "packet: MPI bit length \{bits} exceeds the implementation maximum \{MAX_MPI_BITS}",
     )
   }

@@ -212,7 +212,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
               Some(c) => crc = Some(c)
               // A "=" line that does not parse as a CRC must not be dropped:
               // silently skipping it would bypass the integrity check.
-              None => @error.fail("armor: malformed CRC line")
+              None => @error.malformed("armor: malformed CRC line")
             }
           } else {
             body.write_stringview(l)
@@ -220,17 +220,17 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
           i = i + 1
         }
         if !closed {
-          @error.fail(
+          @error.malformed(
             "armor: missing END marker after \{armor_type.begin_marker()}",
           )
         }
         let data = @base64.decode(body.to_string(), ignore_whitespace=true) catch {
-          _ => @error.fail("armor: invalid base64 body")
+          _ => @error.malformed("armor: invalid base64 body")
         }
         match crc {
           Some(expected) =>
             if expected != crc24(data.exact_view()) {
-              @error.fail("armor: CRC-24 mismatch")
+              @error.malformed("armor: CRC-24 mismatch")
             }
           None => ()
         }
@@ -239,7 +239,7 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
     }
   }
   if blocks.is_empty() {
-    @error.fail("armor: no armor block found")
+    @error.malformed("armor: no armor block found")
   }
   blocks
 }

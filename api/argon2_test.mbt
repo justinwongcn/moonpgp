@@ -71,7 +71,7 @@ test "argon2 SKESK rejects the wrong passphrase" {
     ignore(@api.decrypt_with_password(message, "wrong"))
     false
   } catch {
-    @error.PgpError(msg~) => {
+    @error.WrongPassphrase(msg~) => {
       // Either the garbage session key fails the SEIPD layer or its cipher
       // octet is not a known algorithm; both are controlled failures.
       assert_true(msg.contains("seipd:") || msg.contains("api:"))
@@ -128,7 +128,7 @@ test "argon2 specifier is rejected with S2K usage 254/255" {
       ignore(@packet.SecretKeyPacket::parse(key.to_body().exact_view()))
       false
     } catch {
-      @error.PgpError(msg~) => {
+      @error.Malformed(msg~) => {
         assert_true(msg.contains("without AEAD"))
         true
       }
@@ -311,8 +311,7 @@ test "the default Argon2 memory policy refuses a 2 GiB request" {
 test "an explicit Argon2 memory cap is enforced before allocating" {
   let wire = argon2_skesk_with_memory(10) // 2^10 KiB = 1 MiB
   try @api.decrypt_binary_with_password(wire, "pw") catch {
-    @error.PgpError(msg~) => assert_false(msg.contains("exceeds the cap"))
-    _ => fail("expected a PgpError for the bogus session key")
+    e => assert_false(e.to_string().contains("exceeds the cap"))
   } noraise {
     _ => fail("the bogus session key must still be rejected")
   }

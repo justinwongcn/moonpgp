@@ -9,6 +9,31 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — v6 dual-subkey generation and v6 subkey-revocation coverage (2026-10-26)
+
+- `generate_ed25519_v6_key_with_signing_subkey` builds the gpg dual-subkey
+  shape on a v6 certificate: a cert-only Ed25519 primary (self-signature
+  key flags 0x01), an X25519 encryption subkey and an Ed25519 signing
+  subkey whose v6 binding embeds a v6 Primary Key Binding
+  (cross-certification, RFC 9580 §5.2.3.26 — a v6 key's self-signatures
+  must be v6). With a cert-only primary, document signatures flow through
+  the signing subkey, which makes the v6 embedded-signature branch (added
+  with the R3 review fix) publicly reachable for the first time.
+  `api/v6_signing_subkey_test.mbt` pins the shape end to end: flags, both
+  bindings verifying, the embedded signature's v6 issuer fingerprint,
+  signing-subkey issuer on detached signatures, and export/encryption
+  round trips.
+- v6 subkey revocation is covered too: `revoke_subkey` on a v6 key emits
+  a version-6 SubkeyRevocation (no Issuer Key ID, the primary named by
+  fingerprint in the hashed area), and the new test in
+  `api/revocation_test.mbt` pins selection drop-out, decryption of mail
+  that predates the revocation, and re-export survival.
+- Interop boundary probed (2026-10-26): gpg 2.4.5 rejects v6 key and
+  signature packets outright ("packet with unknown version 6"), so the
+  gpg fixtures necessarily remain v4; v6 verification rests on the
+  library's own cryptographic checks and round trips until a
+  RFC 9580-capable GnuPG is available.
+
 ### Changed — performance: Argon2 permutation round in registers
 
 - `argon2_round16` replaces the per-word `blamka_gb`/`argon2_round` pair:

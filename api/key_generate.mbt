@@ -211,3 +211,72 @@ pub fn generate_ed25519_v6_key(user_id : String) -> PrivateKey raise {
     revocations: [],
   }
 }
+
+///|
+/// Generate a v6 certificate in the gpg dual-subkey shape: a CERT-ONLY
+/// Ed25519 primary (key flags 0x01 — the self-signature withholds the
+/// sign flag), an X25519 encryption subkey and an Ed25519 signing subkey
+/// whose v6 binding embeds a v6 Primary Key Binding (cross-certification,
+/// RFC 9580 §5.2.3.26 — a v6 key's self-signatures MUST be v6, so the
+/// embedded signature is v6-shaped). Document signatures then flow
+/// through the signing subkey (`signing_packet`), exactly like the gpg
+/// dual-subkey interop fixtures, exercising the v6 cross-certification
+/// path end to end.
+pub fn generate_ed25519_v6_key_with_signing_subkey(
+  user_id : String,
+) -> PrivateKey raise {
+  let now = @primitives.unix_now().to_int()
+  let primary = build_ed25519_v6_secret_key_packet(
+    @primitives.random_bytes(32),
+    now,
+  )
+  // Cert-only: certify flag only, so every document signature must come
+  // from the signing subkey.
+  let self_sig = make_self_signature(
+    primary,
+    primary.public,
+    user_id,
+    now,
+    key_flags=0x01,
+  )
+  let direct = make_direct_key_signature(primary, primary.public, now)
+  let enc_subkey = build_v6_x25519_secret_key_packet(now)
+  let enc_binding = make_binding_signature(
+    primary,
+    primary.public,
+    enc_subkey.public,
+    now,
+  )
+  let sign_subkey = build_ed25519_v6_secret_key_packet(
+    @primitives.random_bytes(32),
+    now,
+  )
+  // Cross-certification is mandatory for a sign-capable subkey: the
+  // binding embeds the subkey's own v6 PrimaryKeyBinding over the pair.
+  let sign_binding = make_binding_signature(
+    primary,
+    primary.public,
+    sign_subkey.public,
+    now,
+    key_flags=0x02,
+    subkey_secret=sign_subkey,
+  )
+  PrivateKey::{
+    primary,
+    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
+    direct_signature: Some(direct),
+    subkeys: [
+      SecretSubkeyCert::{
+        secret: enc_subkey,
+        binding: enc_binding,
+        revocation: None,
+      },
+      SecretSubkeyCert::{
+        secret: sign_subkey,
+        binding: sign_binding,
+        revocation: None,
+      },
+    ],
+    revocations: [],
+  }
+}

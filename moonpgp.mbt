@@ -21,6 +21,7 @@ pub using @api {
   encrypt_with_password_v6,
   generate_ed25519_key,
   generate_ed25519_v6_key,
+  generate_ed25519_v6_key_with_signing_subkey,
   generate_key,
   generate_revocation_certificate,
   generate_session_key,

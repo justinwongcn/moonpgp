@@ -38,6 +38,8 @@ pub fn generate_ed25519_key(String) -> PrivateKey raise
 
 pub fn generate_ed25519_v6_key(String) -> PrivateKey raise
 
+pub fn generate_ed25519_v6_key_with_signing_subkey(String) -> PrivateKey raise
+
 pub fn generate_key(String, bits? : Int32) -> PrivateKey raise
 
 pub fn generate_revocation_certificate(PrivateKey, reason? : RevocationReason, message? : String, created? : Int32) -> String raise

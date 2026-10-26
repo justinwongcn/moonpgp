@@ -127,3 +127,64 @@ test "standalone revocation certificate generates, applies, and rejects misuse" 
   let priv_revoked = key.apply_revocation_certificate(cert)
   assert_true(priv_revoked.to_public().is_revoked(@primitives.unix_now()))
 }
+
+///|
+/// W2: v6 subkey revocation — the v6 branch of the subkey-revocation
+/// signature (version 6, no Issuer Key ID, the primary named by
+/// fingerprint in the hashed area). The revoked encryption subkey drops
+/// out of selection immediately, mail that arrived earlier keeps
+/// decrypting, and the revocation survives re-export.
+test "revoke_subkey on a v6 key emits a v6 revocation and gates selection" {
+  let key = @api.generate_ed25519_v6_key("V6 Sub Rev <v6sr@example.com>")
+  let enc = key.subkeys[0]
+  let sub_id = enc.secret.public.key_id()
+  // Mail encrypted BEFORE the revocation...
+  let data = @primitives.utf8_bytes("written before the subkey died")
+  let msg = @api.encrypt_to_recipients(data, [key.to_public()])
+  let revoked = @api.revoke_subkey(
+    key,
+    sub_id.exact_view(),
+    reason=@api.Retired,
+  )
+  // The revocation signature is a v6 SubkeyRevocation signed by the
+  // primary: no Issuer Key ID in the unhashed area, the primary named by
+  // fingerprint in the hashed area.
+  let r = revoked.subkeys[0].revocation
+  guard r is Some(sig) else { abort("missing subkey revocation") }
+  guard sig.sig_type() == @packet.SubkeyRevocation else {
+    abort("wrong revocation type")
+  }
+  guard sig.version() == 6 else { abort("subkey revocation is not v6") }
+  guard @packet.find_subpacket(
+      sig.unhashed_subpackets,
+      @packet.SIGSUB_ISSUER_KEY_ID,
+    )
+    is None else {
+    abort("v6 revocation must not carry an Issuer Key ID")
+  }
+  let issuer_fp = @packet.find_subpacket(
+    sig.hashed_subpackets,
+    @packet.SIGSUB_ISSUER_FINGERPRINT,
+  )
+  guard issuer_fp is Some(fp) && fp.length() == 33 && fp[0].to_int() == 6 else {
+    abort("v6 revocation lacks a v6 issuer fingerprint")
+  }
+  assert_eq(fp.exact_view()[1:].to_owned(), key.primary.public.fingerprint())
+  guard @api.verify_key_signature(sig, key.primary.public, enc.secret.public) else {
+    abort("v6 subkey revocation does not verify")
+  }
+  // The revoked subkey drops out of encryption selection immediately...
+  guard !revoked.to_public().can_encrypt(@primitives.unix_now()) else {
+    abort("revoked v6 encryption subkey still selectable")
+  }
+  // ...but mail that arrived earlier still decrypts.
+  assert_eq(
+    @utf8.decode_lossy(@api.decrypt_with_private_key(msg, revoked).exact_view()),
+    "written before the subkey died",
+  )
+  // And the revocation survives re-export.
+  let back = @api.PrivateKey::from_armored(revoked.to_armored())
+  guard back.subkeys[0].revocation is Some(_) else {
+    abort("round-trip lost the subkey revocation")
+  }
+}

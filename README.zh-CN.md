@@ -2,7 +2,7 @@
 
 用 MoonBit 写的 OpenPGP 库，可以做消息加解密、签名、密钥管理，也支持 PGP/MIME 邮件。
 
-**模块：** `justinwongcn/moonpgp` · [包文档](https://mooncakes.io/docs/justinwongcn/moonpgp)
+**模块：** `justinwongcn/moonpgp` · [包文档](https://mooncakes.io/docs/justinwongcn/moonpgp) · [![CI](https://github.com/justinwongcn/moonpgp/actions/workflows/ci.yml/badge.svg)](https://github.com/justinwongcn/moonpgp/actions/workflows/ci.yml)
 
 [English documentation](./README.mbt.md)
 
@@ -58,6 +58,27 @@ test "wrong passphrases are a typed error" {
     _ => fail("expected WrongPassphrase")
   }
 }
+```
+
+生成与校验分离签名：
+
+```mbt check
+test "detached signatures and verification" {
+  let signer = @moonpgp.generate_ed25519_key("signer@example.com")
+  let data = b"release tarball bytes or document payload"
+  let sig = @moonpgp.sign_detached(data, signer)
+  let status = @moonpgp.verify_detached(data, sig, signer.to_public())
+  assert_eq(status, @moonpgp.VerifyStatus::Ok)
+}
+```
+
+处理 PGP/MIME 邮件时，导入 `"justinwongcn/moonpgp/mime"`：
+
+```moonbit
+// 组装带签名的 PGP/MIME 邮件并验证：
+let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
+let (body, status) = @mime.verify_pgp_mime_signed(message, key.to_public())
+assert_eq(status, @api.Ok)
 ```
 
 仓库里还带一个命令行示例，克隆下来就能跑：

@@ -2,7 +2,7 @@
 
 An OpenPGP library written in MoonBit: message encryption and decryption, signatures, key management, and PGP/MIME email.
 
-**Module:** `justinwongcn/moonpgp` · [Package documentation](https://mooncakes.io/docs/justinwongcn/moonpgp)
+**Module:** `justinwongcn/moonpgp` · [Package documentation](https://mooncakes.io/docs/justinwongcn/moonpgp) · [![CI](https://github.com/justinwongcn/moonpgp/actions/workflows/ci.yml/badge.svg)](https://github.com/justinwongcn/moonpgp/actions/workflows/ci.yml)
 
 [中文文档](./README.zh-CN.md)
 
@@ -63,6 +63,28 @@ test "wrong passphrases are a typed error" {
     _ => fail("expected WrongPassphrase")
   }
 }
+```
+
+Sign data and verify detached signatures:
+
+```mbt check
+///|
+test "detached signatures and verification" {
+  let signer = @moonpgp.generate_ed25519_key("signer@example.com")
+  let data = b"release tarball bytes or document payload"
+  let sig = @moonpgp.sign_detached(data, signer)
+  let status = @moonpgp.verify_detached(data, sig, signer.to_public())
+  assert_eq(status, @moonpgp.VerifyStatus::Ok)
+}
+```
+
+For PGP/MIME emails, import `"justinwongcn/moonpgp/mime"`:
+
+```moonbit nocheck
+// Sign an email body and verify the multipart/signed structure:
+let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
+let (body, status) = @mime.verify_pgp_mime_signed(message, key.to_public())
+assert_eq(status, @api.Ok)
 ```
 
 There's also a command-line demo, if you clone the repo:

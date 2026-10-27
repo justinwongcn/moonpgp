@@ -9,6 +9,36 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Fixed — BZip2 truncated-stream crash (2026-10-28)
+
+- A stream truncated mid-header crashed the process (out-of-bounds bit
+  read) instead of raising: the 48-bit magic and 32-bit CRC reads in
+  the decoder's wide bit reader skipped the bounds guard their narrow
+  sibling has. Truncated input now raises the same malformed error.
+  Found by the new hand-crafted malformed-bitstream tests.
+
+### Added — test-completeness round (2026-10-28)
+
+- 24 new tests pinning the extension features' failure modes, driven by
+  a JEV review of what no existing test would catch: BZip2 malformed
+  streams (stored block/stream CRC fields, randomized blocks, bad block
+  magic and level digit, empty symbol map, bad group count, selector
+  out of range and over budget, empty block, run overflow, invalid
+  Huffman code — crafted bit for bit with a test-side bit writer),
+  multi-User-ID expiry re-issuance, the v6 Direct Key signature stamp,
+  explicit `created` stamps on every re-signing operation, locked-key
+  refusals for the add-operations, the lifetime cap, v6 User ID
+  revocation round-trips, primary-flag idempotency, and the
+  cryptographic rejection of foreign-signed User ID revocations.
+- `add_user_id` on an existing User ID now replaces its binding outright
+  (the same last-certification-wins rule import applies), so a formerly
+  revoked identity becomes usable again and the in-memory state matches
+  what a round trip produces.
+- `moon coverage analyze` uncovered-expression count for the three
+  extension-round source files dropped from 41 to 13; the remainder are
+  fail-closed guards reachable only with a fully forged multi-symbol
+  Huffman table.
+
 ### Added — certificate extension round (2026-10-28)
 
 - BZip2 decompression (RFC 9580 §9.4 algorithm 3) in pure MoonBit: the

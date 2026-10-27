@@ -39,7 +39,9 @@ fn BzBits::get(self : BzBits, n : Int32) -> Int32 raise {
 /// Read up to 48 bits into an Int64 — wide enough for the 48-bit block
 /// magics and the 32-bit CRCs, which do not fit a 31-bit Int.
 fn BzBits::get64(self : BzBits, n : Int32) -> Int64 raise {
-  guard n >= 1 && n <= 48 else { @error.fail("compress: bad bit width") }
+  guard n >= 1 && n <= 48 && self.pos + n <= self.data.length() * 8 else {
+    @error.malformed("compress: truncated bzip2 stream")
+  }
   let mut v = 0L
   for _ in 0..<n {
     let byte = self.data[self.pos >> 3].to_int()

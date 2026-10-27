@@ -138,8 +138,11 @@ fn make_uid_revocation_signature(
 /// Return a copy of `key` with a new User ID certified by the primary
 /// key — the "I also answer to this address" operation. The new
 /// certification inherits the key flags of the key-level self-signature
-/// so capability statements stay consistent across User IDs. The key
-/// must be unlocked.
+/// so capability statements stay consistent across User IDs.
+/// Re-certifying an existing User ID replaces its binding outright (the
+/// same last-certification-wins rule import applies), which is how a
+/// formerly revoked identity becomes usable again. The key must be
+/// unlocked.
 pub fn PrivateKey::add_user_id(
   self : PrivateKey,
   user_id : String,
@@ -159,11 +162,17 @@ pub fn PrivateKey::add_user_id(
     key_flags=flags,
   )
   let user_ids = self.user_ids.copy()
-  user_ids.push(UserIdBinding::{
-    user_id,
-    self_signature: sig,
-    revocation: None,
-  })
+  let fresh = UserIdBinding::{ user_id, self_signature: sig, revocation: None, }
+  let mut replaced = false
+  for i in 0..<user_ids.length() {
+    if user_ids[i].user_id == user_id {
+      user_ids[i] = fresh
+      replaced = true
+    }
+  }
+  if !replaced {
+    user_ids.push(fresh)
+  }
   { ..self, user_ids, }
 }
 

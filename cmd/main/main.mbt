@@ -33,7 +33,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
   match command {
     "keygen" => {
       check_args(rest.length(), 3)
-      let key = @api.generate_key(rest[0], bits=parse_bits(rest, 1024))
+      let key = @api.generate_key(rest[0], bits=parse_bits(rest, 2048))
       @fs.write_string_to_file(rest[1], key.to_armored())
       @fs.write_string_to_file(rest[2], key.to_public().to_armored())
       println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")

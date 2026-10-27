@@ -19,8 +19,8 @@ run() { moon run cmd/main --target native -- "$@"; }
 echo "== help =="
 run help >/dev/null
 
-echo "== keygen (RSA 1024, fast variant of the documented default) =="
-run keygen "Smoke <smoke@example.com>" "$work/sec.asc" "$work/pub.asc" 1024
+echo "== keygen (RSA 2048, default minimum bits) =="
+run keygen "Smoke <smoke@example.com>" "$work/sec.asc" "$work/pub.asc" 2048
 
 echo "== edkeygen / v6keygen =="
 run edkeygen "Smoke <smoke@example.com>" "$work/ed.asc" "$work/ed-pub.asc"

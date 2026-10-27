@@ -227,10 +227,17 @@ test "N7: subkey signature of an expired primary is Expired" {
     revocations: [],
   }
   let now = @primitives.unix_now()
-  assert_true(pk.is_expired(now))
-  assert_eq(lifecycle_status(expired_self, pk, Some(pk.subkeys[0])), Expired)
-  // The primary path (comp = None) reports Expired as before.
-  assert_eq(lifecycle_status(expired_self, pk, None), Expired)
+  if now > 0L {
+    assert_true(pk.is_expired(now))
+    assert_eq(lifecycle_status(expired_self, pk, Some(pk.subkeys[0])), Expired)
+    // The primary path (comp = None) reports Expired as before.
+    assert_eq(lifecycle_status(expired_self, pk, None), Expired)
+  } else {
+    // On clock-less platforms (unix_now == 0), expiry checks are skipped as documented.
+    assert_false(pk.is_expired(now))
+    assert_eq(lifecycle_status(expired_self, pk, Some(pk.subkeys[0])), Ok)
+    assert_eq(lifecycle_status(expired_self, pk, None), Ok)
+  }
 }
 
 ///|

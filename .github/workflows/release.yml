@@ -1,0 +1,81 @@
+name: Release
+
+# The gate before anything ships: a release is cut only from a green run of
+# the full pipeline. Dispatch this with the version to release; it checks
+# out the current commit, runs the same jobs CI runs, and only then tags
+# and creates the GitHub Release with notes taken from the CHANGELOG.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.4.0 (tags v0.4.0 on this commit)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: gate (fmt + check + build + test + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-moonbit
+      - name: moon fmt --check
+        run: moon fmt --check
+      - name: moon check --target all --deny-warn
+        run: moon check --target all --deny-warn
+      - name: build and test every backend
+        run: |
+          for target in native wasm js; do
+            moon build --target "$target"
+            moon test --target "$target"
+          done
+      - name: smoke test
+        run: bash scripts/ci_smoke.sh
+
+  publish:
+    name: tag and publish the release
+    needs: gate
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: sanity-check the version string
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must look like 0.4.0, got: $VERSION" >&2
+            exit 1
+          fi
+      - name: refuse to double-release
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION"; then
+            echo "tag v$VERSION already exists upstream" >&2
+            exit 1
+          fi
+      - name: create the annotated tag
+        run: |
+          git config user.name "moonpgp release"
+          git config user.email "noreply@github.com"
+          git tag -a "v$VERSION" -m "moonpgp v$VERSION"
+          git push origin "refs/tags/v$VERSION"
+      - name: create the GitHub release from the CHANGELOG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v ver="$VERSION" '
+            $0 ~ ("^## \\[" ver "\\]") { flag = 1; next }
+            flag && /^## /             { exit }
+            flag                       { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "no CHANGELOG section for [$VERSION] — fill it in first" >&2
+            exit 1
+          fi
+          gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md

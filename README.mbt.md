@@ -14,6 +14,8 @@ You'll need the MoonBit toolchain; `moon` resolves dependencies for you.
 moon add justinwongcn/moonpgp
 ```
 
+Use 0.2.0 or later: the 0.1.0 release is affected by a known subkey-injection flaw (see [SECURITY.md](SECURITY.md)). A fresh `moon add` resolves the newest release.
+
 The root package has the main API. Add `mime` and `mail` when you need PGP/MIME parsing or RFC 5322 message building:
 
 ```text

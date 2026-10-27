@@ -1,0 +1,30 @@
+name: Bug report
+description: Something in moonpgp misbehaves
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? Armored keys or messages that reproduce it help a lot.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: moonpgp version
+      description: The version you imported, e.g. 0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Backend
+      description: Where it reproduces, if you know
+      options:
+        - native
+        - wasm
+        - js
+        - not sure / several
+    validations:
+      required: false

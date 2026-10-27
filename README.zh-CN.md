@@ -14,6 +14,8 @@
 moon add justinwongcn/moonpgp
 ```
 
+请用 0.2.0 或更高版本：0.1.0 受已知的子键注入漏洞影响（见 [SECURITY.md](SECURITY.md)）。`moon add` 默认解析到最新发布版。
+
 根包是主要 API；要解析 PGP/MIME 或组装 RFC 5322 邮件，再单独导入 `mime` 和 `mail`：
 
 ```text

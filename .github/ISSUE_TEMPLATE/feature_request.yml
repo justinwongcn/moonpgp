@@ -1,0 +1,11 @@
+name: Feature request
+description: An algorithm, packet type or API you are missing
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need?
+      description: What are you trying to do, and what is missing for it? RFC 9580 section references are welcome.
+    validations:
+      required: true

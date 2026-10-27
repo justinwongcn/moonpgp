@@ -9,6 +9,22 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — open-source hygiene round (2026-10-28)
+
+- SECURITY.md: supported versions, a private reporting channel via GitHub
+  private vulnerability reporting, and an explicit end-of-life warning for
+  0.1.0. Private vulnerability reporting is enabled on the repository, and
+  a draft advisory covers the 0.1.0 subkey-injection flaw (fixed in 0.2.0).
+- Release gate: the dispatchable **Release** workflow runs the full
+  pipeline (fmt, strict check, build and test on all backends, smoke) and
+  only then tags and publishes the GitHub Release, taking the notes from
+  the CHANGELOG section of that version; `scripts/release_gate.sh` mirrors
+  it locally. Released versions 0.2.0 and 0.3.0 got retroactive `v` tags
+  and GitHub Releases.
+- CONTRIBUTING.md, issue and pull-request templates, and the Contributor
+  Covenant code of conduct.
+- The README install sections (both languages) now ask for at least 0.2.0.
+
 ### Added — v6 dual-subkey generation and v6 subkey-revocation coverage (2026-10-26)
 
 - `generate_ed25519_v6_key_with_signing_subkey` builds the gpg dual-subkey

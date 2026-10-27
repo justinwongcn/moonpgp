@@ -7,4 +7,5 @@ import {
 
 import {
   "justinwongcn/moonpgp/primitives",
+  "moonbitlang/x/fs",
 } for "test"

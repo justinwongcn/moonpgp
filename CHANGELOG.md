@@ -9,6 +9,40 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Added — certificate extension round (2026-10-28)
+
+- BZip2 decompression (RFC 9580 §9.4 algorithm 3) in pure MoonBit: the
+  full block decode — symbol map, MTF-coded Huffman selectors, canonical
+  Huffman, MTF/RLE2, inverse Burrows-Wheeler transform, leading run
+  layer — with the block and stream CRCs verified on the way out. Mail
+  that gpg emits under `--compress-algo bzip2` decrypts now; encoding
+  stays ZIP/ZLIB-only and the output-side error says so explicitly.
+  Live-verified against gpg 2.4.5 (`interop_gpg_bzip2_message.asc`).
+- Subkey rotation for existing certificates: `add_encryption_subkey`
+  (Curve25519Legacy ECDH on a v4 key, native X25519 on a v6 one) and
+  `add_signing_subkey` (EdDSA legacy / native Ed25519, whose binding
+  carries the cross-certification gpg requires).
+- Expiry management: `set_expiry` re-issues every governing
+  self-signature with a Key Expiration Time (0 clears it),
+  `set_subkey_expiry` re-issues one binding by subkey id, and
+  `KeyGenBuilder::expires` stamps the lifetime at generation time.
+  gpg 2.4.5 shows the extended key with the exact requested expiry.
+- User ID management: `add_user_id` certifies a new identity with the
+  key's existing capability flags, `revoke_user_id` attaches a
+  CertificationRevocation (reason 32, "User ID no longer valid") that
+  survives export and re-import (gpg marks the identity `uid:r`),
+  `set_primary_user_id` moves the Primary User ID flag, and
+  `user_id()` now reports the flagged identity.
+  `is_user_id_revoked` verifies the revocation cryptographically,
+  lazily like key revocations. `UserIdBinding` gained a `revocation`
+  field — a breaking change for external constructors, in line with the
+  0.2.0 subkey-model change.
+- gpg 2.4.5 live cross-checks (2026-10-28): it imports the extended
+  certificates, signs through the added signing subkey (the
+  cross-certification gate), encrypts to the added encryption subkey
+  with moonpgp decrypting, lists the flagged User ID first, and marks
+  the revoked one revoked.
+
 ### Added — open-source hygiene round (2026-10-28)
 
 - SECURITY.md: supported versions, a private reporting channel via GitHub

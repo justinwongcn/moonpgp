@@ -333,6 +333,7 @@ pub fn SignaturePacket::has_unknown_critical_subpacket(Self) -> Bool
 pub fn SignaturePacket::hash_algo(Self) -> Int32
 pub fn SignaturePacket::hash_prefix(Self) -> Bytes
 pub fn SignaturePacket::hashed_subpackets(Self) -> Array[SigSubpacket]
+pub fn SignaturePacket::is_primary_user_id(Self) -> Bool
 pub fn SignaturePacket::issuer_key_id(Self) -> Bytes?
 pub fn SignaturePacket::key_expiration_time(Self) -> Int32
 pub fn SignaturePacket::key_flags(Self) -> Bytes?

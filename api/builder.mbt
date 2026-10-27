@@ -367,13 +367,15 @@ fn status_rank(status : VerifyStatus) -> Int32 {
 pub struct KeyGenBuilder {
   priv user_id : String
   priv bits : Int32
+  /// Key Expiration Time in seconds from the key's creation (0 = never).
+  priv expiry : Int64
 }
 
 ///|
 /// Start building a key generation (RSA by default; Ed25519 via
 /// `generate_ed25519_key`).
 pub fn Pgp::key_generation(_self : Pgp) -> KeyGenBuilder {
-  KeyGenBuilder::{ user_id: "", bits: 3072, }
+  KeyGenBuilder::{ user_id: "", bits: 3072, expiry: 0L, }
 }
 
 ///|
@@ -393,11 +395,22 @@ pub fn KeyGenBuilder::rsa_bits(
 }
 
 ///|
+/// Expire the generated key after `seconds` (Key Expiration Time, RFC
+/// 9580 §5.2.3.6; counts from the key's creation). `set_expiry` on the
+/// finished key extends or clears it later.
+pub fn KeyGenBuilder::expires(
+  self : KeyGenBuilder,
+  seconds : Int64,
+) -> KeyGenBuilder {
+  { ..self, expiry: seconds, }
+}
+
+///|
 pub fn KeyGenBuilder::generate(self : KeyGenBuilder) -> PrivateKey raise {
   guard self.user_id != "" else {
     @error.fail("api: key generation needs a user id")
   }
-  generate_key(self.user_id, bits=self.bits)
+  generate_key(self.user_id, bits=self.bits, expiry=self.expiry)
 }
 
 ///|

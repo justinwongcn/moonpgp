@@ -41,7 +41,7 @@ pub fn generate_ed25519_v6_key(String) -> @api.PrivateKey raise
 
 pub fn generate_ed25519_v6_key_with_signing_subkey(String) -> @api.PrivateKey raise
 
-pub fn generate_key(String, bits? : Int32) -> @api.PrivateKey raise
+pub fn generate_key(String, bits? : Int32, expiry? : Int64) -> @api.PrivateKey raise
 
 pub fn generate_revocation_certificate(@api.PrivateKey, reason? : @api.RevocationReason, message? : String, created? : Int32) -> String raise
 

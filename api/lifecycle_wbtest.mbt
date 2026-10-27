@@ -51,6 +51,7 @@ test "tampered user id fails import (certification must verify)" {
       UserIdBinding::{
         user_id: "Eve <eve@example.net>",
         self_signature: key.self_signature(),
+        revocation: None,
       },
     ],
   }
@@ -175,6 +176,7 @@ test "a swapped certification fails import on a multi-uid key" {
   let forged_binding : UserIdBinding = {
     user_id: "Forged <forged@example.net>",
     self_signature: key.self_signature(),
+    revocation: None,
   }
   let mixed : PrivateKey = {
     ..key,

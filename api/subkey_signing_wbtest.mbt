@@ -21,7 +21,13 @@ fn with_self_sig_flags(key : PrivateKey, flags : Int32) -> PrivateKey {
   let sig = { ..old, hashed_subpackets: hashed, }
   {
     ..key,
-    user_ids: [UserIdBinding::{ user_id: key.user_id(), self_signature: sig, }],
+    user_ids: [
+      UserIdBinding::{
+        user_id: key.user_id(),
+        self_signature: sig,
+        revocation: None,
+      },
+    ],
   }
 }
 
@@ -54,7 +60,11 @@ fn dual_component_key() -> PrivateKey raise {
   {
     ..base,
     user_ids: [
-      UserIdBinding::{ user_id: base.user_id(), self_signature: cert_only, },
+      UserIdBinding::{
+        user_id: base.user_id(),
+        self_signature: cert_only,
+        revocation: None,
+      },
     ],
     subkeys: [
       SecretSubkeyCert::{

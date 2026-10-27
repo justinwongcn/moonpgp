@@ -6,6 +6,10 @@ import {
 }
 
 // Values
+pub fn bzip2_decompress(BytesView) -> Bytes raise
+
+pub fn bzip2_decompress_capped(BytesView, Int32) -> Bytes raise
+
 pub fn compressed_algo_of_number(Int32) -> CompressedAlgo?
 
 pub fn zip_compress(BytesView) -> Bytes

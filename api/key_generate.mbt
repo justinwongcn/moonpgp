@@ -103,8 +103,14 @@ fn build_rsa_secret_key_packet(
 
 ///|
 /// Generate a fresh transferable key: RSA primary (certify+sign) with a
-/// User ID self-certification plus an RSA encryption subkey.
-pub fn generate_key(user_id : String, bits~ : Int32 = 3072) -> PrivateKey raise {
+/// User ID self-certification plus an RSA encryption subkey. `expiry`
+/// sets a Key Expiration Time (seconds from the key's creation; 0, the
+/// default, never expires) on both self-certification and binding.
+pub fn generate_key(
+  user_id : String,
+  bits~ : Int32 = 3072,
+  expiry~ : Int64 = 0L,
+) -> PrivateKey raise {
   // Int truncation of the Int64 wall clock is wire-safe (Writer::u32 emits
   // the two's-complement low 32 bits, which is the correct u32 epoch past
   // 2038) but stays negative in memory; only date FORMATTING from this
@@ -113,7 +119,13 @@ pub fn generate_key(user_id : String, bits~ : Int32 = 3072) -> PrivateKey raise 
   let sub_bits = if bits >= 4096 { 3072 } else { bits }
   let primary_rsa = @pki.generate_rsa_key(bits~)
   let primary = build_rsa_secret_key_packet(primary_rsa, now)
-  let self_sig = make_self_signature(primary, primary.public, user_id, now)
+  let self_sig = make_self_signature(
+    primary,
+    primary.public,
+    user_id,
+    now,
+    key_expiry=expiry,
+  )
   let sub_rsa = @pki.generate_rsa_key(bits=sub_bits)
   let subkey = build_rsa_secret_key_packet(sub_rsa, now)
   let binding = make_binding_signature(
@@ -121,10 +133,13 @@ pub fn generate_key(user_id : String, bits~ : Int32 = 3072) -> PrivateKey raise 
     primary.public,
     subkey.public,
     now,
+    key_expiry=expiry,
   )
   PrivateKey::{
     primary,
-    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
+    user_ids: [
+      UserIdBinding::{ user_id, self_signature: self_sig, revocation: None, },
+    ],
     direct_signature: None,
     subkeys: [SecretSubkeyCert::{ secret: subkey, binding, revocation: None, }],
     revocations: [],
@@ -160,7 +175,9 @@ pub fn generate_ed25519_key(user_id : String) -> PrivateKey raise {
   )
   PrivateKey::{
     primary,
-    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
+    user_ids: [
+      UserIdBinding::{ user_id, self_signature: self_sig, revocation: None, },
+    ],
     direct_signature: None,
     subkeys: [SecretSubkeyCert::{ secret: subkey, binding, revocation: None, }],
     revocations: [],
@@ -215,7 +232,9 @@ pub fn generate_ed25519_v6_key(user_id : String) -> PrivateKey raise {
   )
   PrivateKey::{
     primary,
-    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
+    user_ids: [
+      UserIdBinding::{ user_id, self_signature: self_sig, revocation: None, },
+    ],
     direct_signature: Some(direct),
     subkeys: [SecretSubkeyCert::{ secret: subkey, binding, revocation: None, }],
     revocations: [],
@@ -273,7 +292,9 @@ pub fn generate_ed25519_v6_key_with_signing_subkey(
   )
   PrivateKey::{
     primary,
-    user_ids: [UserIdBinding::{ user_id, self_signature: self_sig, }],
+    user_ids: [
+      UserIdBinding::{ user_id, self_signature: self_sig, revocation: None, },
+    ],
     direct_signature: Some(direct),
     subkeys: [
       SecretSubkeyCert::{

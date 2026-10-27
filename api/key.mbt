@@ -56,10 +56,13 @@ pub(all) struct SecretSubkeyCert {
 
 ///|
 /// One certified User ID: the identifier plus the self-signature that
-/// binds it to the primary key.
+/// binds it to the primary key. A revoked User ID keeps its place on the
+/// certificate with the CertificationRevocation signature attached —
+/// that is how the wire tells verifiers the identity is no longer valid.
 pub(all) struct UserIdBinding {
   user_id : String
   self_signature : @packet.SignaturePacket
+  revocation : @packet.SignaturePacket?
 } derive(Debug)
 
 ///|
@@ -78,12 +81,25 @@ pub fn PrivateKey::fingerprint(self : PrivateKey) -> Bytes raise {
 }
 
 ///|
-/// The primary (first) certified User ID string; empty for a bare v6 key.
+/// The primary User ID string: the one whose self-certification carries
+/// the Primary User ID flag, else the first certified User ID; empty for
+/// a bare v6 key.
 pub fn PrivateKey::user_id(self : PrivateKey) -> String {
-  match self.user_ids {
-    [] => ""
-    [first, ..] => first.user_id
+  primary_user_id_of(self.user_ids)
+}
+
+///|
+fn primary_user_id_of(bindings : Array[UserIdBinding]) -> String {
+  let mut first = ""
+  for b in bindings {
+    if first == "" {
+      first = b.user_id
+    }
+    if b.self_signature.is_primary_user_id() {
+      return b.user_id
+    }
   }
+  first
 }
 
 ///|
@@ -115,12 +131,11 @@ pub fn PublicKey::fingerprint(self : PublicKey) -> Bytes raise {
 }
 
 ///|
-/// The primary (first) certified User ID string; empty for a bare v6 key.
+/// The primary User ID string: the one whose self-certification carries
+/// the Primary User ID flag, else the first certified User ID; empty for
+/// a bare v6 key.
 pub fn PublicKey::user_id(self : PublicKey) -> String {
-  match self.user_ids {
-    [] => ""
-    [first, ..] => first.user_id
-  }
+  primary_user_id_of(self.user_ids)
 }
 
 ///|

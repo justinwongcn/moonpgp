@@ -40,7 +40,7 @@ pub fn generate_ed25519_v6_key(String) -> PrivateKey raise
 
 pub fn generate_ed25519_v6_key_with_signing_subkey(String) -> PrivateKey raise
 
-pub fn generate_key(String, bits? : Int32) -> PrivateKey raise
+pub fn generate_key(String, bits? : Int32, expiry? : Int64) -> PrivateKey raise
 
 pub fn generate_revocation_certificate(PrivateKey, reason? : RevocationReason, message? : String, created? : Int32) -> String raise
 
@@ -108,6 +108,7 @@ pub struct KeyGenBuilder {
   // private fields
 }
 pub fn KeyGenBuilder::add_user_id(Self, String) -> Self
+pub fn KeyGenBuilder::expires(Self, Int64) -> Self
 pub fn KeyGenBuilder::generate(Self) -> PrivateKey raise
 pub fn KeyGenBuilder::rsa_bits(Self, Int32) -> Self
 
@@ -137,6 +138,9 @@ pub struct PrivateKey {
   subkeys : Array[SecretSubkeyCert]
   revocations : Array[@packet.SignaturePacket]
 } derive(@debug.Debug)
+pub fn PrivateKey::add_encryption_subkey(Self, created? : Int32) -> Self raise
+pub fn PrivateKey::add_signing_subkey(Self, created? : Int32) -> Self raise
+pub fn PrivateKey::add_user_id(Self, String, created? : Int32) -> Self raise
 pub fn PrivateKey::apply_revocation_certificate(Self, String) -> Self raise
 pub fn PrivateKey::can_encrypt(Self, Int64) -> Bool
 pub fn PrivateKey::can_verify(Self, Int64) -> Bool
@@ -147,10 +151,15 @@ pub fn PrivateKey::is_aead_protected(Self) -> Bool
 pub fn PrivateKey::is_expired(Self, Int64) -> Bool
 pub fn PrivateKey::is_locked(Self) -> Bool
 pub fn PrivateKey::is_revoked(Self, Int64) -> Bool
+pub fn PrivateKey::is_user_id_revoked(Self, String, Int64) -> Bool
 pub fn PrivateKey::key_id(Self) -> Bytes raise
 pub fn PrivateKey::lock(Self, String) -> Self raise
 pub fn PrivateKey::lock_argon2(Self, String, passes? : Int32, parallelism? : Int32, memory_exp? : Int32) -> Self raise
+pub fn PrivateKey::revoke_user_id(Self, String, message? : String, created? : Int32) -> Self raise
 pub fn PrivateKey::self_signature(Self) -> @packet.SignaturePacket
+pub fn PrivateKey::set_expiry(Self, Int64, created? : Int32) -> Self raise
+pub fn PrivateKey::set_primary_user_id(Self, String, created? : Int32) -> Self raise
+pub fn PrivateKey::set_subkey_expiry(Self, BytesView, Int64, created? : Int32) -> Self raise
 pub fn PrivateKey::to_armored(Self) -> String
 pub fn PrivateKey::to_bytes(Self) -> Bytes
 pub fn PrivateKey::to_public(Self) -> PublicKey
@@ -175,6 +184,7 @@ pub fn PublicKey::from_armored(String) -> Self raise
 pub fn PublicKey::from_bytes(BytesView) -> Self raise
 pub fn PublicKey::is_expired(Self, Int64) -> Bool
 pub fn PublicKey::is_revoked(Self, Int64) -> Bool
+pub fn PublicKey::is_user_id_revoked(Self, String, Int64) -> Bool
 pub fn PublicKey::key_id(Self) -> Bytes raise
 pub fn PublicKey::preferred_aead(Self) -> Array[(Int32, Int32)]
 pub fn PublicKey::self_signature(Self) -> @packet.SignaturePacket
@@ -221,6 +231,7 @@ pub fn SubkeyCert::to_repr(Self) -> @debug.Repr
 pub(all) struct UserIdBinding {
   user_id : String
   self_signature : @packet.SignaturePacket
+  revocation : @packet.SignaturePacket?
 } derive(@debug.Debug)
 pub fn UserIdBinding::to_repr(Self) -> @debug.Repr
 

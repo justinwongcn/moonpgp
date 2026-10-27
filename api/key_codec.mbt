@@ -40,6 +40,13 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
         binding.self_signature.to_body().exact_view(),
       ).exact_view(),
     )
+    match binding.revocation {
+      Some(r) =>
+        w.bytes(
+          @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+        )
+      None => ()
+    }
   }
   for c in self.subkeys {
     w.bytes(
@@ -143,6 +150,13 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
         binding.self_signature.to_body().exact_view(),
       ).exact_view(),
     )
+    match binding.revocation {
+      Some(r) =>
+        w.bytes(
+          @packet.serialize_packet(@packet.Signature, r.to_body().exact_view()).exact_view(),
+        )
+      None => ()
+    }
   }
   for c in self.subkeys {
     w.bytes(
@@ -254,7 +268,11 @@ fn parse_transferable(packets : Array[@packet.RawPacket]) -> ParsedKey raise {
               None =>
                 @error.fail("api: certification without a preceding user id")
             }
-            let cert = UserIdBinding::{ user_id: uid, self_signature: s, }
+            let cert = UserIdBinding::{
+              user_id: uid,
+              self_signature: s,
+              revocation: None,
+            }
             // Last certification of the same User ID wins.
             let mut replaced = false
             for i in 0..<bindings.length() {
@@ -268,6 +286,19 @@ fn parse_transferable(packets : Array[@packet.RawPacket]) -> ParsedKey raise {
             }
           }
           @packet.DirectSignature => direct = Some(s)
+          @packet.CertificationRevocation =>
+            // The revocation of the certification just seen: attach it to
+            // the matching User ID binding so it survives re-export and
+            // `is_user_id_revoked` can verify it lazily.
+            match pending_uid {
+              Some(uid) =>
+                for i in 0..<bindings.length() {
+                  if bindings[i].user_id == uid {
+                    bindings[i] = { ..bindings[i], revocation: Some(s), }
+                  }
+                }
+              None => ()
+            }
           @packet.SubkeyBinding =>
             // A binding after the last subkey re-binds it (last wins); a
             // binding with no subkey before it certifies nothing.

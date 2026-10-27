@@ -142,7 +142,9 @@ test "N3: persona and casual self-certifications import" {
     )
     let mixed : PrivateKey = {
       ..key,
-      user_ids: [UserIdBinding::{ user_id: uid, self_signature: cert, }],
+      user_ids: [
+        UserIdBinding::{ user_id: uid, self_signature: cert, revocation: None, },
+      ],
     }
     let re = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
     assert_eq(re.user_ids[0].self_signature.sig_type(), cert_type)
@@ -220,7 +222,11 @@ test "N7: subkey signature of an expired primary is Expired" {
   let pk : PublicKey = {
     primary: backdated,
     user_ids: [
-      UserIdBinding::{ user_id: key.user_id(), self_signature: expired_self, },
+      UserIdBinding::{
+        user_id: key.user_id(),
+        self_signature: expired_self,
+        revocation: None,
+      },
     ],
     direct_signature: None,
     subkeys: key.to_public().subkeys,

@@ -774,3 +774,14 @@ pub extend SigType with Eq::{not_equal, equal}
 
 ///|
 pub extend SignaturePacket with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+/// True when the hashed area carries a Primary User ID subpacket (RFC
+/// 9580 §5.2.3.20) with a nonzero flag octet — the marker gpg writes on
+/// the one certification that names the certificate's primary identity.
+pub fn SignaturePacket::is_primary_user_id(self : SignaturePacket) -> Bool {
+  match find_subpacket(self.hashed_subpackets, SIGSUB_PRIMARY_USER_ID) {
+    Some(body) => body.length() > 0 && body[0].to_int() != 0
+    None => false
+  }
+}

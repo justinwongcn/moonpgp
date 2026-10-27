@@ -65,3 +65,24 @@ test "our ECDH encrypt/decrypt roundtrip against gpg vectors" {
   }
   assert_true(saw_ecdh_pkesk)
 }
+
+///|
+/// GnuPG 2.4.5 BZip2 cross-validation (live-verified 2026-10-28): the
+/// interop_our_ecdh_key key was imported into gpg and used as recipient
+/// for `gpg --compress-algo bzip2 --bzip2-compress-level 9 --encrypt`;
+/// `gpg --list-packets` shows `:compressed packet: algo=3`. This is the
+/// shape a gpg sender produces whenever its config names bzip2 — before
+/// the BZip2 codec existed the library could not open such mail at all.
+test "decrypt a GnuPG message compressed with BZip2" {
+  let key = @api.PrivateKey::from_armored(
+    read_testdata("interop_our_ecdh_key.asc"),
+  )
+  let plain = @api.decrypt_with_private_key(
+    read_testdata("interop_gpg_bzip2_message.asc"),
+    key,
+  )
+  assert_eq(
+    plain,
+    @primitives.utf8_bytes("bzip2 interop payload\nsecond line\n"),
+  )
+}

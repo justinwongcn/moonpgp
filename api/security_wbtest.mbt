@@ -214,7 +214,13 @@ test "S02: a signature from an expired primary key reports Expired" {
   ])
   let expired_key : PublicKey = {
     ..key.to_public(),
-    user_ids: [{ user_id: key.user_id(), self_signature: expired_cert, }],
+    user_ids: [
+      {
+        user_id: key.user_id(),
+        self_signature: expired_cert,
+        revocation: None,
+      },
+    ],
   }
   if @primitives.unix_now() > exp.to_int64() {
     assert_true(expired_key.is_expired(@primitives.unix_now()))

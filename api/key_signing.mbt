@@ -230,6 +230,7 @@ fn make_self_signature(
   now : Int32,
   cert_type~ : @packet.SigType = @packet.PositiveCertification,
   key_flags~ : Int32 = 0x03,
+  key_expiry~ : Int64 = 0L,
 ) -> @packet.SignaturePacket raise {
   let v6 = pub_packet.version() >= 6
   let hashed : Array[@packet.SigSubpacket] = [
@@ -237,6 +238,11 @@ fn make_self_signature(
     key_flags_subpacket(key_flags),
     ..preferred_subpackets(v6),
   ]
+  let hashed = if key_expiry != 0L {
+    hashed_with_key_expiration(hashed, key_expiry, now)
+  } else {
+    hashed
+  }
   if v6 {
     // §5.2.3.12/33: v6 keys identify the issuer by fingerprint.
     hashed.push(issuer_fingerprint_subpacket(pub_packet))
@@ -392,6 +398,7 @@ fn make_binding_signature(
   now : Int32,
   key_flags~ : Int32 = 0x0C,
   subkey_secret? : @packet.SecretKeyPacket,
+  key_expiry~ : Int64 = 0L,
 ) -> @packet.SignaturePacket raise {
   let v6 = primary_pub.version() >= 6
   guard !v6 || subkey_pub.version() >= 6 else {
@@ -402,6 +409,11 @@ fn make_binding_signature(
     key_flags_subpacket(key_flags),
     ..preferred_subpackets(v6),
   ]
+  let hashed = if key_expiry != 0L {
+    hashed_with_key_expiration(hashed, key_expiry, now)
+  } else {
+    hashed
+  }
   let unhashed_embedded : Array[@packet.SigSubpacket] = []
   if (key_flags & 0x02) != 0 {
     // Cross-certification (RFC 9580 §5.2.3.26): a sign-capable subkey

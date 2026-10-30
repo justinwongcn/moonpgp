@@ -8,7 +8,7 @@
 #
 #   1. A -> B live: sign with A, encrypt to B, submit via smtp.163.com:465.
 #      PASS = SMTP 250 + the produced PKESK names B's cv25519 subkey
-#      B-ENC-SUBKEY (encryption targeted the right account).
+#      B-ENC-SUBKEY (B's cv25519 subkey, derived from the key file).
 #   2. A -> A live closed loop: sign with A, encrypt to A, submit, fetch over
 #      IMAPS, decrypt with A and verify with A. PASS = "decrypt+verify OK".
 #   3. B -> A real interop: the genuine ProtonMail reply sitting in the INBOX,
@@ -39,9 +39,6 @@ STUNNEL_BIN="${STUNNEL_BIN:-/opt/homebrew/opt/stunnel/bin/stunnel}"
 CAFILE="${CAFILE:-/opt/homebrew/etc/openssl@3/cert.pem}"
 E2E_IMAP_PORT="${E2E_IMAP_PORT:-1143}"
 
-# B's encryption subkey, per the key file itself (assumption checked below).
-B_ENC_SUBKEY="B-ENC-SUBKEY"
-
 E2E_OK=0
 FAIL() {
   echo "E2E FAIL: $1 (artifacts kept in $SINK)"
@@ -66,6 +63,13 @@ command -v msmtp >/dev/null || FAIL "msmtp not installed (brew install msmtp)"
 command -v gpg >/dev/null || FAIL "gpg not installed"
 [ -x "$STUNNEL_BIN" ] || FAIL "stunnel not found at $STUNNEL_BIN"
 [ -s "$CAFILE" ] || FAIL "CA bundle not found at $CAFILE"
+
+# B's encryption subkey: derived from B's public key file (last subkey),
+# or set B_ENC_SUBKEY explicitly to override the derivation.
+B_ENC_SUBKEY="${B_ENC_SUBKEY:-$(gpg --show-keys --with-colons "$KEY_B_PUB" 2>/dev/null |
+  awk -F: '$1 == "sub" { id = substr($5, length($5) - 15) } END { print id }')}"
+[ -n "$B_ENC_SUBKEY" ] ||
+  FAIL "could not derive B's encryption subkey id from $KEY_B_PUB (set B_ENC_SUBKEY)"
 
 # The gate-1 assertion depends on this subkey; fail loudly if the key changed.
 B_SUBS="$(gpg --show-keys --with-colons "$KEY_B_PRIV" 2>/dev/null |
@@ -116,7 +120,7 @@ cat > "$SINK/body-ab.txt" <<EOF
 two-account e2e marker (A->B): $SUBJ_AB
 
 签名:A 账号私钥(${KEY_A_PRIV##*/})
-加密:B 账号公钥(ProtonMail,cv25519 B-ENC-SUBKEY)
+加密:B 账号公钥(cv25519 子钥 ${B_ENC_SUBKEY})
 EOF
 moon run example/mailer -- \
   --from "MoonBit OpenPGP Demo <${ACCOUNT_A}>" \
@@ -181,7 +185,7 @@ echo "--- gate 2c PASS: A->A fetched, decrypted with A, signature verified Ok --
 
 # ------------------------- 3. B -> A: genuine ProtonMail mail, real interop
 UID_BA="$(reader --last 30 2>"$SINK/list-ba.err" |
-  grep -i "protonmail" | sed -E 's/.*uid=([0-9]+).*/\1/' | tail -1)" ||
+  grep -i "$ACCOUNT_B" | sed -E 's/.*uid=([0-9]+).*/\1/' | tail -1)" ||
   FAIL "mailreader list failed (see $SINK/list-ba.err)"
 [ -n "$UID_BA" ] || FAIL "no ProtonMail-produced mail found in the INBOX"
 

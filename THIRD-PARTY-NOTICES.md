@@ -168,7 +168,7 @@ RFC 文档由 IETF 发布，文本使用受 IETF Trust 条款约束；本项目�
 
 ## 本仓库自生成文件与测试数据
 
-截至 2026-10-22，源码仓库的 `testdata/` 共 74 个文件：
+截至 2026-10-31，源码仓库的 `testdata/` 共 89 个文件：
 
 - 41 个与 gopenpgp v3.4.1 的 `crypto/testdata/` 字节一致（34 个顶层文件 + 7 个
   `signature/` 文件）；
@@ -176,8 +176,8 @@ RFC 文档由 IETF 发布，文本使用受 IETF Trust 条款约束；本项目�
 - `testdata/gocrypto/` 下 7 个文件是本项目的夹具生成/校验工具（生成器、校验器、
   go.mod/go.sum 等；Go 模块依赖 go-crypto，但未复制其源码）；该目录通过
   `.moonignore` 排除出发布包，6 个 `.asc` 夹具仍随包分发；
-- 其余 20 个为本项目自建：GnuPG 2.4.5 / OpenSSL 生成的互操作夹具、本项目实现生成
-  的夹具，以及生成脚本和说明。
+- 其余 35 个为本项目自建：GnuPG 2.4.5 / OpenSSL 生成的互操作夹具、本项目实现生成
+  的夹具、BZip2 与证书扩展轮的失败模式夹具，以及生成脚本和说明。
 
 `primitives/blake2b.mbt`、`argon2.mbt`、`hkdf.mbt` 均为按 RFC 自实现，未引入新的
 运行时依赖。

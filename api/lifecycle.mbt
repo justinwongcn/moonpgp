@@ -139,12 +139,14 @@ fn revocation_effective_at(sig : @packet.SignaturePacket, now : Int64) -> Bool {
 ///|
 /// Key flags octet 0 from a signature's hashed area; None when the
 /// subpacket is absent, which means "assume every capability" (the
-/// legacy rule gopenpgp encodes as `FlagsValid = false`).
+/// legacy rule gopenpgp encodes as `FlagsValid = false`). A present
+/// but empty subpacket is a different statement: zero flags mean no
+/// capability at all (fail-closed), not "no information".
 fn governing_flags(sig : @packet.SignaturePacket?) -> Int32? {
   match sig {
     Some(s) =>
       match s.key_flags() {
-        Some(b) => if b.length() > 0 { Some(b[0].to_int()) } else { None }
+        Some(b) => if b.length() > 0 { Some(b[0].to_int()) } else { Some(0) }
         None => None
       }
     None => None

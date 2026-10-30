@@ -9,6 +9,8 @@
 ///   moon run cmd/main -- decpriv <secret-key.asc> [passphrase] <in> <out>
 ///   moon run cmd/main -- sign <secret-key.asc> <in> <out.sig>
 ///   moon run cmd/main -- verify <public-key.asc> <in> <sig.asc>
+///   moon run cmd/main -- lock <secret-key.asc> <passphrase>
+///   moon run cmd/main -- unlock <secret-key.asc> <passphrase>
 fn main {
   let args = @env.args()
   if args.length() < 2 {
@@ -55,10 +57,13 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
     "encpass" => {
       check_args(rest.length(), 3)
       let data = @fs.read_file_to_bytes(rest[1])
+      // Stamp the literal packet with the input's file name so the
+      // backup-file scenario keeps a trace of what was encrypted.
+      let file_name = basename(rest[1])
       // Optional trailing "aead" selects the v5 SKESK + tag-20 shape
       // (GnuPG --force-aead interop) instead of v4 SKESK + SEIPD v1.
       let aead = rest.length() >= 4 && rest[3] == "aead"
-      let armored = @api.encrypt_with_password(data, rest[0], aead~)
+      let armored = @api.encrypt_with_password(data, rest[0], aead~, file_name~)
       @fs.write_string_to_file(rest[2], armored)
       println("wrote \{rest[2]}")
     }
@@ -135,6 +140,24 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
         }
       }
     }
+    "lock" => {
+      check_args(rest.length(), 2)
+      let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(rest[0]))
+      let locked = key.lock(rest[1])
+      @fs.write_string_to_file(rest[0], locked.to_armored())
+      println(
+        "locked \{rest[0]} (decryption and signing now require the passphrase)",
+      )
+    }
+    "unlock" => {
+      check_args(rest.length(), 2)
+      let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(rest[0]))
+      let open = key.unlock(rest[1])
+      @fs.write_string_to_file(rest[0], open.to_armored())
+      println(
+        "unlocked \{rest[0]} (the secret key is now stored without passphrase protection)",
+      )
+    }
     _ => usage()
   }
 }
@@ -143,6 +166,22 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
 fn check_args(got : Int32, want : Int32) -> Unit {
   if got < want {
     usage()
+  }
+}
+
+///|
+/// The final path component, stamped into encrypted literal packets.
+fn basename(path : String) -> String {
+  let mut last = -1
+  for i, ch in path {
+    if ch == '/' {
+      last = i
+    }
+  }
+  if last < 0 {
+    path
+  } else {
+    path[last + 1:path.length()].to_owned()
   }
 }
 
@@ -173,6 +212,8 @@ fn print_usage() -> Unit {
     "  encpub <public-key.asc> <in> <out>\n" +
     "  decpriv <secret-key.asc> [passphrase] <in> <out>\n" +
     "  sign <secret-key.asc> <in> <out.sig>\n" +
-    "  verify <public-key.asc> <in> <sig.asc>",
+    "  verify <public-key.asc> <in> <sig.asc>\n" +
+    "  lock <secret-key.asc> <passphrase>       (protect the stored secret key)\n" +
+    "  unlock <secret-key.asc> <passphrase>     (strip passphrase protection)",
   )
 }

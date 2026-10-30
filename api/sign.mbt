@@ -722,6 +722,12 @@ pub fn sign_and_encrypt(
 ///|
 /// Decrypt an armored message (password OR private keys) and verify an
 /// inline signature against `verifier`. Returns (data, status).
+///
+/// The plaintext is returned even when the signature does not verify —
+/// `Failed`, `KeyRevoked` and `Expired` all arrive with data. Callers
+/// that must not act on unverified content check the status first (the
+/// `DecryptionBuilder` wraps this contract as `DecryptResult`, surfacing
+/// the broken-signature case as `SignatureError(data)`).
 pub fn decrypt_and_verify(
   message : String,
   decryption_keys : Array[PrivateKey],

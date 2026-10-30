@@ -24,12 +24,22 @@ test "session key round trip (bare SEIPD, out-of-band key)" {
 }
 
 ///|
-test "session key with a non-default cipher" {
+test "session-key encryption refuses a non-AES cipher" {
   let sk = @api.generate_session_key(algo=@primitives.Cast5)
   assert_eq(sk.key().length(), 16)
-  let data = @primitives.utf8_bytes("cast5 session key payload")
-  let msg = @api.encrypt_to_session_key(data, sk)
-  assert_eq(@api.decrypt_to_session_key(msg, sk), data)
+  // CAST5/3DES are decryption-only: everything this library encrypts
+  // uses AES, and the session-key backend is no exception.
+  let raised = try {
+    let _ = @api.encrypt_to_session_key(
+      @primitives.utf8_bytes("cast5 session key payload"),
+      sk,
+    )
+    false
+  } catch {
+    @error.PgpError::Unsupported(_) => true
+    _ => false
+  }
+  assert_true(raised)
 }
 
 ///|

@@ -74,3 +74,9 @@ pub using @primitives {type CipherAlgo, type HashId}
 /// import is enough to catch and branch on the failure classes
 /// (`Malformed`, `Unsupported`, `WrongPassphrase`).
 pub using @error {type PgpError}
+
+///|
+/// PGP/MIME high-level entry points, re-exported so the bare root import
+/// also covers signing and verifying `multipart/signed` mail; the `mime`
+/// package stays the home of the full parsing/assembly API.
+pub using @mime {build_pgp_mime_signed, verify_pgp_mime_signed}

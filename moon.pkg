@@ -3,5 +3,6 @@ import {
   "justinwongcn/moonpgp/cipher",
   "justinwongcn/moonpgp/compress",
   "justinwongcn/moonpgp/error",
+  "justinwongcn/moonpgp/mime",
   "justinwongcn/moonpgp/primitives",
 }

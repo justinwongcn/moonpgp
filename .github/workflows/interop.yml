@@ -1,0 +1,27 @@
+name: interop
+
+# Live cross-implementation checks against GnuPG. These need a real gpg
+# binary and are slower than the unit suite, so they run nightly and on
+# demand instead of on every push; the frozen GnuPG test vectors keep
+# cross-implementation coverage in the per-push CI.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gpg-interop:
+    name: live GnuPG interop (scripts/interop_check.sh + AEAD)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-moonbit
+      - name: gpg version
+        run: gpg --version | head -1
+      - name: bash scripts/interop_check.sh
+        run: bash scripts/interop_check.sh
+      - name: bash scripts/interop_aead_gpg.sh
+        run: bash scripts/interop_aead_gpg.sh

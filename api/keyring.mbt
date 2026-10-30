@@ -71,7 +71,9 @@ fn key_packet_encryption_usable_at(
 
 ///|
 /// True when the packet is a component of `key` that may verify at `now`
-/// (not revoked, sign/certify flags permit, nothing expired).
+/// (not revoked, sign/certify flags permit, nothing expired). The matched
+/// packet is judged by its own binding (N2): a sibling subkey's health
+/// says nothing about the subkey that actually issued the signature.
 fn key_packet_verify_usable_at(
   key : PublicKey,
   packet : @packet.PublicKeyPacket,
@@ -89,8 +91,9 @@ fn key_packet_verify_usable_at(
     )
   }
   for c in key.subkeys {
-    if component_usable(c.key, Some(c.binding), FLAG_SIGN_OR_CERTIFY, now) {
-      return true
+    if c.key.key_id().equal(packet.key_id()) {
+      return !subkey_revoked_at(c.revocation, key.primary, c.key, now) &&
+        component_usable(c.key, Some(c.binding), FLAG_SIGN_OR_CERTIFY, now)
     }
   }
   false

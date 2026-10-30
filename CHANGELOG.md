@@ -9,6 +9,46 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-31
+
+### Added
+
+- CLI: `lock` and `unlock` subcommands — passphrase-protect or unprotect
+  a stored secret key file, closing the key-management scenario's CLI
+  gap (`keygen` writes an unprotected key; it can now be locked in
+  place). `encpass` stamps the literal packet with the input's file
+  name so encrypted backups keep a trace of their origin.
+- Nightly CI job (`interop.yml`) running the live GnuPG interop scripts
+  (`scripts/interop_check.sh`, `scripts/interop_aead_gpg.sh`) on a
+  schedule instead of manual-only, plus `workflow_dispatch`.
+
+### Fixed
+
+- `KeyRing::find_verification_key` judged a signature's subkey by its
+  siblings: a signature issued by a revoked or expired subkey passed
+  the ring gate whenever some other signing subkey of the same key was
+  healthy. The matched packet is now judged by its own binding,
+  mirroring the encryption-side twin.
+- Session-key encryption (`encrypt_to_session_key`) accepted non-AES
+  ciphers, contradicting the "anything this library encrypts uses AES"
+  guarantee; CAST5/3DES session keys are decryption-only there too.
+- Malformed hashed-area subpackets silently downgraded lifecycle
+  semantics: a wrong-length creation/expiration timestamp read as
+  "never expires" and a body-less Key Flags subpacket read as "all
+  capabilities". Wrong lengths are now a parse error; a present-but-
+  empty Key Flags subpacket means no capability (fail-closed).
+- Missing-capability differentials pin all of the above, plus two gaps
+  the review found: ring-level expired/valid key selection, and the
+  signing-subkey cross-certification refusal (8 new tests).
+
+### Security
+
+- The example mail scripts carry no real account addresses, key file
+  paths or subkey ids any more; every account, key and credential is
+  provided through environment variables with placeholder defaults, and
+  the recipient's encryption subkey id is derived from the key file at
+  runtime.
+
 ### Fixed — BZip2 truncated-stream crash (2026-10-28)
 
 - A stream truncated mid-header crashed the process (out-of-bounds bit

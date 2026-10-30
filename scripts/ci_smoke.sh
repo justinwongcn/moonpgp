@@ -42,6 +42,15 @@ echo "== detached sign / verify =="
 run sign "$work/sec.asc" "$work/plain.txt" "$work/plain.sig.asc"
 run verify "$work/pub.asc" "$work/plain.txt" "$work/plain.sig.asc"
 
+echo "== lock / decrypt with passphrase / unlock =="
+run lock "$work/sec.asc" "smoke-passphrase"
+run encpub "$work/pub.asc" "$work/plain.txt" "$work/locked.msg.asc"
+run decpriv "$work/sec.asc" "smoke-passphrase" "$work/locked.msg.asc" "$work/locked.out"
+cmp "$work/plain.txt" "$work/locked.out"
+run unlock "$work/sec.asc" "smoke-passphrase"
+run decpriv "$work/sec.asc" "$work/locked.msg.asc" "$work/unlocked.out"
+cmp "$work/plain.txt" "$work/unlocked.out"
+
 echo "== tag-20 AEAD (v5 SKESK) passphrase roundtrip =="
 run encpass "smoke-passphrase" "$work/plain.txt" "$work/aead.asc" aead
 run decpass "smoke-passphrase" "$work/aead.asc" "$work/aead.out"

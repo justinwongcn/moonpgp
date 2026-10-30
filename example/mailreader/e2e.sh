@@ -22,7 +22,7 @@ IMAP_USER="${IMAP_USER:-user-a@example.com}"
 CREDS_FILE="${CREDS_FILE:-$HOME/.pgp-demo/smtp-pass}"
 SENDER_KEY="${SENDER_KEY:-$HOME/.pgp-demo/sender-key.asc}"
 SENDER_PUB="${SENDER_PUB:-$HOME/.pgp-demo/sender-pub.asc}"
-KEY163_PRIV="${KEY163_PRIV:-example/user-a.asc}"
+KEY163_PRIV="${KEY163_PRIV:?set KEY163_PRIV to the mailbox secret key (armored)}"
 KEY163_PUB="${KEY163_PUB:-$HOME/.pgp-demo/addr163-pub.asc}"
 STUNNEL_BIN="${STUNNEL_BIN:-/opt/homebrew/opt/stunnel/bin/stunnel}"
 

@@ -13,6 +13,8 @@ import {
 // Values
 pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int32 = 536870912
 
+pub fn build_pgp_mime_signed(String, @api.PrivateKey) -> String raise
+
 pub fn decrypt_and_verify(String, Array[@api.PrivateKey], @api.PublicKey?, max_decompressed? : Int32) -> (Bytes, @api.VerifyStatus) raise
 
 pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int32, max_decompressed? : Int32) -> Bytes raise
@@ -74,6 +76,8 @@ pub fn verify_detached(BytesView, String, @api.PublicKey) -> @api.VerifyStatus r
 pub fn verify_inline(String, @api.PublicKey, max_decompressed? : Int32) -> (Bytes, @api.VerifyStatus) raise
 
 pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @packet.PublicKeyPacket, user_id? : String, direct? : Bool) -> Bool raise
+
+pub fn verify_pgp_mime_signed(String, @api.PublicKey) -> (String, @api.VerifyStatus) raise
 
 // Errors
 

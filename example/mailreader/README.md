@@ -30,7 +30,7 @@ E2E_TUNNEL=1 ./example/mailreader/e2e.sh  # 隧道:本地 stunnel → IMAPS 993
 用两把真实账号私钥跑三道门,全部经真实 SMTP/IMAP 与真实邮箱:
 
 1. **A→B 发送**:A(163)私钥签名 → B(ProtonMail)公钥加密 → `smtp.163.com:465`
-   提交;断言产出的 PKESK 指向 B 的 cv25519 子钥(`B-ENC-SUBKEY`)。
+   提交;断言产出的 PKESK 指向 B 的 cv25519 子钥(从 B 的密钥文件推导)。
 2. **A→A 闭环**:A 签名+加密给自己 → 提交 → IMAPS 取回 → A 解密验签
    (`decrypt+verify OK`)。
 3. **B→A 真实互通**:取回 ProtonMail 自己产生、留在 INBOX 的回信,用 A 解密、

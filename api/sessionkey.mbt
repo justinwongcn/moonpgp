@@ -58,13 +58,21 @@ pub fn generate_session_key(
 ///|
 /// Encrypt plaintext under a caller-held session key: a bare SEIPD v1
 /// container with no PKESK/SKESK — only whoever holds `sk` out of band
-/// can read it (the gopenpgp "raw session key" backend).
+/// can read it (the gopenpgp "raw session key" backend). Everything this
+/// library encrypts uses AES: CAST5/3DES session keys stay decryption-only.
 pub fn encrypt_to_session_key(
   plaintext : BytesView,
   sk : SessionKey,
   file_name? : String,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
+  guard sk.algo.equal(@primitives.Aes128) ||
+    sk.algo.equal(@primitives.Aes192) ||
+    sk.algo.equal(@primitives.Aes256) else {
+    @error.unsupported(
+      "api: session-key encryption supports AES only, \{sk.algo.to_repr()} is decryption-only",
+    )
+  }
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let inner = @packet.serialize_packet(
     @packet.Literal,

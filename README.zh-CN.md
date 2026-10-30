@@ -76,11 +76,13 @@ test "detached signatures and verification" {
 
 处理 PGP/MIME 邮件时，导入 `"justinwongcn/moonpgp/mime"`：
 
-```moonbit
-// 组装带签名的 PGP/MIME 邮件并验证：
-let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
-let (body, status) = @mime.verify_pgp_mime_signed(message, key.to_public())
-assert_eq(status, @api.Ok)
+```mbt check
+test "pgp/mime sign and verify" {
+  let key = @moonpgp.generate_ed25519_key("mime@example.com")
+  let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
+  let (_, status) = @mime.verify_pgp_mime_signed(message, key.to_public())
+  assert_eq(status, @api.Ok)
+}
 ```
 
 仓库里还带一个命令行示例，克隆下来就能跑：
@@ -101,7 +103,7 @@ moon run cmd/main -- help
 
 ## 互操作与本地检查
 
-测试覆盖了部分与 GnuPG、OpenSSL、go-crypto 的互操作流程，另有 RFC 测试向量。GnuPG 检查脚本在 [`scripts/interop_check.sh`](./scripts/interop_check.sh)。
+测试覆盖了部分与 GnuPG、OpenSSL、go-crypto 的互操作流程，另有 RFC 测试向量。GnuPG 检查脚本在 [`scripts/interop_check.sh`](./scripts/interop_check.sh)，由 CI 每晚定时运行（推送流水线则内置 GnuPG 产出的冻结向量）。
 
 本地检查：
 

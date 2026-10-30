@@ -82,11 +82,14 @@ test "detached signatures and verification" {
 
 For PGP/MIME emails, import `"justinwongcn/moonpgp/mime"`:
 
-```moonbit nocheck
-// Sign an email body and verify the multipart/signed structure:
-let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
-let (body, status) = @mime.verify_pgp_mime_signed(message, key.to_public())
-assert_eq(status, @api.Ok)
+```mbt check
+///|
+test "pgp/mime sign and verify" {
+  let key = @moonpgp.generate_ed25519_key("mime@example.com")
+  let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
+  let (_, status) = @mime.verify_pgp_mime_signed(message, key.to_public())
+  assert_eq(status, @api.Ok)
+}
 ```
 
 There's also a command-line demo, if you clone the repo:
@@ -107,7 +110,7 @@ moon run cmd/main -- help
 
 ## Interop and local checks
 
-Tests include some interop with GnuPG, OpenSSL, and go-crypto, plus RFC test vectors. The GnuPG checks live in [`scripts/interop_check.sh`](./scripts/interop_check.sh).
+Tests include some interop with GnuPG, OpenSSL, and go-crypto, plus RFC test vectors. The GnuPG checks live in [`scripts/interop_check.sh`](./scripts/interop_check.sh) and run on a nightly CI schedule (plus frozen GnuPG-produced vectors in the per-push suite).
 
 Locally:
 

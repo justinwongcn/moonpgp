@@ -297,6 +297,32 @@ fn serialize_subpackets(subs : Array[SigSubpacket]) -> Bytes {
 }
 
 ///|
+/// Semantic length validation for hashed-area subpackets. The subpackets
+/// that govern lifecycle semantics carry fixed-width big-endian counters
+/// (RFC 9580 §5.2.3.4/§5.2.3.6/§5.2.3.10: 4-octet timestamps; §5.2.3.29:
+/// at least one Key Flags octet) — a body of any other length would
+/// otherwise silently read as "absent" downstream and flip expiry or
+/// capability decisions. Unhashed subpackets are untrusted carrier data
+/// and stay lenient.
+fn validate_hashed_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
+  for sp in subs {
+    let n = sp.body.length()
+    let bad = match sp.sub_type {
+      SIGSUB_CREATION_TIME
+      | SIGSUB_KEY_EXPIRATION_TIME
+      | SIGSUB_SIG_EXPIRATION_TIME => n != 4
+      SIGSUB_KEY_FLAGS => n < 1
+      _ => false
+    }
+    guard !bad else {
+      @error.malformed(
+        "packet: signature subpacket \{sp.sub_type} has an invalid body length of \{n}",
+      )
+    }
+  }
+}
+
+///|
 /// RFC 9580 §9.5 Table 23: the v6 signature salt size for a hash
 /// algorithm. Only SHA-2/SHA-3 have v6 salt sizes (MD5/SHA-1/RIPEMD-160
 /// are "N/A").
@@ -326,6 +352,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let hashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let raw_hashed = r.read_bytes(hashed_len)
   let hashed = parse_subpackets(raw_hashed.exact_view())
+  validate_hashed_subpackets(hashed)
   let unhashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let unhashed = parse_subpackets(r.read_bytes(unhashed_len).exact_view())
   let fast = r.read_u16()

@@ -268,12 +268,16 @@ fn pkesk_addresses(
 }
 
 ///|
-/// True for a v3 PKESK whose key id is all zero — a hidden recipient
-/// (S13): it matches no key by id, so every candidate secret key must be
-/// tried, like go-crypto's KeyDecryption with a zero key id.
+/// True for an ESK that names no recipient: a v3 PKESK whose key id is
+/// all zero (S13), or a v6 PKESK with the size octet 0 — key version and
+/// fingerprint omitted (RFC 9580 §5.1.2/§5.1.8). Either shape matches no
+/// key by identity, so every candidate secret key must be tried, like
+/// go-crypto's KeyDecryption with a zero key id.
 fn pkesk_is_anonymous(pkesk : @packet.PkeskPacket) -> Bool {
   if pkesk.version() == 6 {
-    return false
+    // The parse leaves the fingerprint empty exactly when the size octet
+    // was 0 (§5.1.2 anonymous recipient).
+    return pkesk.fingerprint().length() == 0
   }
   let id = pkesk.key_id()
   let mut all_zero = id.length() == 8
@@ -316,7 +320,14 @@ fn decrypt_inner_with_key(
   }
   for p in packets {
     if p.tag() == @packet.Pkesk {
-      let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
+      // RFC 9580 §10.3.2.1: an ESK that cannot be parsed (a future
+      // version, an unknown algorithm) is discarded, not fatal — a later
+      // ESK in the same message may still open it (S4).
+      let pkesk : @packet.PkeskPacket = @packet.PkeskPacket::parse(
+        p.body().exact_view(),
+      ) catch {
+        _ => continue
+      }
       if pkesk_is_anonymous(pkesk) {
         for sk in candidates {
           let inner : Bytes? = Some(decrypt_with_pkesk(packets, pkesk, sk)) catch {

@@ -40,6 +40,13 @@ fn ocb_ntz(n : Int32) -> Int32 {
 ///|
 /// L_0 = double(double(E_K(0))), L_k = double(L_{k-1})
 /// (RFC 7253 §4.1 key-dependent variables).
+///
+/// The table only needs `ntz` indices: every lookup goes through
+/// `l[ocb_ntz(i)]` and `ntz(i) <= log2(i)`, so a message of Int32-bounded
+/// length never indexes past entry 27 (i < 2^28). Building one entry per
+/// block instead made a 1 GiB tag-20 message allocate ~6.7e7 `Bytes`
+/// objects — GBs of pure waste before any length gate (C4). 32 entries
+/// cover every Int32-sized message with margin.
 fn ocb_l_table(
   bc : &@primitives.BlockCipher,
   max_k : Int32,
@@ -48,7 +55,8 @@ fn ocb_l_table(
   let l_star = bc.encrypt_block(zero.exact_view())
   let l_dollar = ocb_double(l_star.exact_view())
   let table : Array[Bytes] = [ocb_double(l_dollar.exact_view())]
-  for k in 1..<=max_k {
+  let entries = if max_k < 31 { max_k } else { 31 }
+  for k in 1..<=entries {
     table.push(ocb_double(table[k - 1].exact_view()))
   }
   (l_star, l_dollar, table)

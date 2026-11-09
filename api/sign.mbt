@@ -515,6 +515,15 @@ fn verify_signature_packet(
   match signer {
     None => NoVerifier
     Some((signer_pk, comp)) => {
+      // C3: a signing subkey must carry a valid embedded Primary Key
+      // Binding (RFC 9580 §5.2.3.26) — the same gate the issuing side
+      // enforces. gpg refuses signatures from an uncrossed subkey;
+      // accepting them here made this library the lenient outlier, so a
+      // signature gpg rejects verified as Ok.
+      if comp is Some(c) &&
+        !subkey_cross_certified(c.binding, verifier.primary, c.key) {
+        return Failed
+      }
       let digest = document_hash(sig, data, sig.sig_type())
       // RFC 9580 §5.2.4: a v6 verifier MUST reject the signature when the
       // left 16 bits of the digest do not match the stored hash tag.
@@ -527,6 +536,13 @@ fn verify_signature_packet(
       let hash_id = match @primitives.hash_id_of_number(sig.hash_algo()) {
         Some(h) => h
         None => return Failed
+      }
+      // C5: MD5 is dead for signatures (RFC 9580 §9.5 MUST NOT, and gpg
+      // refuses it); a chosen-prefix collision must not validate a
+      // document signature. SHA-1 stays verification-only for legacy mail
+      // (the v6 salt table already refuses it for new-format signatures).
+      if hash_id is @primitives.Md5 {
+        return Failed
       }
       let verified = verify_sig_material(
         signer_pk,

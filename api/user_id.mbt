@@ -154,12 +154,20 @@ pub fn PrivateKey::add_user_id(
     None => @primitives.unix_now().to_int()
   }
   let flags = governing_flags(Some(self.self_signature())).unwrap_or(0x03)
+  // The key-level expiry lives in the governing self-signature (S2): a
+  // re-issued certification that dropped the Key Expiration Time would
+  // silently lift the certificate's expiry — the write-side mirror of the
+  // verify-path N7 asymmetry. Inherit it the way the flags are inherited;
+  // 0 (no expiry) stays 0. gpg refuses add-uid on an expired key outright,
+  // so re-certifying never had business clearing the statement.
+  let key_expiry = u32_secs(self.self_signature().key_expiration_time())
   let sig = make_self_signature(
     self.primary,
     self.primary.public,
     user_id,
     now,
     key_flags=flags,
+    key_expiry~,
   )
   let user_ids = self.user_ids.copy()
   let fresh = UserIdBinding::{ user_id, self_signature: sig, revocation: None, }

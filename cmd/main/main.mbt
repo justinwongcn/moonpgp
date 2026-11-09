@@ -1,16 +1,20 @@
 ///|
 /// moonpgp — OpenPGP mail encryption demo CLI.
 ///
+/// Passphrases travel via `--pass-env NAME` (the named environment
+/// variable), never on the command line: argv lands in shell history and
+/// `ps` output (D1, matching the mailer/mailreader examples).
+///
 ///   moon run cmd/main -- help
 ///   moon run cmd/main -- keygen "Name <me@example.com>" key.asc pub.asc [bits]
-///   moon run cmd/main -- encpass <passphrase> <in> <out>
-///   moon run cmd/main -- decpass <passphrase> <in> <out>
+///   moon run cmd/main -- encpass --pass-env NAME <in> <out>
+///   moon run cmd/main -- decpass --pass-env NAME <in> <out>
 ///   moon run cmd/main -- encpub <public-key.asc> <in> <out>
-///   moon run cmd/main -- decpriv <secret-key.asc> [passphrase] <in> <out>
+///   moon run cmd/main -- decpriv <secret-key.asc> [--pass-env NAME] <in> <out>
 ///   moon run cmd/main -- sign <secret-key.asc> <in> <out.sig>
 ///   moon run cmd/main -- verify <public-key.asc> <in> <sig.asc>
-///   moon run cmd/main -- lock <secret-key.asc> <passphrase>
-///   moon run cmd/main -- unlock <secret-key.asc> <passphrase>
+///   moon run cmd/main -- lock <secret-key.asc> --pass-env NAME
+///   moon run cmd/main -- unlock <secret-key.asc> --pass-env NAME
 fn main {
   let args = @env.args()
   if args.length() < 2 {
@@ -55,24 +59,26 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")
     }
     "encpass" => {
-      check_args(rest.length(), 3)
-      let data = @fs.read_file_to_bytes(rest[1])
+      let (pass, pos) = pass_from_args(rest)
+      check_args(pos.length(), 2)
+      let data = @fs.read_file_to_bytes(pos[0])
       // Stamp the literal packet with the input's file name so the
       // backup-file scenario keeps a trace of what was encrypted.
-      let file_name = basename(rest[1])
+      let file_name = basename(pos[0])
       // Optional trailing "aead" selects the v5 SKESK + tag-20 shape
       // (GnuPG --force-aead interop) instead of v4 SKESK + SEIPD v1.
-      let aead = rest.length() >= 4 && rest[3] == "aead"
-      let armored = @api.encrypt_with_password(data, rest[0], aead~, file_name~)
-      @fs.write_string_to_file(rest[2], armored)
-      println("wrote \{rest[2]}")
+      let aead = pos.length() >= 3 && pos[2] == "aead"
+      let armored = @api.encrypt_with_password(data, pass, aead~, file_name~)
+      @fs.write_string_to_file(pos[1], armored)
+      println("wrote \{pos[1]}")
     }
     "decpass" => {
-      check_args(rest.length(), 3)
-      let armored = @fs.read_file_to_string(rest[1])
-      let plain = @api.decrypt_with_password(armored, rest[0])
-      @fs.write_bytes_to_file(rest[2], plain)
-      println("wrote \{rest[2]}")
+      let (pass, pos) = pass_from_args(rest)
+      check_args(pos.length(), 2)
+      let armored = @fs.read_file_to_string(pos[0])
+      let plain = @api.decrypt_with_password(armored, pass)
+      @fs.write_bytes_to_file(pos[1], plain)
+      println("wrote \{pos[1]}")
     }
     "encpub" => {
       check_args(rest.length(), 3)
@@ -83,25 +89,31 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       println("wrote \{rest[2]}")
     }
     "decpriv" => {
-      check_args(rest.length(), 3)
-      let key_text = @fs.read_file_to_string(rest[0])
+      let (pass, pos) = pass_env_from_args(rest)
+      check_args(pos.length(), 3)
+      let key_text = @fs.read_file_to_string(pos[0])
       let key = @api.PrivateKey::from_armored(key_text)
       // Snapshot the lock state BEFORE unlocking: unlock clears s2k_usage,
-      // so key.is_locked() is false afterwards and must not drive the
-      // argument positions (a locked key needs [key, passphrase, in, out]).
-      let was_locked = key.is_locked()
-      let key = if was_locked { key.unlock(rest[1]) } else { key }
-      if was_locked {
-        check_args(rest.length(), 4)
+      // so key.is_locked() is false afterwards. A locked key requires
+      // --pass-env; an unlocked key needs none (the flag stays optional
+      // here, unlike the password-only commands).
+      let key = if key.is_locked() {
+        match pass {
+          Some(p) => key.unlock(p)
+          None =>
+            @error.fail(
+              "cli: \{pos[0]} is locked; pass the passphrase via --pass-env NAME",
+            )
+        }
+      } else {
+        key
       }
-      let input = if was_locked { rest[2] } else { rest[1] }
-      let output = if was_locked { rest[3] } else { rest[2] }
       let data = @api.decrypt_with_private_key(
-        @fs.read_file_to_string(input),
+        @fs.read_file_to_string(pos[1]),
         key,
       )
-      @fs.write_bytes_to_file(output, data)
-      println("wrote \{output}")
+      @fs.write_bytes_to_file(pos[2], data)
+      println("wrote \{pos[2]}")
     }
     "sign" => {
       check_args(rest.length(), 3)
@@ -141,24 +153,74 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       }
     }
     "lock" => {
-      check_args(rest.length(), 2)
-      let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(rest[0]))
-      let locked = key.lock(rest[1])
-      @fs.write_string_to_file(rest[0], locked.to_armored())
+      let (pass, pos) = pass_from_args(rest)
+      check_args(pos.length(), 1)
+      let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(pos[0]))
+      let locked = key.lock(pass)
+      @fs.write_string_to_file(pos[0], locked.to_armored())
       println(
-        "locked \{rest[0]} (decryption and signing now require the passphrase)",
+        "locked \{pos[0]} (decryption and signing now require the passphrase)",
       )
     }
     "unlock" => {
-      check_args(rest.length(), 2)
-      let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(rest[0]))
-      let open = key.unlock(rest[1])
-      @fs.write_string_to_file(rest[0], open.to_armored())
+      let (pass, pos) = pass_from_args(rest)
+      check_args(pos.length(), 1)
+      let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(pos[0]))
+      let open = key.unlock(pass)
+      @fs.write_string_to_file(pos[0], open.to_armored())
       println(
-        "unlocked \{rest[0]} (the secret key is now stored without passphrase protection)",
+        "unlocked \{pos[0]} (the secret key is now stored without passphrase protection)",
       )
     }
     _ => usage()
+  }
+}
+
+///|
+/// Strip `--pass-env NAME` from the arguments, returning the passphrase
+/// read from that environment variable together with the remaining
+/// positional arguments. The value never appears in argv: command lines
+/// land in shell history and `ps` output (D1; same convention as the
+/// mailer/mailreader examples).
+fn pass_from_args(rest : Array[String]) -> (String, Array[String]) raise {
+  let (pass, pos) = pass_env_from_args(rest)
+  match pass {
+    Some(p) => (p, pos)
+    None =>
+      @error.fail(
+        "cli: pass the passphrase via --pass-env NAME (an environment variable), not on the command line",
+      )
+  }
+}
+
+///|
+/// Like `pass_from_args` but the flag is optional (for commands where a
+/// passphrase is only needed in some states, e.g. `decpriv` on an
+/// unlocked key).
+fn pass_env_from_args(rest : Array[String]) -> (String?, Array[String]) raise {
+  let out : Array[String] = []
+  let mut name : String? = None
+  let mut i = 0
+  while i < rest.length() {
+    if rest[i] == "--pass-env" {
+      if i + 1 >= rest.length() {
+        @error.fail("cli: --pass-env needs the NAME of an environment variable")
+      }
+      name = Some(rest[i + 1])
+      i += 1
+    } else {
+      out.push(rest[i])
+    }
+    i += 1
+  }
+  match name {
+    Some(n) =>
+      match @env.get_env_var(n) {
+        Some(v) => (Some(v), out)
+        None =>
+          @error.fail("cli: environment variable \{n} (--pass-env) is not set")
+      }
+    None => (None, out)
   }
 }
 
@@ -207,13 +269,13 @@ fn print_usage() -> Unit {
     "  keygen \"Name <me@example.com>\" key.asc pub.asc [bits]\n" +
     "  edkeygen \"Name <me@example.com>\" key.asc pub.asc\n" +
     "  v6keygen \"Name <me@example.com>\" key.asc pub.asc   (RFC 9580 v6 Ed25519)\n" +
-    "  encpass <passphrase> <in> <out> [aead]   (aead = tag-20/GnuPG shape)\n" +
-    "  decpass <passphrase> <in> <out>\n" +
+    "  encpass --pass-env NAME <in> <out> [aead]  (aead = tag-20/GnuPG shape)\n" +
+    "  decpass --pass-env NAME <in> <out>\n" +
     "  encpub <public-key.asc> <in> <out>\n" +
-    "  decpriv <secret-key.asc> [passphrase] <in> <out>\n" +
+    "  decpriv <secret-key.asc> [--pass-env NAME] <in> <out>\n" +
     "  sign <secret-key.asc> <in> <out.sig>\n" +
     "  verify <public-key.asc> <in> <sig.asc>\n" +
-    "  lock <secret-key.asc> <passphrase>       (protect the stored secret key)\n" +
-    "  unlock <secret-key.asc> <passphrase>     (strip passphrase protection)",
+    "  lock <secret-key.asc> --pass-env NAME     (protect the stored secret key)\n" +
+    "  unlock <secret-key.asc> --pass-env NAME   (strip passphrase protection)",
   )
 }

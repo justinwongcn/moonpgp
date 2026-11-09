@@ -28,10 +28,21 @@ const FLAG_ENCRYPT : Int32 = FLAG_ENCRYPT_COMM | FLAG_ENCRYPT_STORAGE
 const FLAG_SIGN_OR_CERTIFY : Int32 = FLAG_SIGN | FLAG_CERTIFY
 
 ///|
+/// Reinterpret a wire u32 timestamp/duration carried as a two's-complement
+/// Int32 (F09) as its unsigned value in Int64. All expiry arithmetic runs
+/// here so legal 4-octet lifetimes up to 2^32-1 seconds and creation times
+/// past 2038 compare correctly instead of wrapping negative.
+fn u32_secs(t : Int32) -> Int64 {
+  t.to_int64() & 0xFFFFFFFFL
+}
+
+///|
 /// True when a key packet expired at `now`: the governing signature's
 /// Key Expiration Time is nonzero and `now` lies after the key's creation
 /// time plus that many seconds (go-crypto's `keyExpired` semantics: the
 /// lifetime counts from the key packet's creation, not the signature's).
+/// Both operands are unsigned (F09), summed in Int64 — a lifetime whose
+/// absolute expiry crosses 2038 must not wrap into "already expired".
 fn packet_expired_at(
   packet : @packet.PublicKeyPacket,
   governing_sig : @packet.SignaturePacket?,
@@ -47,7 +58,7 @@ fn packet_expired_at(
   if lifetime == 0 {
     return false
   }
-  now > (packet.creation_time + lifetime).to_int64()
+  now > u32_secs(packet.creation_time) + u32_secs(lifetime)
 }
 
 ///|
@@ -64,7 +75,7 @@ fn sig_expired_at(sig : @packet.SignaturePacket, now : Int64) -> Bool {
     return false
   }
   match sig.creation_time() {
-    Some(created) => now > (created + lifetime).to_int64()
+    Some(created) => now > u32_secs(created) + u32_secs(lifetime)
     None => false
   }
 }
@@ -131,7 +142,9 @@ fn revocation_effective_at(sig : @packet.SignaturePacket, now : Int64) -> Bool {
     return true
   }
   match sig.creation_time() {
-    Some(created) => created <= now.to_int()
+    // Unsigned comparison: a revocation dated past 2038 (u32 top bit set,
+    // negative as Int32) must stay dormant until its stamp, not fire early.
+    Some(created) => u32_secs(created) <= now
     None => true
   }
 }
@@ -198,11 +211,17 @@ pub fn PublicKey::is_revoked(self : PublicKey, now : Int64) -> Bool {
 /// The encryption-capable packet to use at `now`: the last usable
 /// encryption subkey in wire order (each judged by its own binding —
 /// flags, expiry, revocation), otherwise the primary for RSA. None when
-/// nothing on the key may encrypt at `now`.
+/// nothing on the key may encrypt at `now`. An expired primary invalidates
+/// every component (the rule the verification path applies, N7): a subkey
+/// only exists as part of its certificate, so nothing is selectable past
+/// primary expiry.
 pub fn PublicKey::encryption_packet_at(
   self : PublicKey,
   now : Int64,
 ) -> @packet.PublicKeyPacket? {
+  if self.is_expired(now) {
+    return None
+  }
   let mut chosen : @packet.PublicKeyPacket? = None
   for c in self.subkeys {
     if !subkey_revoked_at(c.revocation, self.primary, c.key, now) &&
@@ -228,9 +247,10 @@ pub fn PublicKey::encryption_packet_at(
 
 ///|
 /// True when, at `now`, the key has an encryption-capable component:
-/// neither the key nor the subkey is revoked, some component carries the
-/// encryption key flags (absence of the subpacket counts as capable) and
-/// that component has not expired.
+/// the key is not revoked and not expired (an expired primary invalidates
+/// its subkeys too), some component carries the encryption key flags
+/// (absence of the subpacket counts as capable) and that component has
+/// not expired.
 pub fn PublicKey::can_encrypt(self : PublicKey, now : Int64) -> Bool {
   if self.is_revoked(now) {
     return false
@@ -240,10 +260,11 @@ pub fn PublicKey::can_encrypt(self : PublicKey, now : Int64) -> Bool {
 
 ///|
 /// True when, at `now`, some component may sign or certify: not revoked,
-/// primary (or any subkey) flags permit signing/certifying, and the
-/// governing signatures have not expired.
+/// not expired (the primary's expiry binds the whole certificate), and
+/// primary (or any subkey) flags permit signing/certifying with the
+/// governing signatures unexpired.
 pub fn PublicKey::can_verify(self : PublicKey, now : Int64) -> Bool {
-  if self.is_revoked(now) {
+  if self.is_revoked(now) || self.is_expired(now) {
     return false
   }
   if component_usable(

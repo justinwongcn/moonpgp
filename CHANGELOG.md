@@ -9,6 +9,58 @@ a released version when that version is published to mooncakes.io.
 
 ## [Unreleased]
 
+### Fixed
+
+- An expired primary key no longer decrypts to a working encryption path:
+  `can_encrypt`/`encryption_packet_at` and both KeyRing `usable_at` gates
+  only judged a subkey by its own binding, so a live encryption subkey
+  kept a dead certificate encrypting. The primary's expiry now binds the
+  whole certificate on the encryption side too (the verify path already
+  did). Expiry arithmetic moved to Int64 over the unsigned wire domain —
+  a legal lifetime crossing 2038 used to wrap negative and expire the
+  key at creation, and a revocation dated past 2038 fired early.
+- `add_user_id` re-certifying the first User ID silently dropped the Key
+  Expiration Time: one natural operation turned an expired certificate
+  into an immortal one, locally and on export. The re-issued
+  certification inherits the expiry the way it already inherited key
+  flags.
+- A single unparseable ESK packet (a future version, an unknown S2K
+  usage) aborted the whole message's decryption even when a later ESK
+  would have opened it; RFC 9580 §10.3.2.1 says discard and continue. A
+  legal v6 anonymous PKESK (size octet 0, §5.1.2/§5.1.8) was skipped
+  outright, so a hidden recipient could never decrypt.
+- Import now refuses mixed-generation certificates (v6 primary with a
+  v4 subkey or the reverse): the message layer would wire a v3 PKESK to
+  a v2 SEIPD, a pairing RFC 9580 Table 26 forbids and every recipient
+  must discard.
+- `verify_key_signature` checked unknown-critical subpackets but not the
+  v6 fast-hash tag, accepting signatures gpg must reject (RFC 9580
+  §5.2.4); the document-verification path already checked it.
+- Verification answered `Ok` for signatures issued by a signing subkey
+  without a valid embedded cross-certification — the issuing side
+  refuses to create one and gpg refuses to trust one.
+- The OCB key-dependent L table was built with one entry per message
+  block; a 1 GiB tag-20 message allocated ~6.7e7 `Bytes` objects before
+  any length gate. It is capped at 32 entries (every lookup is
+  `l[ocb_ntz(i)]`, so 28 entries cover Int32-sized messages).
+- mailreader archived mail signed by revoked or expired keys with exit
+  code 0; only `Failed` aborted. `KeyRevoked` and `Expired` abort now.
+- CLI passphrases moved off argv: `encpass`, `decpass`, `lock`,
+  `unlock` (and the optional `decpriv` passphrase) take `--pass-env
+  NAME` and read the environment variable, matching the example
+  scripts; argv values land in shell history and `ps` output.
+
+### Security
+
+- Password decryption shares a per-message KDF budget (S3): every SKESK
+  attempt costs a full derivation before it can prove the passphrase
+  wrong, so an ESK-stuffed message was a pre-authentication CPU
+  amplifier — ~10 KB of attacker input bought minutes of victim CPU.
+  The retry loop now caps both the attempt count (16) and the cumulative
+  derivation work (about three saturated Argon2 attempts), and refuses
+  further attempts explicitly. Honest multi-recipient messages are
+  unaffected.
+
 ## [0.4.0] - 2026-10-31
 
 ### Added

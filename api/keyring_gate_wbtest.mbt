@@ -7,12 +7,16 @@
 /// expiry differential runs both clock states against the same ring.
 
 ///|
+/// Stamp a signature with a Key Expiration Time of `lifetime` seconds —
+/// RFC 9580 §5.2.3.13 semantics: the subpacket counts SECONDS AFTER the
+/// key's creation, it is not an absolute stamp. (An earlier draft of this
+/// helper wrote `created + lifetime`; the certificates only "expired"
+/// because the old Int32 arithmetic wrapped those huge lifetimes negative.
+/// Fixing S1 exposed the helper, so it now writes what RFC says.)
 fn with_key_expiration(
   binding : @packet.SignaturePacket,
-  created : Int32,
   lifetime : Int32,
 ) -> @packet.SignaturePacket {
-  let exp = created + lifetime
   {
     ..binding,
     hashed_subpackets: [
@@ -21,10 +25,10 @@ fn with_key_expiration(
         critical: false,
         sub_type: @packet.SIGSUB_KEY_EXPIRATION_TIME,
         body: Bytes::from_array([
-          ((exp >> 24) & 0xFF).to_byte(),
-          ((exp >> 16) & 0xFF).to_byte(),
-          ((exp >> 8) & 0xFF).to_byte(),
-          (exp & 0xFF).to_byte(),
+          ((lifetime >> 24) & 0xFF).to_byte(),
+          ((lifetime >> 16) & 0xFF).to_byte(),
+          ((lifetime >> 8) & 0xFF).to_byte(),
+          (lifetime & 0xFF).to_byte(),
         ]),
       },
     ],
@@ -34,8 +38,7 @@ fn with_key_expiration(
 ///|
 test "ring encryption lookup judges the matched subkey's own lifetime" {
   let key = generate_key("X <x@example.com>", bits=2048)
-  let created = key.subkeys[0].secret.public.creation_time
-  let expired_binding = with_key_expiration(key.subkeys[0].binding, created, 60)
+  let expired_binding = with_key_expiration(key.subkeys[0].binding, 60)
   let pk = {
     ..key,
     subkeys: [
@@ -69,12 +72,7 @@ test "ring encryption lookup judges the matched subkey's own lifetime" {
 ///|
 test "ring verification lookup judges the primary certification's lifetime" {
   let key = generate_ed25519_key("E <e@example.com>")
-  let created = key.primary.public.creation_time
-  let expired_self = with_key_expiration(
-    key.user_ids[0].self_signature,
-    created,
-    60,
-  )
+  let expired_self = with_key_expiration(key.user_ids[0].self_signature, 60)
   let pk : PublicKey = {
     ..key.to_public(),
     user_ids: [{ ..key.user_ids[0], self_signature: expired_self, }],
@@ -178,4 +176,29 @@ test "a signing subkey without cross-certification is refused" {
   // assert false: the uncrossed subkey would issue a signature gpg
   // refuses to verify.
   assert_true(raised)
+}
+
+///|
+test "ring lookups refuse every component of an expired primary" {
+  let key = generate_ed25519_key("RP <rp@example.com>")
+  let now = @primitives.unix_now()
+  if now != 0L {
+    let pk = with_expired_primary(key, now)
+    let ring = KeyRing::new()
+    let fresh = generate_ed25519_key("RF <rf@example.com>")
+    ring.add_public(pk)
+    ring.add_public(fresh.to_public())
+    // The subkey id is still inside its own binding's validity — the
+    // primary's expiry must be what refuses it. Deleting the is_expired
+    // gate from key_packet_*_usable_at turns both asserts green and this
+    // test red.
+    assert_true(
+      ring.find_encryption_key(pk.subkeys[0].key.key_id(), now~) is None,
+    )
+    assert_true(ring.find_verification_key(pk.primary.key_id(), now~) is None)
+    assert_true(
+      ring.find_encryption_key(fresh.to_public().subkeys[0].key.key_id(), now~)
+      is Some(_),
+    )
+  }
 }

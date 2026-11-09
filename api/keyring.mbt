@@ -48,15 +48,16 @@ fn all_public_packets(key : PublicKey) -> Array[@packet.PublicKeyPacket] {
 
 ///|
 /// True when the packet is an encryption-capable component of `key` that
-/// is still usable at `now` (key/subkey not revoked, flags permit —
-/// absent flags count as capable —, nothing expired). Each subkey is
-/// judged by its own binding (N2).
+/// is still usable at `now` (key not revoked and not expired — an expired
+/// primary invalidates its subkeys too —, flags permit, absent flags count
+/// as capable, nothing expired). Each subkey is judged by its own binding
+/// (N2).
 fn key_packet_encryption_usable_at(
   key : PublicKey,
   packet : @packet.PublicKeyPacket,
   now : Int64,
 ) -> Bool raise {
-  if key.is_revoked(now) {
+  if key.is_revoked(now) || key.is_expired(now) {
     return false
   }
   for c in key.subkeys {
@@ -71,15 +72,16 @@ fn key_packet_encryption_usable_at(
 
 ///|
 /// True when the packet is a component of `key` that may verify at `now`
-/// (not revoked, sign/certify flags permit, nothing expired). The matched
-/// packet is judged by its own binding (N2): a sibling subkey's health
-/// says nothing about the subkey that actually issued the signature.
+/// (not revoked, not expired — the primary's expiry binds the whole
+/// certificate —, sign/certify flags permit). The matched packet is judged
+/// by its own binding (N2): a sibling subkey's health says nothing about
+/// the subkey that actually issued the signature.
 fn key_packet_verify_usable_at(
   key : PublicKey,
   packet : @packet.PublicKeyPacket,
   now : Int64,
 ) -> Bool raise {
-  if key.is_revoked(now) {
+  if key.is_revoked(now) || key.is_expired(now) {
     return false
   }
   if packet.key_id().equal(key.primary.key_id()) {

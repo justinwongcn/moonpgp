@@ -307,13 +307,77 @@ pub fn decrypt_with_password(
 }
 
 ///|
+/// Per-message KDF budget (S3): every SKESK costs a full key derivation
+/// before it can prove the passphrase right or wrong, so a message packed
+/// with high-cost SKESKs is a pre-authentication CPU amplifier — ~10 KB of
+/// attacker input used to buy minutes of victim CPU across the retry loop.
+/// The budget bounds the total derivation work one message may request
+/// while leaving legitimate multi-recipient messages (a few SKESKs at
+/// gpg-default cost) untouched. Mirrors the decompression-budget pattern
+/// (S03) — this is the KDF-side sibling.
+priv struct S2KBudget {
+  mut charged : Int32
+}
+
+///|
+/// Budget in units of one Argon2 pass over 64 MiB: 768 ≈ three full-cost
+/// Argon2 attempts (t=255, m=64 MiB books 255 units each) or roughly six
+/// gpg-default iterated derivations. The first attempt of any single ESK
+/// always fits when the budget starts at zero.
+const S2K_BUDGET_UNITS : Int32 = 768
+
+///|
+/// Worst charge one attempt may book. A saturated Argon2 specifier is
+/// exactly 255 units; a max-count iterated specifier computes far more
+/// raw units than its milliseconds of SHA-256 cost, so charges clamp here
+/// — honest work keeps fitting the budget while the amplification stays
+/// bounded.
+const S2K_MAX_CHARGE : Int32 = 255
+
+///|
+fn S2KBudget::new() -> S2KBudget {
+  { charged: 0, }
+}
+
+///|
+fn S2KBudget::exhausted(self : S2KBudget) -> Bool {
+  self.charged >= S2K_BUDGET_UNITS
+}
+
+///|
+/// Book one Argon2 derivation at `passes` passes over `memory_kib` KiB
+/// (both bounded by validation and the memory cap, so the product fits
+/// Int). A unit is one pass over 64 MiB.
+fn S2KBudget::charge_argon2(
+  self : S2KBudget,
+  passes : Int32,
+  memory_kib : Int32,
+) -> Unit {
+  let units = (passes * memory_kib + 65535) / 65536
+  self.charged = self.charged +
+    (if units > S2K_MAX_CHARGE { S2K_MAX_CHARGE } else { units })
+}
+
+///|
+/// Book one iterated-S2K derivation hashing `count` octets. SHA-256 moves
+/// several MiB per unit, so the raw ratio overcharges — the clamp exists
+/// precisely for this gap.
+fn S2KBudget::charge_iterated(self : S2KBudget, count : Int32) -> Unit {
+  let units = (count + 65535) / 65536
+  self.charged = self.charged +
+    (if units > S2K_MAX_CHARGE { S2K_MAX_CHARGE } else { units })
+}
+
+///|
 /// Same as `decrypt_with_password` but takes binary packet data.
 ///
 /// Every SKESK in the stream is tried until one both unwraps AND opens the
 /// message payload (N4): a v4 SKESK has no integrity check of its own, so
 /// a wrong passphrase can unwrap to structurally plausible garbage whose
 /// wrongness only surfaces at the SEIPD MDC — the retry must therefore
-/// span the payload decryption, not just the unwrap.
+/// span the payload decryption, not just the unwrap. The retry shares a
+/// per-message KDF budget (S3) so an ESK-stuffed message cannot buy
+/// unbounded derivation work.
 pub fn decrypt_binary_with_password(
   data : BytesView,
   passphrase : String,
@@ -326,16 +390,32 @@ pub fn decrypt_binary_with_password(
   // variant survives the retry loop.
   let mut passphrase_error : String? = None
   let mut last_error : Error? = None
+  let budget = S2KBudget::new()
   for p in packets {
     if p.tag() == @packet.Skesk {
-      let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
+      // RFC 9580 §10.3.2.1: an ESK that cannot be parsed (a future
+      // version, an unknown S2K usage) is discarded, not fatal — a later
+      // ESK in the same message may still open it (S4).
+      let skesk : @packet.SkeskPacket = @packet.SkeskPacket::parse(
+        p.body().exact_view(),
+      ) catch {
+        _ => continue
+      }
+      if budget.exhausted() {
+        @error.fail(
+          "api: message asks for more session-key derivations than the per-message budget (S3)",
+        )
+      }
       // v5/v6 and the AEAD-protected v4 shape prove the passphrase at
       // unwrap time; only the checksum-free v4 CFB shape leaves the
       // payload failure as the wrong-passphrase signal.
       let unwrap_definitive = skesk.version() >= 5 || skesk.aead_algo() != 0
       let opened : Bytes? = try {
         let (msg_algo, session_key, skesk_version) = unwrap_one_skesk(
-          skesk, passphrase, argon2_max_memory_kib,
+          skesk,
+          passphrase,
+          argon2_max_memory_kib,
+          budget~,
         )
         Some(
           open_password_payload(
@@ -530,11 +610,22 @@ fn unwrap_skesk(
 ) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
   let mut passphrase_error : String? = None
   let mut last_error : Error? = None
+  let budget = S2KBudget::new()
   for p in packets {
     if p.tag() == @packet.Skesk {
-      let skesk = @packet.SkeskPacket::parse(p.body().exact_view())
+      // S4: an unparseable ESK is discarded, not fatal (§10.3.2.1).
+      let skesk : @packet.SkeskPacket = @packet.SkeskPacket::parse(
+        p.body().exact_view(),
+      ) catch {
+        _ => continue
+      }
+      if budget.exhausted() {
+        @error.fail(
+          "api: message asks for more session-key derivations than the per-message budget (S3)",
+        )
+      }
       let unwrapped : (@primitives.CipherAlgo, Bytes, Int32)? = Some(
-        unwrap_one_skesk(skesk, passphrase, argon2_max_memory_kib),
+        unwrap_one_skesk(skesk, passphrase, argon2_max_memory_kib, budget~),
       ) catch {
         @error.WrongPassphrase(msg~) => {
           passphrase_error = Some(msg)
@@ -563,11 +654,30 @@ fn unwrap_skesk(
 ///|
 /// Unwrap a single SKESK. Any raise means "this SKESK does not match the
 /// passphrase", which the caller treats as a reason to try the next one.
+/// The derivation cost is booked against the caller's per-message budget
+/// (S3) before the work starts.
 fn unwrap_one_skesk(
   skesk : @packet.SkeskPacket,
   passphrase : String,
   argon2_max_memory_kib : Int32,
+  budget~ : S2KBudget = S2KBudget::new(),
 ) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
+  // S3: book the derivation cost up front. The memory actually processed
+  // is the specifier's demand clamped by the caller's cap, matching what
+  // derive_key_capped will run.
+  match skesk.s2k() {
+    @s2k.Argon2(_, passes, _parallelism, memory_exp) => {
+      let m_kib = if memory_exp > 16 {
+        argon2_max_memory_kib
+      } else {
+        1 << memory_exp
+      }
+      budget.charge_argon2(passes, m_kib)
+    }
+    @s2k.Iterated(_, _, count_byte) =>
+      budget.charge_iterated(@s2k.decode_count(count_byte))
+    _ => ()
+  }
   let algo = match @primitives.cipher_algo_of_number(skesk.cipher_algo()) {
     Some(a) => a
     None =>

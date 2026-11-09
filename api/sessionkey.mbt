@@ -158,7 +158,13 @@ pub fn recover_session_key_with_key(
   }
   for p in packets {
     if p.tag() == @packet.Pkesk {
-      let pkesk = @packet.PkeskPacket::parse(p.body().exact_view())
+      // RFC 9580 §10.3.2.1: an ESK that cannot be parsed is discarded,
+      // not fatal — a later ESK may still open this message (S4).
+      let pkesk : @packet.PkeskPacket = @packet.PkeskPacket::parse(
+        p.body().exact_view(),
+      ) catch {
+        _ => continue
+      }
       // Hidden recipient (S13): an all-zero v3 key id matches no key by
       // id, so every candidate is tried; a failing candidate is just not
       // the recipient.

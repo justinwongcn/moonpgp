@@ -574,6 +574,22 @@ pub fn verify_key_signature(
     Some(h) => h
     None => return false
   }
+  // RFC 9580 §5.2.4: a v6 verifier MUST reject the signature when the
+  // left 16 bits of the digest do not match the stored hash tag — the
+  // same check document verification applies (C2). Without it a corrupted
+  // revocation or binding could pass where gpg refuses.
+  if sig.version() >= 6 {
+    let tag = (digest[0].to_int() << 8) | digest[1].to_int()
+    if tag != sig.fast_hash() {
+      return false
+    }
+  }
+  // C5: MD5 is dead for signatures (RFC 9580 §9.5 MUST NOT, and gpg
+  // refuses it); a prefix collision must not validate a certification,
+  // binding or revocation. SHA-1 stays verification-only for legacy mail.
+  if hash_id is @primitives.Md5 {
+    return false
+  }
   verify_sig_material(
     signer_pub,
     hash_id,

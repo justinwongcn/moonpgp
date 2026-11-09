@@ -1,5 +1,6 @@
 import {
   "justinwongcn/moonpgp/api",
+  "justinwongcn/moonpgp/error",
   "moonbitlang/x/fs",
   "moonbitlang/core/string",
   "moonbitlang/core/env",

@@ -367,7 +367,14 @@ fn fetch_and_decrypt(
       }
       if cb.verified is [Ok] {
         println("decrypt+verify OK")
-      } else if cb.errors.length() > 0 || cb.verified is [Failed] {
+      } else if cb.errors.length() > 0 ||
+        cb.verified is [Failed] ||
+        cb.verified is [KeyRevoked] ||
+        cb.verified is [Expired] {
+        // D2: a signature from a revoked or expired key is not a
+        // success either — only [Ok] (or the empty/no-verifier case)
+        // counts as a clean delivery, and anything else must not be
+        // archived silently with exit code 0.
         abort("mailreader: decrypt/verify FAILED")
       }
     },

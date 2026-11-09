@@ -128,6 +128,8 @@ CI covers native, wasm, and js; for day-to-day work, use native. Key generation 
 - Import verifies the signatures it understands (User ID certifications, subkey bindings, v6 direct-key signatures), but that's signature checking, not trust management: whether a key really belongs to someone is for your application to decide.
 - RSA, Ed25519, and X25519 arithmetic runs on `@bigint` and is not constant-time, and a GC runtime makes no promise about wiping private keys from memory.
 - Decrypting untrusted Argon2-protected data is capped at 64 MiB of memory by default; over-limit requests are rejected before anything is allocated. Some APIs let you set a different limit.
+- One message can only ask for so much key derivation: the password-decryption retry loop caps the ESK attempts it will try (16) and the total KDF work they may book — roughly three saturated Argon2 derivations — and rejects further attempts explicitly before spending them.
+- Verification refuses MD5 signatures outright (RFC 9580 §9.5 says MUST NOT; gpg refuses them too). SHA-1 still verifies for legacy mail.
 - The encryption APIs don't pad v2 SEIPD messages, so ciphertext length gives away roughly how long the plaintext is.
 - On targets without a platform clock, expiration checks are off and revocation dates can't be evaluated; revocation signatures are still checked cryptographically.
 

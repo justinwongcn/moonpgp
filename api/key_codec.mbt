@@ -433,6 +433,17 @@ fn validate_key_signatures(
     None => ()
   }
   for s in subkeys {
+    // C1: uniform generations are a certificate invariant. A v6 primary
+    // with a v4 subkey (or the reverse) makes the message layer wire a v3
+    // PKESK to a v2 SEIPD — a pairing RFC 9580 Table 26 forbids and every
+    // recipient discards, i.e. a certificate nobody can be written to.
+    // The builder enforces this at key-build time; import re-checks
+    // because certificates arrive from the outside world.
+    guard s.public.version() == primary.version() else {
+      @error.fail(
+        "api: subkey packet version \{s.public.version()} does not match primary key version \{primary.version()} (RFC 9580 Table 26)",
+      )
+    }
     // N1 (RFC 9580 §10.1): a transferable subkey MUST carry a binding
     // signature. Accepting an unbound subkey let a subkey injected into a
     // forwarded certificate be treated as encryption-capable without any

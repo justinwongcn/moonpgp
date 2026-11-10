@@ -94,7 +94,7 @@ pub fn ArmorBlock::header(self : ArmorBlock, key : String) -> String? {
 
 ///|
 /// Version header emitted when the caller does not supply one.
-const VERSION_STRING : String = "moonpgp 0.1.0"
+const VERSION_STRING : String = "moonpgp 0.4.0"
 
 ///|
 /// Encode `data` into ASCII armor with this block type and headers.

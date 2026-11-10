@@ -50,16 +50,39 @@ a released version when that version is published to mooncakes.io.
   NAME` and read the environment variable, matching the example
   scripts; argv values land in shell history and `ps` output.
 
+- Release smoke script synced to the `--pass-env` CLI: `ci_smoke.sh`
+  still passed the passphrase as a positional argument in six places,
+  which fails outright on the new CLI and would have broken the release
+  gate at the next publish.
+- SECURITY.md supported-versions table moved to 0.4.x (0.3.x and earlier
+  end of life, matching the newest-line-only policy); it still said
+  0.3.x after 0.4.0 shipped.
+- THIRD-PARTY-NOTICES records the flate version actually pinned in
+  `moon.mod` (0.9.0; the file's own sync rule was violated at 0.8.4).
+- Armor version string regenerated per release line: `Version: moonpgp
+  0.1.0` was still stamped on every cleartext signature and armor block
+  while the module is at 0.4.0.
+- Chinese README no longer claims its code blocks are executed by
+  `moon test` (only `.mbt.md` files are literate-checked; the Chinese
+  file is plain Markdown) and its examples are re-synced with the
+  English blocks, including the package-qualified `PgpError` pattern.
+- The scheduled OpenWiki workflow was removed: its inputs (openwiki/,
+  AGENTS.md, CLAUDE.md) are deliberately kept out of the public
+  repository, so a hosted run has no source to regenerate from and its
+  pull request would try to add ignored files — the job could only ever
+  fail. Regeneration happens locally via the openwiki-update skill.
+
 ### Security
 
 - Password decryption shares a per-message KDF budget (S3): every SKESK
   attempt costs a full derivation before it can prove the passphrase
   wrong, so an ESK-stuffed message was a pre-authentication CPU
   amplifier — ~10 KB of attacker input bought minutes of victim CPU.
-  The retry loop now caps both the attempt count (16) and the cumulative
-  derivation work (about three saturated Argon2 attempts), and refuses
-  further attempts explicitly. Honest multi-recipient messages are
-  unaffected.
+  Each attempt books its derivation work against the cumulative
+  per-message budget (about three saturated Argon2 attempts, or roughly
+  six gpg-default iterated derivations), and further attempts are
+  refused explicitly once the line is crossed. Honest multi-recipient
+  messages are unaffected.
 
 ## [0.4.0] - 2026-10-31
 

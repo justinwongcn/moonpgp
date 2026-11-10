@@ -30,9 +30,10 @@ import {
 
 ## 接口速览
 
-生成一把密钥、加密、再解开。下面的代码块会被 `moon test` 编译并执行，不会与代码脱节：
+生成一把密钥、加密、再解开。下面的示例与英文版（README.mbt.md）逐块同步，英文版的代码块由 `moon test` 编译执行，示例改动会被一并校验：
 
 ```mbt check
+///|
 test "a tiny round trip" {
   let key = @moonpgp.generate_ed25519_key("alice@example.com")
   let armored = @moonpgp.pgp().encryption().recipient(key.to_public()).finish()(
@@ -50,13 +51,14 @@ test "a tiny round trip" {
 错误是带类型的：口令错误抛 `WrongPassphrase`，输入损坏抛 `Malformed`，未实现的算法抛 `Unsupported`——都从根包直接可用：
 
 ```mbt check
+///|
 test "wrong passphrases are a typed error" {
   let key = @moonpgp.generate_ed25519_key("alice@example.com").lock("right")
   try {
     let _ = key.unlock("wrong")
     fail("unlocking must fail")
   } catch {
-    WrongPassphrase(_) => () // 预期的失败类别
+    @moonpgp.PgpError::WrongPassphrase(_) => () // 预期的失败类别
     _ => fail("expected WrongPassphrase")
   }
 }
@@ -65,6 +67,7 @@ test "wrong passphrases are a typed error" {
 生成与校验分离签名：
 
 ```mbt check
+///|
 test "detached signatures and verification" {
   let signer = @moonpgp.generate_ed25519_key("signer@example.com")
   let data = b"release tarball bytes or document payload"
@@ -77,6 +80,7 @@ test "detached signatures and verification" {
 处理 PGP/MIME 邮件时，导入 `"justinwongcn/moonpgp/mime"`：
 
 ```mbt check
+///|
 test "pgp/mime sign and verify" {
   let key = @moonpgp.generate_ed25519_key("mime@example.com")
   let message = @mime.build_pgp_mime_signed("Hello from MoonBit\n", key)
@@ -121,7 +125,7 @@ CI 覆盖 native、wasm、js 三个目标，日常开发建议直接用 native�
 - 导入时会校验它认识的签名（User ID 认证、子钥绑定、v6 直接签名），但校验签名不等于建立信任：密钥是否真的属于某个人，要由应用自己判断。
 - RSA、Ed25519 和 X25519 的域运算基于 `@bigint`，不是常数时间实现；GC 环境下也无法保证私钥内存被清零。
 - 解密不可信的 Argon2 数据默认限 64 MiB 内存，超限请求在分配前就会被拒绝；部分 API 允许设置其他上限。
-- 一条消息能索取的密钥派生工作量有上限：口令解密的重试循环最多尝试 16 个 ESK，累计 KDF 工作量约等于三次满配 Argon2 推导，超出部分在花费前就会显式拒绝。
+- 一条消息能索取的密钥派生工作量有上限：每个 SKESK 尝试都会把 KDF 工作量计入一条共享的每消息预算——约等于三次满配 Argon2 推导（或约六次 gpg 默认 iterated）——越线之后的尝试在花费前就会被显式拒绝。
 - 验证一律拒绝 MD5 签名（RFC 9580 §9.5 的 MUST NOT，gpg 也拒绝）；SHA-1 出于旧邮件兼容仍可验证。
 - 加密 API 不给 v2 SEIPD 加填充，密文长度会大致暴露明文长度。
 - 没有平台时钟的目标上，过期检查不可用，吊销日期也无法判断；吊销签名本身仍会做密码学验证。

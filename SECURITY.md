@@ -11,8 +11,8 @@ Only the newest release line gets security fixes.
 
 | Version | Status |
 | ------- | ------ |
-| 0.3.x | Supported; security fixes land here |
-| 0.2.x and earlier | End of life. 0.1.0 in particular ships a known subkey-injection flaw — upgrade to at least 0.2.0 |
+| 0.4.x | Supported; security fixes land here |
+| 0.3.x and earlier | End of life. 0.1.0 in particular ships a known subkey-injection flaw — upgrade to at least 0.2.0 |
 
 ## Reporting a vulnerability
 

@@ -8,6 +8,7 @@
 /// `parse`/`to_body` regardless of visibility.
 ///
 /// PKESK packet body, versions 3 (RFC 9580 §5.1.1) and 6 (§5.1.2).
+#derive(Debug)
 pub(all) struct PkeskPacket {
   version : Int32
   /// v3 only: recipient key id (all zero for a hidden recipient).
@@ -24,7 +25,7 @@ pub(all) struct PkeskPacket {
   /// X25519 only: the 32-octet native ephemeral public key. ECDH only:
   /// the MPI value of the ephemeral point (0x40 || X). Empty for RSA.
   ecdh_ephemeral : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn PkeskPacket::version(self : PkeskPacket) -> Int32 {
@@ -185,6 +186,7 @@ pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
 /// nonce and seals the session key with the S2K-derived key directly;
 /// version 6 adds the two count octets and the HKDF-SHA256 key
 /// separation (`info`/AD = tag | version | cipher | aead).
+#derive(Debug)
 pub(all) struct SkeskPacket {
   version : Int32
   /// Symmetric algorithm used for the message; also the default derivation
@@ -199,7 +201,7 @@ pub(all) struct SkeskPacket {
   /// AEAD seal of the key alone), present when the S2K key only wraps the
   /// session key. Empty when the S2K derives it directly.
   encrypted_session_key : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn SkeskPacket::version(self : SkeskPacket) -> Int32 {
@@ -335,6 +337,7 @@ pub fn SkeskPacket::to_body(self : SkeskPacket) -> Bytes raise {
 /// (draft-ietf-openpgp-rfc4880bis §5.16) — the shape GnuPG 2.4 produces
 /// under --force-aead. RFC 9580 reserves tag 20 in favour of SEIPD v2;
 /// this packet exists here for GnuPG interop and legacy data.
+#derive(Debug)
 pub(all) struct AeadPacket {
   version : Int32
   cipher_algo : Int32
@@ -343,7 +346,7 @@ pub(all) struct AeadPacket {
   iv : Bytes
   /// Chunk ciphertexts+tags followed by the final tag.
   ciphertext : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn AeadPacket::version(self : AeadPacket) -> Int32 {
@@ -419,6 +422,7 @@ pub fn AeadPacket::to_body(self : AeadPacket) -> Bytes raise {
 
 ///|
 /// Literal data packet body (RFC 9580 §5.9).
+#derive(Debug)
 pub struct LiteralPacket {
   /// 'b' binary, 'u' UTF-8 text (or legacy 't', reported as 'u').
   format : Char
@@ -426,7 +430,7 @@ pub struct LiteralPacket {
   /// Modification date, seconds since epoch.
   date : Int32
   data : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn LiteralPacket::format(self : LiteralPacket) -> Char {
@@ -510,11 +514,12 @@ pub fn LiteralPacket::binary(
 
 ///|
 /// Compressed data packet body (RFC 9580 §5.6): algorithm octet + data.
+#derive(Debug)
 pub struct CompressedPacket {
   /// 0 = uncompressed, 1 = ZIP (raw DEFLATE), 2 = ZLIB, 3 = BZip2.
   algo : Int32
   data : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn CompressedPacket::parse(body : BytesView) -> CompressedPacket raise {
@@ -535,6 +540,7 @@ pub fn CompressedPacket::to_body(self : CompressedPacket) -> Bytes {
 ///|
 /// SEIPD packet body: version 1 (RFC 9580 §5.13.1, the MDC-protected CFB
 /// shape) and version 2 (§5.13.2, the chunked AEAD shape).
+#derive(Debug)
 pub(all) struct SeipdPacket {
   version : Int32
   /// v2 only: symmetric cipher algorithm id.
@@ -546,7 +552,7 @@ pub(all) struct SeipdPacket {
   /// v2 only: 32-octet HKDF salt.
   salt : Bytes
   ciphertext : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn SeipdPacket::cipher_algo(self : SeipdPacket) -> Int32 {

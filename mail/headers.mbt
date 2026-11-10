@@ -5,10 +5,11 @@
 
 ///|
 /// An RFC 5322 mailbox: optional display name plus the addr-spec.
+#derive(Debug)
 pub(all) struct MailAddress {
   display_name : String
   addr : String
-} derive(Debug)
+}
 
 ///|
 /// ASCII-only for addr-spec/domain/attachment metadata (RFC 2047 does

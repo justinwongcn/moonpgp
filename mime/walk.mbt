@@ -8,6 +8,7 @@ let max_mime_depth : Int32 = 20
 /// the raw span must survive parsing untouched. `body_raw` is the body as
 /// transmitted; `body` is transfer-decoded. Parsing is byte-level: binary
 /// leaves survive without any String round trip.
+#derive(Debug)
 pub struct MimePart {
   headers : Array[(String, String)]
   content_type : MediaType
@@ -15,7 +16,7 @@ pub struct MimePart {
   body_raw : Bytes
   body : Bytes
   parts : Array[MimePart]
-} derive(Debug)
+}
 
 ///|
 /// Case-insensitive header lookup; the first occurrence wins (unlike
@@ -310,19 +311,21 @@ fn split_multipart_bytes(
 
 ///|
 /// Body handed to OnBody: content plus its exact mimetype.
+#derive(Debug)
 pub(all) struct MimeBody {
   content : Bytes
   mimetype : String
-} derive(Debug)
+}
 
 ///|
 /// One attachment handed to OnAttachment.
+#derive(Debug)
 pub(all) struct MimeAttachment {
   headers : Array[(String, String)]
   data : Bytes
   filename : String?
   mimetype : String
-} derive(Debug)
+}
 
 ///|
 priv struct MimeCollector {

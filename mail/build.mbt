@@ -7,11 +7,12 @@
 ///|
 /// An RFC 5322 attachment leaf: base64 CTE, Content-Disposition:
 /// attachment.
+#derive(Debug)
 pub(all) struct MailAttachment {
   filename : String
   content_type : String
   data : Bytes
-} derive(Debug)
+}
 
 ///|
 fn new_boundary() -> String raise {

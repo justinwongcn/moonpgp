@@ -1,5 +1,6 @@
 ///|
 /// OpenPGP packet type IDs (RFC 9580 §5).
+#derive(Eq, Debug)
 pub(all) enum PacketTag {
   Pkesk
   Skesk
@@ -20,7 +21,7 @@ pub(all) enum PacketTag {
   Mdc
   AeadEncData
   Unknown(Int32)
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn PacketTag::number(self : PacketTag) -> Int32 {
@@ -75,10 +76,11 @@ pub fn tag_of_number(n : Int32) -> PacketTag {
 ///|
 /// One parsed packet: type plus the raw packet body (header stripped).
 /// Higher-level parsers decode bodies into typed structures.
+#derive(Debug)
 pub(all) struct RawPacket {
   tag : PacketTag
   body : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn RawPacket::tag(self : RawPacket) -> PacketTag {

@@ -431,6 +431,7 @@ pub fn sign_detached(
 /// Verification outcome, mirroring gopenpgp's status codes
 /// (OK / NOT_SIGNED / NO_VERIFIER / FAILED) plus the lifecycle outcomes
 /// gopenpgp v3 folds into a rejected signature.
+#derive(Eq, Debug)
 pub(all) enum VerifyStatus {
   /// Signature verified against the given key.
   Ok
@@ -447,7 +448,7 @@ pub(all) enum VerifyStatus {
   /// The signature is cryptographically valid but the signing key or the
   /// signature itself has expired.
   Expired
-} derive(Eq, Debug)
+}
 
 ///|
 /// Verify a detached armored signature over `data` using `verifier`.

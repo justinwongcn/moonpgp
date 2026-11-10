@@ -1,5 +1,6 @@
 ///|
 /// Signature types (RFC 9580 §5.2.1).
+#derive(Eq, Debug)
 pub(all) enum SigType {
   BinaryDocument
   CanonicalTextDocument
@@ -17,7 +18,7 @@ pub(all) enum SigType {
   Timestamp
   ThirdPartyConfirmation
   Unknown(Int32)
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn SigType::number(self : SigType) -> Int32 {
@@ -150,11 +151,12 @@ pub const SIGSUB_ISSUER_FINGERPRINT : Int32 = 33
 
 ///|
 /// A raw signature subpacket: critical bit, type id, body.
+#derive(Debug, Eq)
 pub(all) struct SigSubpacket {
   critical : Bool
   sub_type : Int32
   body : Bytes
-} derive(Debug, Eq)
+}
 
 ///|
 pub fn SigSubpacket::critical(self : SigSubpacket) -> Bool {
@@ -176,6 +178,7 @@ pub fn SigSubpacket::body(self : SigSubpacket) -> Bytes {
 /// Version 6 differs in the subpacket-area length widths (4 octets), the
 /// trailing salt, the trailer's version octet, and raw (non-MPI) Ed25519
 /// signature material.
+#derive(Debug)
 pub(all) struct SignaturePacket {
   version : Int32
   sig_type : SigType
@@ -195,7 +198,7 @@ pub(all) struct SignaturePacket {
   /// Algorithm-specific signature material in wire order (RSA: one MPI;
   /// EdDSA legacy: two MPIs; Ed25519 v6: one raw 64-octet blob).
   sig_params : Array[Bytes]
-} derive(Debug)
+}
 
 ///|
 pub fn SignaturePacket::version(self : SignaturePacket) -> Int32 {
@@ -689,6 +692,7 @@ pub fn signature_trailer(version : Int32, hashed_body_len : Int32) -> Bytes {
 /// A one-pass signature packet body: version 3 (RFC 9580 §5.4, what a v4
 /// key emits) and version 6 (the same fields plus a hash salt and the
 /// 32-octet signing-key fingerprint, and with the 8-octet key id gone).
+#derive(Debug)
 pub(all) struct OnePassSigPacket {
   version : Int32
   sig_type : SigType
@@ -701,7 +705,7 @@ pub(all) struct OnePassSigPacket {
   /// v6 only: the 32-octet signing key fingerprint.
   fingerprint : Bytes
   nested : Bool
-} derive(Debug)
+}
 
 ///|
 pub fn OnePassSigPacket::version(self : OnePassSigPacket) -> Int32 {

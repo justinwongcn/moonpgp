@@ -15,14 +15,16 @@
 /// deliberately `pub(all)` (policy note, HANDOFF 2026-10-06): the api
 /// layer assembles these from parsed/generated wire material; the guarded,
 /// invariant-checked surface is `@api.PrivateKey`/`PublicKey`.
+#derive(Debug)
 pub(all) struct RsaPublicKey {
   n : BigInt
   e : BigInt
-} derive(Debug)
+}
 
 ///|
 /// RSA private key with CRT parameters. Value carrier, deliberately
 /// `pub(all)` (see RsaPublicKey).
+#derive(Debug)
 pub(all) struct RsaPrivateKey {
   public : RsaPublicKey
   d : BigInt
@@ -30,7 +32,7 @@ pub(all) struct RsaPrivateKey {
   q : BigInt
   /// p^-1 mod q (OpenPGP MPI order for the `u` parameter).
   u : BigInt
-} derive(Debug)
+}
 
 ///|
 /// OCTET length of the modulus (k in PKCS#1 terms).

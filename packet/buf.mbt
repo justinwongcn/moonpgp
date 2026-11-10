@@ -1,9 +1,10 @@
 ///|
 /// Big-endian byte reader over a `BytesView`, used by every packet parser.
+#derive(Debug)
 pub struct Reader {
   priv buf : BytesView
   priv mut pos : Int32
-} derive(Debug)
+}
 
 ///|
 pub fn Reader::new(buf : BytesView) -> Reader {
@@ -110,9 +111,10 @@ pub fn Reader::read_mpi(self : Reader) -> Bytes raise {
 /// Big-endian byte writer for packet serialization. The backing buffer is
 /// core's `Buffer` so `bytes()` can bulk-write views instead of pushing
 /// byte by byte (F12).
+#derive(Debug)
 pub struct Writer {
   priv out : Buffer
-} derive(Debug)
+}
 
 ///|
 pub fn Writer::new() -> Writer {

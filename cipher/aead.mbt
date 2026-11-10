@@ -13,11 +13,12 @@
 
 ///|
 /// AEAD algorithm IDs (RFC 9580 §9.6).
+#derive(Eq, Debug)
 pub(all) enum AeadMode {
   Eax
   Ocb
   Gcm
-} derive(Eq, Debug)
+}
 
 ///|
 pub extend AeadMode with @moonbitlang/core/debug.Debug::{to_repr}

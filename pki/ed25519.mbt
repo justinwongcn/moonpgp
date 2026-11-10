@@ -15,12 +15,13 @@ pub fn ed25519_oid() -> Bytes {
 ///|
 /// Value carrier, deliberately `pub(all)` (same policy as X25519SecretKey:
 /// assembled by the api layer, guarded surface is @api.PrivateKey).
+#derive(Debug)
 pub(all) struct Ed25519SecretKey {
   /// 32-octet seed.
   seed : Bytes
   /// 32-octet public key (compressed point).
   public : Bytes
-} derive(Debug)
+}
 
 ///|
 /// Generate a fresh Ed25519 key pair from platform entropy.
@@ -57,9 +58,10 @@ pub fn ed25519_public_key(bytes : BytesView) -> Ed25519PublicKeyValue raise {
 
 ///|
 /// Value carrier, deliberately `pub(all)` (see Ed25519SecretKey).
+#derive(Debug)
 pub(all) struct Ed25519PublicKeyValue {
   bytes : Bytes
-} derive(Debug)
+}
 
 ///|
 /// Sign `message` (for OpenPGP EdDSA legacy this is the digest) with pure

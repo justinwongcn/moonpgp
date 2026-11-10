@@ -1,6 +1,7 @@
 ///|
 /// String-to-Key derivations (RFC 9580 §3.7). PGP-wire material, never a
 /// replaceable third-party concern.
+#derive(Eq, Debug)
 pub(all) enum S2k {
   /// Usage type 0.
   Simple(@primitives.HashId)
@@ -13,7 +14,7 @@ pub(all) enum S2k {
   /// 16-octet salt, the number of passes `t`, the degree of parallelism
   /// `p`, and the memory exponent `encoded_m` (`m = 2^encoded_m` KiB).
   Argon2(Bytes, Int32, Int32, Int32)
-} derive(Eq, Debug)
+}
 
 ///|
 /// Salt length in octets for salted/iterated S2K.

@@ -20,12 +20,13 @@ pub fn parse(BytesView) -> (S2k, Int32) raise
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) enum S2k {
   Simple(@primitives.HashId)
   Salted(@primitives.HashId, Bytes)
   Iterated(@primitives.HashId, Bytes, Int32)
   Argon2(Bytes, Int32, Int32, Int32)
-} derive(Eq, @debug.Debug)
+}
 pub fn S2k::derive_key(Self, BytesView, Int32) -> Bytes raise
 pub fn S2k::derive_key_capped(Self, BytesView, Int32, Int32) -> Bytes raise
 pub fn S2k::encode(Self) -> Bytes raise

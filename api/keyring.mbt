@@ -1,10 +1,11 @@
 ///|
 /// A collection of public and private keys with id lookup, mirroring the
 /// gopenpgp KeyRing role.
+#derive(Debug)
 pub struct KeyRing {
   priv public_keys : Array[PublicKey]
   priv private_keys : Array[PrivateKey]
-} derive(Debug)
+}
 
 ///|
 /// Create an empty key ring.

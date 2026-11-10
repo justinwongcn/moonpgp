@@ -21,12 +21,13 @@ pub fn curve25519_oid() -> Bytes {
 /// from parsed/generated wire material and reads the fields directly.
 /// The guarded, invariant-checked surface is `@api.PrivateKey`/`PublicKey`;
 /// treat this struct as plain data (policy note, HANDOFF 2026-10-06).
+#derive(Debug)
 pub(all) struct X25519SecretKey {
   /// 32-octet little-endian scalar, already clamped.
   scalar : Bytes
   /// 32-octet little-endian public key.
   public : Bytes
-} derive(Debug)
+}
 
 ///|
 fn x25519_clamp(scalar : BytesView) -> Bytes raise {

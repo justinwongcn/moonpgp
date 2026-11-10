@@ -2,11 +2,12 @@
 /// Parsed Content-Type value (RFC 2045 §5). `main_type`/`sub_type` are
 /// lowercased; parameter keys are lowercased while values keep their
 /// original case (boundary values are case-sensitive per RFC 2046 §5.1.1).
+#derive(Debug)
 pub struct MediaType {
   main_type : String
   sub_type : String
   params : Array[(String, String)]
-} derive(Debug)
+}
 
 ///|
 pub fn MediaType::mimetype(self : MediaType) -> String {

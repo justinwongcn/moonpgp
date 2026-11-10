@@ -54,11 +54,12 @@ pub fn seipd_v2_seal(&@primitives.BlockCipher, AeadMode, BytesView, BytesView, I
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) enum AeadMode {
   Eax
   Ocb
   Gcm
-} derive(Eq, @debug.Debug)
+}
 pub fn AeadMode::equal(Self, Self) -> Bool
 pub fn AeadMode::iv_length(Self) -> Int32
 pub fn AeadMode::not_equal(Self, Self) -> Bool

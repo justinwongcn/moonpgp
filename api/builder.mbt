@@ -233,6 +233,7 @@ pub fn DecryptionBuilder::verification_key(
 
 ///|
 /// Outcome of a combined decrypt+verify: data plus signature status.
+#derive(Debug)
 pub(all) enum DecryptResult {
   /// Data decrypted; the message carried no verifiable signature.
   Data(Bytes)
@@ -240,7 +241,7 @@ pub(all) enum DecryptResult {
   Verified(Bytes)
   /// Data decrypted but the inline signature failed.
   SignatureError(Bytes)
-} derive(Debug)
+}
 
 ///|
 pub fn DecryptionBuilder::finish(

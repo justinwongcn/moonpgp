@@ -1,5 +1,6 @@
 ///|
 /// Public key algorithm IDs (RFC 9580 §9.2).
+#derive(Eq, Debug)
 pub(all) enum PubKeyAlgo {
   RsaEncryptOrSign
   RsaEncryptOnly
@@ -11,7 +12,7 @@ pub(all) enum PubKeyAlgo {
   X25519
   Ed25519
   Unknown(Int32)
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn PubKeyAlgo::number(self : PubKeyAlgo) -> Int32 {
@@ -55,6 +56,7 @@ pub fn PubKeyAlgo::is_rsa(self : PubKeyAlgo) -> Bool {
 
 ///|
 /// A version 4 (or 5) public key packet body (RFC 9580 §5.5.2).
+#derive(Debug)
 pub(all) struct PublicKeyPacket {
   version : Int32
   /// Seconds since the Unix epoch.
@@ -63,7 +65,7 @@ pub(all) struct PublicKeyPacket {
   /// Algorithm-specific public parameters in wire order (MPI bodies for
   /// RSA: n then e).
   params : Array[Bytes]
-} derive(Debug)
+}
 
 ///|
 pub fn PublicKeyPacket::version(self : PublicKeyPacket) -> Int32 {
@@ -275,6 +277,7 @@ pub fn PublicKeyPacket::key_id(self : PublicKeyPacket) -> Bytes raise {
 /// A version 4 or 6 secret key packet: public part plus secret material.
 /// The secret material is kept in wire form; unlocking/locking happens at
 /// the key-management layer.
+#derive(Debug)
 pub(all) struct SecretKeyPacket {
   public : PublicKeyPacket
   /// S2K usage: 0 = plaintext secret, 253 = AEAD + HKDF key separation,
@@ -296,7 +299,7 @@ pub(all) struct SecretKeyPacket {
   /// True for GnuPG "GNU dummy" keys whose secret material lives on a
   /// smartcard (S2K type 101 marker); there is nothing to unlock.
   dummy : Bool
-} derive(Debug)
+}
 
 ///|
 /// Read an S2K specifier from `r`, honouring the v6 length octet, and

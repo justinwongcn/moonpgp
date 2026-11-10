@@ -20,13 +20,14 @@ pub(open) trait BlockCipher {
 /// CAST5 (3) exist for the read side only — RFC 4880 §9.2 makes 3DES a
 /// MUST-implement and CAST5 was GnuPG's pre-AES default; the generation
 /// paths always pick AES.
+#derive(Eq, Debug)
 pub(all) enum CipherAlgo {
   Tripledes
   Cast5
   Aes128
   Aes192
   Aes256
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn CipherAlgo::number(self : CipherAlgo) -> Int32 {

@@ -65,19 +65,21 @@ pub fn xor_bytes(BytesView, BytesView) -> Bytes raise
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) enum CipherAlgo {
   Tripledes
   Cast5
   Aes128
   Aes192
   Aes256
-} derive(Eq, @debug.Debug)
+}
 pub fn CipherAlgo::equal(Self, Self) -> Bool
 pub fn CipherAlgo::key_size(Self) -> Int32
 pub fn CipherAlgo::not_equal(Self, Self) -> Bool
 pub fn CipherAlgo::number(Self) -> Int32
 pub fn CipherAlgo::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum HashId {
   Md5
   Sha1
@@ -86,7 +88,7 @@ pub(all) enum HashId {
   Sha256
   Sha384
   Sha512
-} derive(Eq, @debug.Debug)
+}
 pub fn HashId::block_size(Self) -> Int32
 pub fn HashId::der_prefix(Self) -> Bytes
 pub fn HashId::digest(Self, BytesView) -> Bytes

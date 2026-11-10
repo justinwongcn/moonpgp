@@ -3,6 +3,7 @@
 /// algorithm numbers. This is the PGP-level identity; concrete digest
 /// computation is delegated to `moonbitlang/x/crypto` inside this package
 /// only, so the hash backend can be swapped without touching callers.
+#derive(Eq, Debug)
 pub(all) enum HashId {
   Md5
   Sha1
@@ -11,7 +12,7 @@ pub(all) enum HashId {
   Sha256
   Sha384
   Sha512
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn HashId::number(self : HashId) -> Int32 {

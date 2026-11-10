@@ -13,6 +13,7 @@
 /// Revocation reason codes (RFC 9580 §5.2.3.31). Reason 32 (User ID no
 /// longer valid) belongs to certification revocations, which this library
 /// does not model.
+#derive(Eq, Debug)
 pub(all) enum RevocationReason {
   /// No reason specified.
   NoReason
@@ -22,7 +23,7 @@ pub(all) enum RevocationReason {
   Compromised
   /// Retired; no longer used.
   Retired
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn RevocationReason::number(self : RevocationReason) -> Int32 {

@@ -77,11 +77,12 @@ pub fn verify_key_signature(@packet.SignaturePacket, @packet.PublicKeyPacket, @p
 // Errors
 
 // Types and methods
+#derive(@debug.Debug)
 pub(all) enum DecryptResult {
   Data(Bytes)
   Verified(Bytes)
   SignatureError(Bytes)
-} derive(@debug.Debug)
+}
 pub fn DecryptResult::to_repr(Self) -> @debug.Repr
 
 pub struct DecryptionBuilder {
@@ -112,9 +113,10 @@ pub fn KeyGenBuilder::expires(Self, Int64) -> Self
 pub fn KeyGenBuilder::generate(Self) -> PrivateKey raise
 pub fn KeyGenBuilder::rsa_bits(Self, Int32) -> Self
 
+#derive(@debug.Debug)
 pub struct KeyRing {
   // private fields
-} derive(@debug.Debug)
+}
 pub fn KeyRing::add_private(Self, PrivateKey) -> Unit
 pub fn KeyRing::add_public(Self, PublicKey) -> Unit
 pub fn KeyRing::find_decryption_key(Self, BytesView) -> @packet.SecretKeyPacket? raise
@@ -131,13 +133,14 @@ pub fn Pgp::decryption(Self) -> DecryptionBuilder
 pub fn Pgp::encryption(Self) -> EncryptionBuilder
 pub fn Pgp::key_generation(Self) -> KeyGenBuilder
 
+#derive(@debug.Debug)
 pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
   user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
   subkeys : Array[SecretSubkeyCert]
   revocations : Array[@packet.SignaturePacket]
-} derive(@debug.Debug)
+}
 pub fn PrivateKey::add_encryption_subkey(Self, created? : Int32) -> Self raise
 pub fn PrivateKey::add_signing_subkey(Self, created? : Int32) -> Self raise
 pub fn PrivateKey::add_user_id(Self, String, created? : Int32) -> Self raise
@@ -167,13 +170,14 @@ pub fn PrivateKey::to_repr(Self) -> @debug.Repr
 pub fn PrivateKey::unlock(Self, String, argon2_max_memory_kib? : Int32) -> Self raise
 pub fn PrivateKey::user_id(Self) -> String
 
+#derive(@debug.Debug)
 pub struct PublicKey {
   primary : @packet.PublicKeyPacket
   user_ids : Array[UserIdBinding]
   direct_signature : @packet.SignaturePacket?
   subkeys : Array[SubkeyCert]
   revocations : Array[@packet.SignaturePacket]
-} derive(@debug.Debug)
+}
 pub fn PublicKey::apply_revocation_certificate(Self, String) -> Self raise
 pub fn PublicKey::can_encrypt(Self, Int64) -> Bool
 pub fn PublicKey::can_verify(Self, Int64) -> Bool
@@ -194,45 +198,50 @@ pub fn PublicKey::to_bytes(Self) -> Bytes
 pub fn PublicKey::to_repr(Self) -> @debug.Repr
 pub fn PublicKey::user_id(Self) -> String
 
+#derive(Eq, @debug.Debug)
 pub(all) enum RevocationReason {
   NoReason
   Superseded
   Compromised
   Retired
-} derive(Eq, @debug.Debug)
+}
 pub fn RevocationReason::equal(Self, Self) -> Bool
 pub fn RevocationReason::not_equal(Self, Self) -> Bool
 pub fn RevocationReason::number(Self) -> Int32
 pub fn RevocationReason::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub(all) struct SecretSubkeyCert {
   secret : @packet.SecretKeyPacket
   binding : @packet.SignaturePacket
   revocation : @packet.SignaturePacket?
-} derive(@debug.Debug)
+}
 pub fn SecretSubkeyCert::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub(all) struct SessionKey {
   key : Bytes
   algo : @primitives.CipherAlgo
-} derive(@debug.Debug)
+}
 pub fn SessionKey::algo(Self) -> @primitives.CipherAlgo
 pub fn SessionKey::key(Self) -> Bytes
 pub fn SessionKey::new(BytesView, @primitives.CipherAlgo) -> Self raise
 pub fn SessionKey::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub(all) struct SubkeyCert {
   key : @packet.PublicKeyPacket
   binding : @packet.SignaturePacket
   revocation : @packet.SignaturePacket?
-} derive(@debug.Debug)
+}
 pub fn SubkeyCert::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub(all) struct UserIdBinding {
   user_id : String
   self_signature : @packet.SignaturePacket
   revocation : @packet.SignaturePacket?
-} derive(@debug.Debug)
+}
 pub fn UserIdBinding::to_repr(Self) -> @debug.Repr
 
 pub(all) struct V6Password {
@@ -244,6 +253,7 @@ pub(all) struct V6Password {
   memory_exp : Int32
 }
 
+#derive(Eq, @debug.Debug)
 pub(all) enum VerifyStatus {
   Ok
   NotSigned
@@ -251,7 +261,7 @@ pub(all) enum VerifyStatus {
   Failed
   KeyRevoked
   Expired
-} derive(Eq, @debug.Debug)
+}
 pub fn VerifyStatus::equal(Self, Self) -> Bool
 pub fn VerifyStatus::not_equal(Self, Self) -> Bool
 pub fn VerifyStatus::to_repr(Self) -> @debug.Repr

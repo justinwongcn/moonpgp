@@ -30,17 +30,19 @@ pub fn rfc5322_date(Int64, Int32) -> String
 // Errors
 
 // Types and methods
+#derive(@debug.Debug)
 pub(all) struct MailAddress {
   display_name : String
   addr : String
-} derive(@debug.Debug)
+}
 pub fn MailAddress::to_repr(Self) -> @debug.Repr
 
+#derive(@debug.Debug)
 pub(all) struct MailAttachment {
   filename : String
   content_type : String
   data : Bytes
-} derive(@debug.Debug)
+}
 pub fn MailAttachment::to_repr(Self) -> @debug.Repr
 
 // Type aliases

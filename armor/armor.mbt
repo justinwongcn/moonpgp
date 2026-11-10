@@ -3,12 +3,13 @@
 /// armor blocks themselves (their enclosed signature is), so there is no
 /// CleartextMessage variant — decode never produces one and cleartext
 /// handling lives in `@api.cleartext`.
+#derive(Eq, Debug)
 pub(all) enum ArmorType {
   Message
   PublicKey
   PrivateKey
   Signature
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn ArmorType::begin_marker(self : ArmorType) -> String {
@@ -64,12 +65,13 @@ fn armor_type_of_begin(line : StringView) -> ArmorType? {
 
 ///|
 /// A decoded armor block: armor type, armor headers, and payload bytes.
+#derive(Debug)
 pub struct ArmorBlock {
   armor_type : ArmorType
   /// Armor headers in order of appearance (e.g. "Version", "Comment").
   headers : Array[(String, String)]
   data : Bytes
-} derive(Debug)
+}
 
 ///|
 pub fn ArmorBlock::armor_type(self : ArmorBlock) -> ArmorType {

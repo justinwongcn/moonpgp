@@ -12,10 +12,11 @@
 /// must be `algo.key_size()` octets — `SessionKey::new` enforces it;
 /// direct struct construction bypasses the check and fails at first use
 /// inside the block-cipher constructor.
+#derive(Debug)
 pub(all) struct SessionKey {
   key : Bytes
   algo : @primitives.CipherAlgo
-} derive(Debug)
+}
 
 ///|
 pub extend SessionKey with @moonbitlang/core/debug.Debug::{to_repr}

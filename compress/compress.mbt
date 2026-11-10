@@ -1,12 +1,13 @@
 ///|
 /// Compression algorithms for the Compressed Data packet
 /// (RFC 9580 §9.4).
+#derive(Eq, Debug)
 pub(all) enum CompressedAlgo {
   Uncompressed
   Zip
   Zlib
   BZip2
-} derive(Eq, Debug)
+}
 
 ///|
 pub fn CompressedAlgo::number(self : CompressedAlgo) -> Int32 {

@@ -5,10 +5,11 @@
 
 ///|
 /// A parsed MIME message: top-level headers and the raw body.
+#derive(Debug)
 pub struct MimeMessage {
   headers : Array[(String, String)]
   body : String
-} derive(Debug)
+}
 
 ///|
 pub fn MimeMessage::header(self : MimeMessage, name : String) -> String? {
@@ -153,10 +154,11 @@ pub fn extract_pgp_encrypted(mime_text : String) -> String raise {
 ///|
 /// The signature half of a received multipart/signed message: the exact
 /// raw bytes of the signed part and the armored signature.
+#derive(Debug)
 pub(all) struct PgpMimeSigned {
   signed_bytes : Bytes
   signature_armor : String
-} derive(Debug)
+}
 
 ///|
 /// Extract (and later verify) a received multipart/signed message

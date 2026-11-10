@@ -4,6 +4,7 @@
 /// binding signature. Fields are read-only from outside the package —
 /// obtain keys through `generate_key` / `from_armored` / `from_bytes` and
 /// mutate them through `lock` / `unlock` so the cross-field invariants hold.
+#derive(Debug)
 pub struct PrivateKey {
   primary : @packet.SecretKeyPacket
   /// All certified User IDs, in wire order (M5). A bare v6 key carries
@@ -19,11 +20,12 @@ pub struct PrivateKey {
   /// Primary-key revocation signatures (type 0x20) found on import;
   /// verified lazily by `is_revoked` (their validity is time-dependent).
   revocations : Array[@packet.SignaturePacket]
-} derive(Debug)
+}
 
 ///|
 /// The public half of a transferable key. Read-only like `PrivateKey`;
 /// obtain values via `to_public` / `from_armored` / `from_bytes`.
+#derive(Debug)
 pub struct PublicKey {
   primary : @packet.PublicKeyPacket
   /// All certified User IDs, in wire order (M5).
@@ -33,37 +35,40 @@ pub struct PublicKey {
   subkeys : Array[SubkeyCert]
   /// Primary-key revocation signatures (type 0x20) found on import.
   revocations : Array[@packet.SignaturePacket]
-} derive(Debug)
+}
 
 ///|
 /// One bound subkey of a public transferable key: the public key packet,
 /// the SubkeyBinding signature by the primary (import-verified), and the
 /// SubkeyRevocation signature when the wire carried one.
+#derive(Debug)
 pub(all) struct SubkeyCert {
   key : @packet.PublicKeyPacket
   binding : @packet.SignaturePacket
   revocation : @packet.SignaturePacket?
-} derive(Debug)
+}
 
 ///|
 /// The private-key half of one bound subkey: the secret key packet plus
 /// the same binding/revocation signatures as its public twin.
+#derive(Debug)
 pub(all) struct SecretSubkeyCert {
   secret : @packet.SecretKeyPacket
   binding : @packet.SignaturePacket
   revocation : @packet.SignaturePacket?
-} derive(Debug)
+}
 
 ///|
 /// One certified User ID: the identifier plus the self-signature that
 /// binds it to the primary key. A revoked User ID keeps its place on the
 /// certificate with the CertificationRevocation signature attached —
 /// that is how the wire tells verifiers the identity is no longer valid.
+#derive(Debug)
 pub(all) struct UserIdBinding {
   user_id : String
   self_signature : @packet.SignaturePacket
   revocation : @packet.SignaturePacket?
-} derive(Debug)
+}
 
 ///|
 pub extend UserIdBinding with @moonbitlang/core/debug.Debug::{to_repr}

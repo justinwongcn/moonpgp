@@ -96,7 +96,15 @@ pub fn zlib_decompress_capped(data : BytesView, max_out : Int32) -> Bytes raise 
     }
     pos = pos + dec.last_consumed()
     let produced = dec.last_produced()
-    if out.length() + produced > max_out {
+    // Subtraction form (audit F2): the additive check wrapped Int32 once
+    // a caller-supplied cap sat within one chunk of 2^31, waving oversized
+    // output through with a negative sum.
+    guard out.length() <= max_out else {
+      @error.fail(
+        "compress: decompressed output exceeds the \{max_out}-octet limit",
+      )
+    }
+    if produced > max_out - out.length() {
       @error.fail(
         "compress: decompressed output exceeds the \{max_out}-octet limit",
       )

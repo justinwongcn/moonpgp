@@ -255,6 +255,16 @@ fn parse_subpackets(view : BytesView) -> Array[SigSubpacket] raise {
   let r = Reader::new(view)
   while r.remaining() > 0 {
     let first = r.read_u8()
+    // RFC 9580 §5.2.3.1 defines three subpacket length shapes: one octet
+    // (0..191), two octets (192..223) and five octets (255). First octets
+    // 224..254 are the PACKET-level partial-length range and undefined for
+    // subpackets — accepting them made the same value mean two things on
+    // the two levels (audit F4).
+    guard first < 224 || first == 255 else {
+      @error.malformed(
+        "packet: signature subpacket length first octet \{first} is a partial-length value",
+      )
+    }
     let len : Int32 = if first < 192 {
       first
     } else if first < 255 {
@@ -315,6 +325,11 @@ fn validate_hashed_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
       | SIGSUB_KEY_EXPIRATION_TIME
       | SIGSUB_SIG_EXPIRATION_TIME => n != 4
       SIGSUB_KEY_FLAGS => n < 1
+      // RFC 9580 §5.2.3.19/§5.2.3.28: exact body shapes (audit F5's
+      // sibling gate) — issuer_key_id is a public API whose callers
+      // slice the body, so a ragged one must not parse through.
+      SIGSUB_ISSUER_KEY_ID => n != 8
+      SIGSUB_ISSUER_FINGERPRINT => n != 21 && n != 33
       _ => false
     }
     guard !bad else {
@@ -373,7 +388,17 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   }
   let params : Array[Bytes] = []
   match pub_algo {
-    RsaEncryptOrSign | RsaEncryptOnly | RsaSignOnly => params.push(r.read_mpi())
+    RsaEncryptOrSign | RsaEncryptOnly | RsaSignOnly => {
+      params.push(r.read_mpi())
+      // Trailing octets after the MPI are a framing violation (audit F6):
+      // the Ed25519/X25519 branches consume exactly, and a v4 signature
+      // is fully specified. Strict parity across algorithms.
+      guard r.remaining() == 0 else {
+        @error.malformed(
+          "packet: RSA signature has \{r.remaining()} trailing octets after the MPI",
+        )
+      }
+    }
     EdDsaLegacy => {
       // RFC 9580 §5.2.3.3.1: "Ed25519Legacy MUST NOT be used in Signature
       // packets version 6 or above" — only for reading historic v4 keys.
@@ -385,6 +410,11 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
       // EdDSA legacy carries two MPIs: r then s (RFC 9580 §5.2.3.1).
       params.push(r.read_mpi())
       params.push(r.read_mpi())
+      guard r.remaining() == 0 else {
+        @error.malformed(
+          "packet: EdDsaLegacy signature has \{r.remaining()} trailing octets after the MPIs",
+        )
+      }
     }
     Ed25519 => {
       // v6 Ed25519 carries 64 raw octets, not MPIs (§5.2.3.4).
@@ -415,7 +445,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
 }
 
 ///|
-pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
+pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes raise {
   let w = Writer::new()
   let v6 = self.version >= 6
   w.u8(self.version)
@@ -429,6 +459,13 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
   if v6 {
     w.u32(hashed.length())
   } else {
+    // u16 area length (audit F8): a >65535-octet hashed area truncates
+    // and reparses with a different subpacket boundary.
+    guard hashed.length() <= 65535 else {
+      @error.malformed(
+        "packet: v4 hashed area of \{hashed.length()} octets exceeds the u16 length",
+      )
+    }
     w.u16(hashed.length())
   }
   w.bytes(hashed.exact_view())
@@ -436,6 +473,11 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes {
   if v6 {
     w.u32(unhashed.length())
   } else {
+    guard unhashed.length() <= 65535 else {
+      @error.malformed(
+        "packet: v4 unhashed area of \{unhashed.length()} octets exceeds the u16 length",
+      )
+    }
     w.u16(unhashed.length())
   }
   w.bytes(unhashed.exact_view())

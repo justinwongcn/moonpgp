@@ -3,7 +3,7 @@
 
 ///|
 /// One algo-0 (uncompressed) Compressed packet around `inner`.
-fn wrap_uncompressed(inner : Bytes) -> Bytes {
+fn wrap_uncompressed(inner : Bytes) -> Bytes raise {
   @packet.serialize_packet(
     @packet.Compressed,
     Bytes::from_array([0]).add(inner).exact_view(),

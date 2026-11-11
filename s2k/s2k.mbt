@@ -185,7 +185,13 @@ fn derive_hash_key(
   hash_id : @primitives.HashId,
   seed : BytesView,
   key_len : Int32,
-) -> Bytes {
+) -> Bytes raise {
+  // OpenPGP key sizes top out at 32; the wire can never ask for more
+  // (audit F3) — a direct call with an absurd length would drive
+  // millions of prefix-hashing rounds.
+  guard key_len >= 0 && key_len <= 255 else {
+    @error.fail("s2k: derived key length \{key_len} out of range")
+  }
   let out : Array[Byte] = Array(capacity=key_len)
   let mut j = 0
   while out.length() < key_len {

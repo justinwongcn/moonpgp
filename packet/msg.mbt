@@ -128,7 +128,18 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
       }
     }
     _ => {
-      let encrypted = if algo.is_rsa() { r.read_mpi() } else { r.read_rest() }
+      let encrypted = if algo.is_rsa() {
+        let m = r.read_mpi()
+        // Parity with the exact-consuming X25519/ECDH branches (audit F6).
+        guard r.remaining() == 0 else {
+          @error.malformed(
+            "packet: RSA PKESK has \{r.remaining()} trailing octets after the MPI",
+          )
+        }
+        m
+      } else {
+        r.read_rest()
+      }
       PkeskPacket::{
         version,
         key_id,
@@ -143,7 +154,7 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
 }
 
 ///|
-pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
+pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(self.version)
   if self.version == 6 {
@@ -160,11 +171,24 @@ pub fn PkeskPacket::to_body(self : PkeskPacket) -> Bytes {
   w.u8(self.pub_algo.number())
   match self.pub_algo {
     X25519 => {
+      // The wrapped-key length travels in ONE octet (audit F8): anything
+      // above 255 truncates into a different key on the wire. RSA is
+      // exempt — its material is an MPI sized by the modulus.
+      guard self.encrypted.length() <= 255 else {
+        @error.malformed(
+          "packet: wrapped session key of \{self.encrypted.length()} octets exceeds the 255-octet length octet",
+        )
+      }
       w.bytes(self.ecdh_ephemeral.exact_view())
       w.u8(self.encrypted.length())
       w.bytes(self.encrypted.exact_view())
     }
     Ecdh => {
+      guard self.encrypted.length() <= 255 else {
+        @error.malformed(
+          "packet: wrapped session key of \{self.encrypted.length()} octets exceeds the 255-octet length octet",
+        )
+      }
       w.mpi(self.ecdh_ephemeral.exact_view())
       w.u8(self.encrypted.length())
       w.bytes(self.encrypted.exact_view())

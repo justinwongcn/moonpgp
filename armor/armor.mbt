@@ -202,14 +202,16 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
         let mut closed = false
         while i < n {
           let l = lines[i]
-          if l.has_prefix("-----END PGP") {
+          // END line matches whole (audit F7): the BEGIN side is strict,
+          // and a prefix match let trailing junk ride in on the END line.
+          if l == armor_type.end_marker() {
             closed = true
             i = i + 1
             break
           } else if l.has_prefix("-----BEGIN PGP") {
             // Malformed input; treat as end to avoid an infinite mess.
             break
-          } else if l.has_prefix("=") && !body.is_empty() {
+          } else if l.has_prefix("=") {
             match parse_crc_line(l) {
               Some(c) => crc = Some(c)
               // A "=" line that does not parse as a CRC must not be dropped:
@@ -253,7 +255,9 @@ fn parse_crc_line(line : StringView) -> Int32? {
     None => None
     Some(s) =>
       try {
-        let b = @base64.decode(s.to_owned())
+        // Same whitespace tolerance as the body (audit F7): transport
+        // padding on the CRC line is legal, not corruption.
+        let b = @base64.decode(s.to_owned(), ignore_whitespace=true)
         if b.length() == 3 {
           Some((b[0].to_int() << 16) | (b[1].to_int() << 8) | b[2].to_int())
         } else {

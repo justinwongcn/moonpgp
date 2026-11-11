@@ -193,8 +193,8 @@ pub fn PublicKey::key_id(Self) -> Bytes raise
 pub fn PublicKey::preferred_aead(Self) -> Array[(Int32, Int32)]
 pub fn PublicKey::self_signature(Self) -> @packet.SignaturePacket
 pub fn PublicKey::supports_seipd_v2(Self) -> Bool
-pub fn PublicKey::to_armored(Self) -> String
-pub fn PublicKey::to_bytes(Self) -> Bytes
+pub fn PublicKey::to_armored(Self) -> String raise
+pub fn PublicKey::to_bytes(Self) -> Bytes raise
 pub fn PublicKey::to_repr(Self) -> @debug.Repr
 pub fn PublicKey::user_id(Self) -> String
 

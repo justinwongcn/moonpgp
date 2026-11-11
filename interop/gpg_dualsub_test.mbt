@@ -121,7 +121,9 @@ test "our subkey revocation rejects gpg's subkey-issued signature" {
     reason=@api.Compromised,
     message="signing stick lost",
   )
-  let revoked_pub = @api.PrivateKey::from_bytes(revoked.to_bytes(allow_unlocked=true).exact_view()).to_public()
+  let revoked_pub = @api.PrivateKey::from_bytes(
+    revoked.to_bytes(allow_unlocked=true).exact_view(),
+  ).to_public()
   let data = @primitives.utf8_bytes(
     read_testdata("interop_gpg_dualsub_sig.txt"),
   )

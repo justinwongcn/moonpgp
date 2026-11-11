@@ -5,7 +5,7 @@
 fn secret_key_associated_data(
   key : @packet.SecretKeyPacket,
   tag : Int32,
-) -> Bytes {
+) -> Bytes raise {
   @primitives.concat2(Bytes::from_array([tag.to_byte()]), key.public.to_body())
 }
 

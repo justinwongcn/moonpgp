@@ -71,7 +71,7 @@ pub fn pub_key_algo_of_number(Int32) -> PubKeyAlgo
 
 pub fn salt_size_of_hash(Int32) -> Int32 raise
 
-pub fn serialize_packet(PacketTag, BytesView) -> Bytes
+pub fn serialize_packet(PacketTag, BytesView) -> Bytes raise
 
 pub fn serialize_packet_old(PacketTag, BytesView) -> Bytes
 
@@ -193,7 +193,7 @@ pub fn PkeskPacket::key_id(Self) -> Bytes
 pub fn PkeskPacket::key_version(Self) -> Int32
 pub fn PkeskPacket::parse(BytesView) -> Self raise
 pub fn PkeskPacket::pub_algo(Self) -> PubKeyAlgo
-pub fn PkeskPacket::to_body(Self) -> Bytes
+pub fn PkeskPacket::to_body(Self) -> Bytes raise
 pub fn PkeskPacket::to_repr(Self) -> @debug.Repr
 pub fn PkeskPacket::version(Self) -> Int32
 
@@ -229,7 +229,7 @@ pub fn PublicKeyPacket::fingerprint(Self) -> Bytes raise
 pub fn PublicKeyPacket::key_id(Self) -> Bytes raise
 pub fn PublicKeyPacket::params(Self) -> Array[Bytes]
 pub fn PublicKeyPacket::parse(BytesView) -> Self raise
-pub fn PublicKeyPacket::to_body(Self) -> Bytes
+pub fn PublicKeyPacket::to_body(Self) -> Bytes raise
 pub fn PublicKeyPacket::to_repr(Self) -> @debug.Repr
 pub fn PublicKeyPacket::version(Self) -> Int32
 
@@ -269,7 +269,7 @@ pub(all) struct SecretKeyPacket {
   dummy : Bool
 }
 pub fn SecretKeyPacket::parse(BytesView) -> Self raise
-pub fn SecretKeyPacket::to_body(Self) -> Bytes
+pub fn SecretKeyPacket::to_body(Self) -> Bytes raise
 pub fn SecretKeyPacket::to_repr(Self) -> @debug.Repr
 pub impl @debug.Debug for SecretKeyPacket
 
@@ -360,7 +360,7 @@ pub fn SignaturePacket::sig_expiration_time(Self) -> Int32
 pub fn SignaturePacket::sig_params(Self) -> Array[Bytes]
 pub fn SignaturePacket::sig_type(Self) -> SigType
 pub fn SignaturePacket::supports_seipd_v2(Self) -> Bool
-pub fn SignaturePacket::to_body(Self) -> Bytes
+pub fn SignaturePacket::to_body(Self) -> Bytes raise
 pub fn SignaturePacket::to_repr(Self) -> @debug.Repr
 pub fn SignaturePacket::unhashed_subpackets(Self) -> Array[SigSubpacket]
 pub fn SignaturePacket::version(Self) -> Int32

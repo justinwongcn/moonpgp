@@ -131,7 +131,7 @@ pub fn PublicKey::supports_seipd_v2(self : PublicKey) -> Bool {
 
 ///|
 /// Public half to binary packets.
-pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
+pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes raise {
   let w = @packet.Writer::new()
   w.bytes(
     @packet.serialize_packet(
@@ -201,7 +201,7 @@ pub fn PublicKey::to_bytes(self : PublicKey) -> Bytes {
 
 ///|
 /// Export as ASCII-armored public key block.
-pub fn PublicKey::to_armored(self : PublicKey) -> String {
+pub fn PublicKey::to_armored(self : PublicKey) -> String raise {
   @armor.PublicKey.encode(self.to_bytes().exact_view())
 }
 

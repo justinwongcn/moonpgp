@@ -184,7 +184,7 @@ pub fn PublicKeyPacket::parse(body : BytesView) -> PublicKeyPacket raise {
 }
 
 ///|
-pub fn PublicKeyPacket::to_body(self : PublicKeyPacket) -> Bytes {
+pub fn PublicKeyPacket::to_body(self : PublicKeyPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(self.version)
   w.u32(self.creation_time)
@@ -214,11 +214,23 @@ pub fn PublicKeyPacket::to_body(self : PublicKeyPacket) -> Bytes {
           w.bytes(p.exact_view())
         }
       EdDsaLegacy => {
+        // parse always fills two params; a pub(all) direct construction
+        // may not (audit F9) — index, don't abort.
+        guard self.params.length() >= 2 else {
+          @error.malformed(
+            "packet: EdDsaLegacy key needs 2 parameters, got \{self.params.length()}",
+          )
+        }
         // First param carries the length-prefixed OID verbatim.
         w.bytes(self.params[0].exact_view())
         w.mpi(self.params[1].exact_view())
       }
       Ecdh => {
+        guard self.params.length() >= 3 else {
+          @error.malformed(
+            "packet: Ecdh key needs 3 parameters, got \{self.params.length()}",
+          )
+        }
         // OID and KDF params carry their own length octets; point is an MPI.
         w.bytes(self.params[0].exact_view())
         w.mpi(self.params[1].exact_view())
@@ -537,7 +549,7 @@ fn v6_params_length(key : SecretKeyPacket) -> Int32 {
 /// `parse` enforces (no usage 255 on a v6 packet, and a v6 S2K parameter
 /// block that fits its 1-octet count); `api.lock_secret_key` is the only
 /// producer of protected packets and validates them there.
-pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes {
+pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes raise {
   let w = Writer::new()
   w.bytes(self.public.to_body().exact_view())
   let v6 = self.public.version() >= 6
@@ -550,6 +562,13 @@ pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes {
   } else if self.s2k_usage == 253 {
     w.u8(253)
     if v6 {
+      // One length octet (audit F8): >255 truncates and reparses as a
+      // different parameter layout.
+      guard v6_params_length(self) <= 255 else {
+        @error.malformed(
+          "packet: v6 secret key parameters of \{v6_params_length(self)} octets exceed the length octet",
+        )
+      }
       w.u8(v6_params_length(self))
     }
     w.u8(self.cipher_algo)
@@ -563,6 +582,11 @@ pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes {
   } else if self.s2k_usage == 254 || self.s2k_usage == 255 {
     w.u8(self.s2k_usage)
     if v6 {
+      guard v6_params_length(self) <= 255 else {
+        @error.malformed(
+          "packet: v6 secret key parameters of \{v6_params_length(self)} octets exceed the length octet",
+        )
+      }
       w.u8(v6_params_length(self))
     }
     w.u8(self.cipher_algo)

@@ -106,7 +106,16 @@ pub fn parse_packets(data : BytesView) -> Array[RawPacket] raise {
 
 ///|
 /// Serialize one packet with a new-format header.
-pub fn serialize_packet(tag : PacketTag, body : BytesView) -> Bytes {
+pub fn serialize_packet(tag : PacketTag, body : BytesView) -> Bytes raise {
+  // An unknown tag number (>= 64) cannot be expressed in either header
+  // format — 0xC0 | n wraps it into a DIFFERENT tag (audit F8). This
+  // library never serializes unknown tags, so refuse instead of emitting
+  // a mislabeled packet.
+  match tag {
+    PacketTag::Unknown(_) =>
+      @error.malformed("packet: refusing to serialize an unknown packet tag")
+    _ => ()
+  }
   let w = Writer::new()
   w.u8(0xC0 | tag.number())
   write_new_length(w, body.length())

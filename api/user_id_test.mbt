@@ -11,7 +11,7 @@ test "add_user_id: the key answers to two identities" {
   )
   assert_eq(key.user_id(), "First <first@example.com>")
   // Import cryptographically validates the new certification.
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   let pubk = re.to_public()
   assert_eq(pubk.user_ids.length(), 2)
   assert_eq(pubk.user_ids[1].user_id, "Second <second@example.com>")
@@ -30,7 +30,7 @@ test "set_primary_user_id: user_id() follows the flag" {
     .set_primary_user_id("Second <second@example.com>")
   assert_eq(key.user_id(), "Second <second@example.com>")
   // The flag round-trips and only one User ID carries it.
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_eq(re.user_id(), "Second <second@example.com>")
   let flagged = re.user_ids
     .iter()
@@ -56,7 +56,7 @@ test "revoke_user_id: the identity is publicly invalid, verifiably" {
   assert_false(key.is_user_id_revoked("First <first@example.com>", 0L))
   // The revocation is the primary's own signature: it verifies lazily
   // through the same path imported revocations take.
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_true(re.is_user_id_revoked("Burned <burned@example.com>", 0L))
   // An unrevoked alias still verifies signatures and receives mail.
   let pubk = re.to_public()
@@ -122,7 +122,7 @@ test "revoked user id survives a gpg-shaped re-import" {
     .add_user_id("Two <two@example.com>")
     .add_user_id("Three <three@example.com>")
     .revoke_user_id("Two <two@example.com>")
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_eq(re.user_ids.length(), 3)
   assert_true(re.is_user_id_revoked("Two <two@example.com>", 0L))
   assert_false(re.is_user_id_revoked("Three <three@example.com>", 0L))
@@ -138,7 +138,7 @@ test "v6 user id operations round-trip with the created stamps" {
       created=1700000011,
     )
     .set_primary_user_id("V6 <v6@example.com>", created=1700000012)
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_true(re.is_user_id_revoked("Alt6 <alt6@example.com>", 0L))
   assert_false(re.is_user_id_revoked("V6 <v6@example.com>", 0L))
   assert_eq(re.user_id(), "V6 <v6@example.com>")
@@ -165,7 +165,9 @@ test "re-certifying a revoked user id restores the identity" {
   // new certification is a fresh statement, and in-memory state matches
   // what a round trip produces.
   let revived = key.add_user_id("Temp <temp@example.com>")
-  let re = @api.PrivateKey::from_armored(revived.to_armored())
+  let re = @api.PrivateKey::from_armored(
+    revived.to_armored(allow_unlocked=true),
+  )
   let bindings = re.user_ids
     .iter()
     .filter(fn(b) { b.user_id == "Temp <temp@example.com>" })
@@ -188,7 +190,7 @@ test "set_primary_user_id moves the flag and tolerates repetition" {
     .set_primary_user_id("One <one@example.com>", created=1700000021)
     .set_primary_user_id("One <one@example.com>", created=1700000022)
   assert_eq(key.user_id(), "One <one@example.com>")
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   let flagged = re.user_ids
     .iter()
     .filter(fn(b) { b.self_signature.is_primary_user_id() })

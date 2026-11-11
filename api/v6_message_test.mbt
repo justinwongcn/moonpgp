@@ -148,7 +148,9 @@ test "v6 key generation round trips through armor and encryption" {
   assert_eq(subkey.public.version(), 6)
   assert_eq(subkey.public.algo(), @packet.X25519)
   // The public half must stay usable after an armor round trip.
-  let reimported = @api.PrivateKey::from_armored(key.to_armored())
+  let reimported = @api.PrivateKey::from_armored(
+    key.to_armored(allow_unlocked=true),
+  )
   assert_eq(reimported.fingerprint(), key.fingerprint())
   let message = @api.encrypt_to_recipients(
     @primitives.utf8_bytes("v6 message round trip\n"),

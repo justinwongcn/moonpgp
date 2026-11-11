@@ -345,17 +345,23 @@ fn S2KBudget::exhausted(self : S2KBudget) -> Bool {
 }
 
 ///|
-/// Book one Argon2 derivation at `passes` passes over `memory_kib` KiB
-/// (both bounded by validation and the memory cap, so the product fits
-/// Int). A unit is one pass over 64 MiB.
+/// Book one Argon2 derivation at `passes` passes over `memory_kib` KiB.
+/// A unit is one pass over 64 MiB. The product runs in Int64 (audit F10):
+/// `passes * memory_kib` overflowed Int32 once a caller-supplied cap went
+/// above 2^23 KiB, and the negative unit count bypassed the clamp and
+/// poisoned `charged` so `exhausted()` could never fire.
 fn S2KBudget::charge_argon2(
   self : S2KBudget,
   passes : Int32,
   memory_kib : Int32,
 ) -> Unit {
-  let units = (passes * memory_kib + 65535) / 65536
+  let units = (passes.to_int64() * memory_kib.to_int64() + 65535L) / 65536L
   self.charged = self.charged +
-    (if units > S2K_MAX_CHARGE { S2K_MAX_CHARGE } else { units })
+    (if units > S2K_MAX_CHARGE.to_int64() {
+      S2K_MAX_CHARGE
+    } else {
+      units.to_int()
+    })
 }
 
 ///|
@@ -660,7 +666,10 @@ fn unwrap_one_skesk(
   skesk : @packet.SkeskPacket,
   passphrase : String,
   argon2_max_memory_kib : Int32,
-  budget~ : S2KBudget = S2KBudget::new(),
+  // No default (audit F11): a defaulted budget silently granted
+  // unlimited derivations to any future call site that forgot to pass
+  // one — exactly the shape S3 exists to prevent.
+  budget~ : S2KBudget,
 ) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
   // S3: book the derivation cost up front. The memory actually processed
   // is the specifier's demand clamped by the caller's cap, matching what

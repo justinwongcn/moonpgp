@@ -40,21 +40,25 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
     "keygen" => {
       check_args(rest.length(), 3)
       let key = @api.generate_key(rest[0], bits=parse_bits(rest, 2048))
-      @fs.write_string_to_file(rest[1], key.to_armored())
+      // Key generation writes the fresh unlocked key by definition (F17):
+      // the export gate stays, and the intent is explicit here.
+      @fs.write_string_to_file(rest[1], key.to_armored(allow_unlocked=true))
       @fs.write_string_to_file(rest[2], key.to_public().to_armored())
       println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")
     }
     "edkeygen" => {
       check_args(rest.length(), 3)
       let key = @api.generate_ed25519_key(rest[0])
-      @fs.write_string_to_file(rest[1], key.to_armored())
+      // Key generation writes the fresh unlocked key by definition (F17).
+      @fs.write_string_to_file(rest[1], key.to_armored(allow_unlocked=true))
       @fs.write_string_to_file(rest[2], key.to_public().to_armored())
       println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")
     }
     "v6keygen" => {
       check_args(rest.length(), 3)
       let key = @api.generate_ed25519_v6_key(rest[0])
-      @fs.write_string_to_file(rest[1], key.to_armored())
+      // Key generation writes the fresh unlocked key by definition (F17).
+      @fs.write_string_to_file(rest[1], key.to_armored(allow_unlocked=true))
       @fs.write_string_to_file(rest[2], key.to_public().to_armored())
       println("wrote \{rest[1]} (secret) and \{rest[2]} (public)")
     }
@@ -167,7 +171,9 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       check_args(pos.length(), 1)
       let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(pos[0]))
       let open = key.unlock(pass)
-      @fs.write_string_to_file(pos[0], open.to_armored())
+      // `unlock` exists to store the key without passphrase protection
+      // (F17): the explicit opt-in is the command's own intent.
+      @fs.write_string_to_file(pos[0], open.to_armored(allow_unlocked=true))
       println(
         "unlocked \{pos[0]} (the secret key is now stored without passphrase protection)",
       )

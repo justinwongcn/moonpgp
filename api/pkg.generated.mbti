@@ -120,8 +120,8 @@ pub struct KeyRing {
 pub fn KeyRing::add_private(Self, PrivateKey) -> Unit
 pub fn KeyRing::add_public(Self, PublicKey) -> Unit
 pub fn KeyRing::find_decryption_key(Self, BytesView) -> @packet.SecretKeyPacket? raise
-pub fn KeyRing::find_encryption_key(Self, BytesView, now? : Int64) -> @packet.PublicKeyPacket? raise
-pub fn KeyRing::find_verification_key(Self, BytesView, now? : Int64) -> PublicKey? raise
+pub fn KeyRing::find_encryption_key(Self, BytesView, now~ : Int64) -> @packet.PublicKeyPacket? raise
+pub fn KeyRing::find_verification_key(Self, BytesView, now~ : Int64) -> PublicKey? raise
 pub fn KeyRing::new() -> Self
 pub fn KeyRing::private_count(Self) -> Int32
 pub fn KeyRing::public_count(Self) -> Int32
@@ -163,8 +163,8 @@ pub fn PrivateKey::self_signature(Self) -> @packet.SignaturePacket
 pub fn PrivateKey::set_expiry(Self, Int64, created? : Int32) -> Self raise
 pub fn PrivateKey::set_primary_user_id(Self, String, created? : Int32) -> Self raise
 pub fn PrivateKey::set_subkey_expiry(Self, BytesView, Int64, created? : Int32) -> Self raise
-pub fn PrivateKey::to_armored(Self) -> String
-pub fn PrivateKey::to_bytes(Self) -> Bytes
+pub fn PrivateKey::to_armored(Self, allow_unlocked? : Bool) -> String raise
+pub fn PrivateKey::to_bytes(Self, allow_unlocked? : Bool) -> Bytes raise
 pub fn PrivateKey::to_public(Self) -> PublicKey
 pub fn PrivateKey::to_repr(Self) -> @debug.Repr
 pub fn PrivateKey::unlock(Self, String, argon2_max_memory_kib? : Int32) -> Self raise
@@ -218,7 +218,6 @@ pub(all) struct SecretSubkeyCert {
 }
 pub fn SecretSubkeyCert::to_repr(Self) -> @debug.Repr
 
-#derive(@debug.Debug)
 pub(all) struct SessionKey {
   key : Bytes
   algo : @primitives.CipherAlgo

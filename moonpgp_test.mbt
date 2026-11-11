@@ -12,7 +12,7 @@ test "root facade: password encrypt/decrypt roundtrip" {
 ///|
 test "root facade: key generate / armor / reimport / methods" {
   let key = @moonpgp.generate_key("alice@example.com")
-  let armored = key.to_armored()
+  let armored = key.to_armored(allow_unlocked=true)
   let re = @moonpgp.PrivateKey::from_armored(armored)
   assert_eq(re.fingerprint(), key.fingerprint())
   assert_eq(re.user_id(), "alice@example.com")

@@ -164,7 +164,7 @@ test "v6 keygen signs and verifies; key armor round-trips" {
   // user ID and v6 wire shape included) and still verifies.
   let pub2 = @api.PublicKey::from_armored(key.to_public().to_armored())
   assert_eq(@api.verify_detached(msg, sig, pub2), @api.Ok)
-  let priv2 = @api.PrivateKey::from_armored(key.to_armored())
+  let priv2 = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   let sig2 = @api.sign_detached(msg, priv2)
   assert_eq(@api.verify_detached(msg, sig2, pub2), @api.Ok)
   // v6 signatures carry a salt and no issuer key id subpacket.

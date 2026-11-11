@@ -277,7 +277,6 @@ pub fn PublicKeyPacket::key_id(self : PublicKeyPacket) -> Bytes raise {
 /// A version 4 or 6 secret key packet: public part plus secret material.
 /// The secret material is kept in wire form; unlocking/locking happens at
 /// the key-management layer.
-#derive(Debug)
 pub(all) struct SecretKeyPacket {
   public : PublicKeyPacket
   /// S2K usage: 0 = plaintext secret, 253 = AEAD + HKDF key separation,
@@ -299,6 +298,21 @@ pub(all) struct SecretKeyPacket {
   /// True for GnuPG "GNU dummy" keys whose secret material lives on a
   /// smartcard (S2K type 101 marker); there is nothing to unlock.
   dummy : Bool
+}
+
+///|
+/// Debug redaction (audit F16): `secret_material` IS the raw private key
+/// (an Ed25519 seed, RSA d/p/q/u) when `s2k_usage` is 0, and the derived
+/// Debug printed it in full — any Debug formatting or snapshot of a
+/// parsed/generated key leaked live key material into logs and files.
+/// Only metadata and lengths are shown; nested holders (PrivateKey,
+/// SecretSubkeyCert) inherit the redaction through their own derives.
+pub impl @moonbitlang/core/debug.Debug for SecretKeyPacket with fn to_repr(
+  self : SecretKeyPacket,
+) -> @moonbitlang/core/debug.Repr {
+  @moonbitlang/core/debug.Repr::Repr(
+    "SecretKeyPacket::version=\{self.public.version} algo=\{self.public.algo.number()} s2k_usage=\{self.s2k_usage} secret_material=<\{self.secret_material.length()} octets> dummy=\{self.dummy}",
+  )
 }
 
 ///|

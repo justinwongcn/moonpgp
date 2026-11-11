@@ -19,7 +19,9 @@ test "add_user_id inherits the key-level expiry (S2)" {
     assert_eq(recert.user_ids[0].self_signature.key_expiration_time(), 3600)
     assert_true(recert.is_expired(later))
     // The re-issued certification is wire-valid: re-import keeps the gate.
-    let re = PrivateKey::from_bytes(recert.to_bytes().exact_view())
+    let re = PrivateKey::from_bytes(
+      recert.to_bytes(allow_unlocked=true).exact_view(),
+    )
     assert_true(re.is_expired(later))
     // Appending a fresh user id (the first untouched) keeps it too.
     let append = key.add_user_id("AU2 <au2@example.net>")
@@ -182,7 +184,9 @@ test "import refuses a mixed-generation certificate (C1)" {
     ],
   }
   let raised = try {
-    let _ = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
+    let _ = PrivateKey::from_bytes(
+      mixed.to_bytes(allow_unlocked=true).exact_view(),
+    )
     false
   } catch {
     e => {
@@ -244,12 +248,25 @@ test "an MD5 document signature fails verification (C5)" {
   let key = generate_ed25519_key("M5 <m5@example.net>")
   let data : Bytes = b"md5 payload"
   // A cryptographically REAL MD5 signature — before C5 it verified as Ok
-  // and only gpg said no.
-  let md5_sig = make_document_signature_with(
+  // and only gpg said no. Minted below the issuing gate (F13) so this
+  // test pins the VERIFY side of the MD5 refusal.
+  let sha_sig = make_document_signature_with(
     key.primary,
     data.exact_view(),
     @packet.BinaryDocument,
+    @primitives.Sha1,
+  )
+  let md5_proto = { ..sha_sig, hash_algo: 1, }
+  let md5_digest = document_hash(
+    md5_proto,
+    data.exact_view(),
+    @packet.BinaryDocument,
+  )
+  let md5_sig = finish_signature(
+    md5_proto,
+    key.primary,
     @primitives.Md5,
+    md5_digest.exact_view(),
   )
   let armored_md5 = @armor.Signature.encode(
     @packet.serialize_packet(@packet.Signature, md5_sig.to_body().exact_view()).exact_view(),
@@ -391,4 +408,180 @@ test "import parse survives 50k same-uid certifications linearly (F5)" {
   )
   assert_eq(parsed.user_ids.length(), 1)
   assert_eq(parsed.user_ids[0].self_signature.fast_hash(), last_fast)
+}
+
+///|
+test "Debug output redacts secret material (F16)" {
+  let key = generate_ed25519_key("F16 <f16@example.net>")
+  let sk = key.primary
+  let hex = @primitives.to_hex(sk.secret_material.exact_view())
+  let repr = sk.to_repr().to_string()
+  assert_true(repr.contains("secret_material=<"))
+  assert_true(!repr.contains(hex))
+  // Nested holders (PrivateKey derives Debug over SecretKeyPacket)
+  // inherit the redaction.
+  let key_repr = key.to_repr().to_string()
+  assert_true(!key_repr.contains(hex))
+  // The session key shows a length, never octets.
+  let session = SessionKey::new(
+    @primitives.random_bytes(32),
+    @primitives.Aes256,
+  )
+  let srepr = session.to_repr().to_string()
+  assert_true(srepr.contains("key=<32 octets>"))
+  assert_true(!srepr.contains(@primitives.to_hex(session.key().exact_view())))
+}
+
+///|
+test "issuing refuses MD5 but keeps SHA-1 mintable and verifiable (F13)" {
+  let key = generate_ed25519_key("F13 <f13@example.net>")
+  let raised = try {
+    let _ = sign_cleartext_with("hi\n", key, @primitives.Md5)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+  // SHA-1 remains mintable for legacy interop and still verifies Ok.
+  let ct = sign_cleartext_with("hi\n", key, @primitives.Sha1)
+  let (text, status) = verify_cleartext(ct, key.to_public())
+  assert_eq(text, "hi")
+  assert_true(status is Ok)
+}
+
+///|
+test "RSA public exponent sanity gates the key surface (F18)" {
+  let n = Bytes::make(64, b'\xab')
+  let mk = fn(e : Bytes) -> @packet.PublicKeyPacket {
+    {
+      version: 4,
+      creation_time: 0,
+      algo: @packet.RsaEncryptOrSign,
+      params: [n, e],
+    }
+  }
+  // e = 1 makes verification trivially forgeable: refuse.
+  let e1 = try {
+    let _ = rsa_public_parts(mk(Bytes::from_array([0x01])))
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(e1)
+  // Even exponents are never legitimate: refuse.
+  let e2 = try {
+    let _ = rsa_public_parts(mk(Bytes::from_array([0x02])))
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(e2)
+  // e = 65537 over a larger modulus passes.
+  let ok = try {
+    let _ = rsa_public_parts(mk(Bytes::from_array([0x01, 0x00, 0x01])))
+    true
+  } catch {
+    _ => false
+  }
+  assert_true(ok)
+  // e >= n is not a valid exponent: refuse.
+  let big = try {
+    let _ = rsa_public_parts(mk(Bytes::make(65, b'\xff')))
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(big)
+}
+
+///|
+fn corrupt_embedded_signatures(
+  binding : @packet.SignaturePacket,
+) -> @packet.SignaturePacket {
+  let wreck = fn(
+    subs : Array[@packet.SigSubpacket],
+  ) -> Array[@packet.SigSubpacket] {
+    let out : Array[@packet.SigSubpacket] = []
+    for sp in subs {
+      if sp.sub_type == @packet.SIGSUB_EMBEDDED_SIGNATURE {
+        out.push({ ..sp, body: Bytes::from_array([0xff, 0xff]), })
+      } else {
+        out.push(sp)
+      }
+    }
+    out
+  }
+  {
+    ..binding,
+    hashed_subpackets: wreck(binding.hashed_subpackets),
+    unhashed_subpackets: wreck(binding.unhashed_subpackets),
+  }
+}
+
+///|
+test "a malformed embedded signature reports Failed, not a raise (F12)" {
+  let key = generate_ed25519_v6_key_with_signing_subkey("F12 <f12@example.net>")
+  let data : Bytes = b"payload"
+  // Sign with the intact key, then swap in a binding whose Embedded
+  // Signature body is garbage: the verify side used to raise out of
+  // parse; the VerifyStatus contract says Failed.
+  let sig = sign_detached(data.exact_view(), key)
+  let corrupted : PrivateKey = {
+    ..key,
+    subkeys: key.subkeys.map(fn(c) {
+      { ..c, binding: corrupt_embedded_signatures(c.binding), }
+    }),
+  }
+  assert_true(
+    verify_detached(data.exact_view(), sig, corrupted.to_public()) is Failed,
+  )
+}
+
+///|
+test "unlocked export requires explicit opt-in (F17)" {
+  let key = generate_ed25519_key("F17 <f17@example.net>")
+  let raised = try {
+    // The ungated call is the intentional violation under test (F17).
+    let _ = key.to_armored()
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+  let armored = key.to_armored(allow_unlocked=true)
+  assert_true(armored.contains("BEGIN PGP PRIVATE KEY BLOCK"))
+  // A locked key exports without the opt-in: its material is encrypted.
+  let locked = key.lock("passphrase-1")
+  assert_true(
+    locked
+    .to_armored(allow_unlocked=true)
+    .contains("BEGIN PGP PRIVATE KEY BLOCK"),
+  )
+}
+
+///|
+test "decrypt_and_verify tolerates a failing first key (F14)" {
+  let decoy = generate_ed25519_key("D7 <d7@example.net>")
+  let target = generate_ed25519_key("D7t <d7t@example.net>")
+  let msg = encrypt_to_recipients(b"hello", [target.to_public()])
+  let data = @armor.ArmorBlock::data(@armor.decode(msg))
+  let packets = @packet.parse_packets(data.exact_view())
+  // A poison PKESK addressing the FIRST key's subkey: the old loop let
+  // its error kill the whole function, skipping the second key.
+  let decoy_id : Bytes = decoy.to_public().subkeys[0].key.key_id()
+  let w = @packet.Writer::new()
+  let body = Bytes::from_array([0x03])
+    .add(decoy_id)
+    .add(Bytes::from_array([0x12, 0x00, 0x00, 0x00]))
+  w.bytes(
+    @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
+  )
+  for p in packets {
+    w.bytes(
+      @packet.serialize_packet(p.tag(), p.body().exact_view()).exact_view(),
+    )
+  }
+  let poisoned = @armor.Message.encode(w.to_bytes().exact_view())
+  let (plain, _) = decrypt_and_verify(poisoned, [decoy, target], None)
+  assert_eq(plain, @primitives.utf8_bytes("hello"))
 }

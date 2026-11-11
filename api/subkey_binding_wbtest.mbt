@@ -34,7 +34,7 @@ test "N1: subkey without a binding signature is rejected on import" {
   assert_true(raised)
   // The private-key import path shares the validation.
   let w2 = @packet.Writer::new()
-  w2.bytes(a.to_bytes().exact_view())
+  w2.bytes(a.to_bytes(allow_unlocked=true).exact_view())
   w2.bytes(
     @packet.serialize_packet(
       @packet.SecretSubkey,
@@ -111,7 +111,9 @@ test "N2: multiple subkeys are kept, paired, and role-selected" {
     ],
   }
   // Import keeps BOTH subkeys, each with its own binding.
-  let re = PrivateKey::from_bytes(multi.to_bytes().exact_view())
+  let re = PrivateKey::from_bytes(
+    multi.to_bytes(allow_unlocked=true).exact_view(),
+  )
   assert_eq(re.subkeys.length(), 2)
   let pk = re.to_public()
   // Encryption selection picks the encryption-flagged subkey (the first),
@@ -146,7 +148,9 @@ test "N3: persona and casual self-certifications import" {
         UserIdBinding::{ user_id: uid, self_signature: cert, revocation: None, },
       ],
     }
-    let re = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
+    let re = PrivateKey::from_bytes(
+      mixed.to_bytes(allow_unlocked=true).exact_view(),
+    )
     assert_eq(re.user_ids[0].self_signature.sig_type(), cert_type)
   }
 }

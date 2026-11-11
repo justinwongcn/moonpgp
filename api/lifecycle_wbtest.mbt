@@ -56,7 +56,9 @@ test "tampered user id fails import (certification must verify)" {
     ],
   }
   let raised = try {
-    let _ = PrivateKey::from_bytes(tampered.to_bytes().exact_view())
+    let _ = PrivateKey::from_bytes(
+      tampered.to_bytes(allow_unlocked=true).exact_view(),
+    )
     false
   } catch {
     _ => true
@@ -81,7 +83,9 @@ test "swapped subkey fails import (binding must verify)" {
     ],
   }
   let raised = try {
-    let _ = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
+    let _ = PrivateKey::from_bytes(
+      mixed.to_bytes(allow_unlocked=true).exact_view(),
+    )
     false
   } catch {
     _ => true
@@ -95,7 +99,9 @@ test "swapped v6 direct-key signature fails import" {
   let other = generate_ed25519_v6_key("O <o@example.com>")
   let mixed : PrivateKey = { ..key, direct_signature: other.direct_signature, }
   let raised = try {
-    let _ = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
+    let _ = PrivateKey::from_bytes(
+      mixed.to_bytes(allow_unlocked=true).exact_view(),
+    )
     false
   } catch {
     _ => true
@@ -109,13 +115,14 @@ test "keyring finds non-RSA encryption subkeys (previously is_rsa-gated)" {
   let ring = KeyRing::new()
   ring.add_public(ed.to_public())
   let sub_id = ed.to_public().subkeys[0].key.key_id()
-  assert_true(ring.find_encryption_key(sub_id) is Some(_))
+  let now = @primitives.unix_now()
+  assert_true(ring.find_encryption_key(sub_id, now~) is Some(_))
   let v6 = generate_ed25519_v6_key("V6 <v6@example.com>")
   ring.add_public(v6.to_public())
   let v6_sub = v6.to_public().subkeys[0].key.key_id()
-  assert_true(ring.find_encryption_key(v6_sub) is Some(_))
+  assert_true(ring.find_encryption_key(v6_sub, now~) is Some(_))
   // The primary (EdDSA) is not encryption-capable and must not resolve.
-  assert_true(ring.find_encryption_key(v6.key_id()) is None)
+  assert_true(ring.find_encryption_key(v6.key_id(), now~) is None)
 }
 
 ///|
@@ -170,7 +177,9 @@ test "a swapped certification fails import on a multi-uid key" {
     user_ids: [key.user_ids[0], forged_binding],
   }
   let raised = try {
-    let _ = PrivateKey::from_bytes(mixed.to_bytes().exact_view())
+    let _ = PrivateKey::from_bytes(
+      mixed.to_bytes(allow_unlocked=true).exact_view(),
+    )
     false
   } catch {
     _ => true
@@ -192,10 +201,15 @@ test "a generated key exposes one binding and stable accessors" {
     ),
   )
   // Round trip keeps the bindings byte-stable.
-  let again = PrivateKey::from_bytes(key.to_bytes().exact_view())
+  let again = PrivateKey::from_bytes(
+    key.to_bytes(allow_unlocked=true).exact_view(),
+  )
   assert_eq(again.user_ids.length(), 1)
   assert_eq(again.user_ids[0].user_id, "Solo <solo@example.com>")
-  assert_eq(again.to_bytes(), key.to_bytes())
+  assert_eq(
+    again.to_bytes(allow_unlocked=true),
+    key.to_bytes(allow_unlocked=true),
+  )
 }
 
 ///|
@@ -252,7 +266,7 @@ test "long legal lifetimes do not wrap into instant expiry" {
     assert_true(key.is_expired(now + 500_000_001L))
     // The 4-octet wire value round-trips: the exported certificate judges
     // the same way.
-    let again = PrivateKey::from_armored(key.to_armored())
+    let again = PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
     assert_false(again.is_expired(now))
     assert_true(again.is_expired(now + 500_000_001L))
   }

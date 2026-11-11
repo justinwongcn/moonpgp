@@ -81,14 +81,18 @@ test "keyring lookup by key id" {
   ring.add_public(alice.to_public())
   assert_eq(ring.public_count(), 1)
   let pub_key = alice.to_public()
-  let found = ring.find_verification_key(pub_key.key_id())
+  let found = ring.find_verification_key(
+    pub_key.key_id(),
+    now=@primitives.unix_now(),
+  )
   assert_true(found is Some(_))
   // M1: lookups are capability-aware. The encryption-only subkey (key
   // flags 0x0C) no longer resolves as a verification key, but it does
   // resolve as an encryption key.
   let sub_id = alice.to_public().subkeys[0].key.key_id()
-  assert_true(ring.find_verification_key(sub_id) is None)
-  assert_true(ring.find_encryption_key(sub_id) is Some(_))
+  let now = @primitives.unix_now()
+  assert_true(ring.find_verification_key(sub_id, now~) is None)
+  assert_true(ring.find_encryption_key(sub_id, now~) is Some(_))
 }
 
 ///|

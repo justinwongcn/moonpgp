@@ -2,7 +2,21 @@
 /// Serialize to binary packets: SecretKey || [revocation] ||
 /// [DirectKeySig] || [UserID || cert] || [SecretSubkey || binding ]. A v6
 /// key without a User ID writes only the Direct Key signature.
-pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
+/// Serialize the transferable private key. `allow_unlocked~` gates the
+/// dangerous state (audit F17): an UNLOCKED key serializes its raw secret
+/// material (an Ed25519 seed, RSA d/p/q/u) — exactly what `lock` exists
+/// to keep off disk — so exporting one requires the explicit opt-in,
+/// matching the weight the lock/unlock state machine already carries.
+/// Locked keys are unaffected: their material is encrypted on the wire.
+pub fn PrivateKey::to_bytes(
+  self : PrivateKey,
+  allow_unlocked~ : Bool = false,
+) -> Bytes raise {
+  guard allow_unlocked || self.is_locked() else {
+    @error.fail(
+      "api: refusing to export an unlocked private key (its secret material would be written in plaintext); pass allow_unlocked=true if this is intentional, or lock the key first",
+    )
+  }
   let w = @packet.Writer::new()
   w.bytes(
     @packet.serialize_packet(
@@ -74,8 +88,11 @@ pub fn PrivateKey::to_bytes(self : PrivateKey) -> Bytes {
 
 ///|
 /// Export as ASCII-armored private key block.
-pub fn PrivateKey::to_armored(self : PrivateKey) -> String {
-  @armor.PrivateKey.encode(self.to_bytes().exact_view())
+pub fn PrivateKey::to_armored(
+  self : PrivateKey,
+  allow_unlocked~ : Bool = false,
+) -> String raise {
+  @armor.PrivateKey.encode(self.to_bytes(allow_unlocked~).exact_view())
 }
 
 ///|
@@ -511,7 +528,9 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
 /// ```mbt check
 /// test "armor round trip preserves the fingerprint" {
 ///   let key = @api.generate_ed25519_key("A <a@example.com>")
-///   let re = @api.PrivateKey::from_armored(key.to_armored())
+///   // Fresh keys are unlocked: exporting one needs the explicit opt-in
+///   // (audit F17) — or lock it first.
+///   let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
 ///   assert_eq(re.fingerprint(), key.fingerprint())
 /// }
 /// ```

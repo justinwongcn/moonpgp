@@ -5,10 +5,25 @@ fn rsa_public_parts(p : @packet.PublicKeyPacket) -> (BigInt, BigInt) raise {
   guard params.length() == 2 else {
     @error.fail("api: bad RSA public parameters")
   }
-  (
-    BigInt::from_octets(params[0].exact_view(), signum=1),
-    BigInt::from_octets(params[1].exact_view(), signum=1),
-  )
+  let n = BigInt::from_octets(params[0].exact_view(), signum=1)
+  let e = BigInt::from_octets(params[1].exact_view(), signum=1)
+  // Import-side RSA sanity (audit F18): e = 1 makes signature
+  // verification trivially forgeable (s^1 mod n = s, so a key the
+  // attacker minted with a victim-shaped UID forges every signature),
+  // and even or tiny exponents are never legitimate. Go's
+  // rsa.PublicKey.Validation draws the same line. Keys arrive from the
+  // outside world, so the parse path re-checks what the generator
+  // guarantees.
+  guard e.compare_int(3) >= 0 else {
+    @error.fail("api: RSA public exponent below 3")
+  }
+  guard e.mod(BigInt::from_int(2)).equal_int(1) else {
+    @error.fail("api: RSA public exponent must be odd")
+  }
+  guard e.compare(n) < 0 else {
+    @error.fail("api: RSA public exponent must be less than the modulus")
+  }
+  (n, e)
 }
 
 ///|

@@ -27,7 +27,9 @@ test "revoke_key flips every lifecycle gate and round-trips" {
     @api.KeyRevoked,
   )
   // The revocation survives export/import (to_bytes writes it).
-  let re = @api.PrivateKey::from_bytes(revoked.to_bytes().exact_view())
+  let re = @api.PrivateKey::from_bytes(
+    revoked.to_bytes(allow_unlocked=true).exact_view(),
+  )
   assert_true(re.to_public().is_revoked(now))
   // Decrypting mail that arrived before the revocation keeps working
   // (decryption is deliberately not lifecycle-gated).
@@ -54,7 +56,9 @@ test "revoke_subkey drops the subkey from selection but not from decryption" {
     @primitives.utf8_bytes("pre-revocation mail"),
   )
   // Round trip keeps the subkey revocation.
-  let re = @api.PrivateKey::from_bytes(revoked.to_bytes().exact_view())
+  let re = @api.PrivateKey::from_bytes(
+    revoked.to_bytes(allow_unlocked=true).exact_view(),
+  )
   assert_true(re.subkeys[0].revocation is Some(_))
   assert_false(re.to_public().can_encrypt(now))
 }
@@ -81,7 +85,9 @@ test "v6 key revocation round-trips" {
   let revoked = @api.revoke_key(v6, reason=@api.Superseded, message="v6 too")
   let now = @primitives.unix_now()
   assert_true(revoked.to_public().is_revoked(now))
-  let re = @api.PrivateKey::from_bytes(revoked.to_bytes().exact_view())
+  let re = @api.PrivateKey::from_bytes(
+    revoked.to_bytes(allow_unlocked=true).exact_view(),
+  )
   assert_true(re.to_public().is_revoked(now))
   assert_eq(re.revocations[0].version(), 6)
 }
@@ -183,7 +189,9 @@ test "revoke_subkey on a v6 key emits a v6 revocation and gates selection" {
     "written before the subkey died",
   )
   // And the revocation survives re-export.
-  let back = @api.PrivateKey::from_armored(revoked.to_armored())
+  let back = @api.PrivateKey::from_armored(
+    revoked.to_armored(allow_unlocked=true),
+  )
   guard back.subkeys[0].revocation is Some(_) else {
     abort("round-trip lost the subkey revocation")
   }

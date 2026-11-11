@@ -98,7 +98,9 @@ test "argon2 AEAD secret key lock/unlock round trip" {
   assert_eq(locked.primary.s2k_usage, 253)
   assert_eq(locked.primary.aead_algo, @cipher.Ocb.number())
   // The wire form round-trips through armor/parse and still unlocks.
-  let reimported = @api.PrivateKey::from_armored(locked.to_armored())
+  let reimported = @api.PrivateKey::from_armored(
+    locked.to_armored(allow_unlocked=true),
+  )
   assert_true(reimported.is_aead_protected())
   assert_eq(
     reimported.unlock("passphrase").to_public().to_armored(),

@@ -20,7 +20,9 @@ test "add_encryption_subkey: rotation keeps old mail readable" {
   let after = @api.encrypt_to_recipients(msg, [rotated.to_public()])
   assert_eq(@api.decrypt_with_private_key(after, rotated), msg)
   // Import validates the new binding cryptographically.
-  let re = @api.PrivateKey::from_armored(rotated.to_armored())
+  let re = @api.PrivateKey::from_armored(
+    rotated.to_armored(allow_unlocked=true),
+  )
   assert_eq(re.subkeys.length(), 2)
 }
 
@@ -32,14 +34,16 @@ test "add_encryption_subkey: v6 key gets a v6 X25519 subkey" {
   let msg = b"v6 rotation"
   let armored = @api.encrypt_to_recipients(msg, [rotated.to_public()])
   assert_eq(@api.decrypt_with_private_key(armored, rotated), msg)
-  let re = @api.PrivateKey::from_armored(rotated.to_armored())
+  let re = @api.PrivateKey::from_armored(
+    rotated.to_armored(allow_unlocked=true),
+  )
   assert_eq(re.subkeys.length(), 2)
 }
 
 ///|
 test "add_signing_subkey: binding carries a verifying cross-certification" {
   let key = @api.generate_ed25519_key("S <s@example.com>").add_signing_subkey()
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   let pubk = re.to_public()
   let sign_sub = pubk.subkeys[1]
   // The embedded Primary Key Binding (RFC 9580 §5.2.3.26) must verify as
@@ -62,14 +66,14 @@ test "set_expiry: the key expires, then unexpires when cleared" {
   let cleared = key.set_expiry(0)
   assert_false(cleared.is_expired(now + 3601))
   // The re-issued self-signature round-trips with the expiry attached.
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_true(re.is_expired(now + 3601))
 }
 
 ///|
 test "set_expiry: v6 direct-key signature is re-issued too" {
   let key = @api.generate_ed25519_v6_key("V <v@example.com>").set_expiry(3600)
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   let now = @primitives.unix_now()
   assert_true(re.is_expired(now + 3601))
   // The key still works while valid: sign and verify at `now`.
@@ -92,7 +96,9 @@ test "set_subkey_expiry: encryption capability follows the subkey" {
   )
   // Round trip: import validates the re-issued binding and keeps the
   // expiry semantics.
-  let re = @api.PrivateKey::from_armored(extended.to_armored())
+  let re = @api.PrivateKey::from_armored(
+    extended.to_armored(allow_unlocked=true),
+  )
   assert_false(re.can_encrypt(now + 3601))
   assert_true(re.can_encrypt(now))
 }
@@ -158,7 +164,7 @@ test "set_expiry re-issues every user id certification with the created stamp" {
     assert_eq(b.self_signature.creation_time(), Some(1700000000))
   }
   // Import validates both re-issued certifications and keeps the semantics.
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   let now = @primitives.unix_now()
   assert_true(re.is_expired(now + 3601))
 }
@@ -172,7 +178,7 @@ test "set_expiry stamps the v6 direct-key signature too" {
   let direct = key.direct_signature.unwrap()
   assert_eq(direct.key_expiration_time(), 3600)
   assert_eq(direct.creation_time(), Some(1700000001))
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_eq(re.direct_signature.unwrap().key_expiration_time(), 3600)
 }
 
@@ -181,7 +187,7 @@ test "add_signing_subkey: v6 key gets a cross-certified native Ed25519 subkey" {
   let key = @api.generate_ed25519_v6_key("R6S <r6s@example.com>").add_signing_subkey(
     created=1700000003,
   )
-  let re = @api.PrivateKey::from_armored(key.to_armored())
+  let re = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   assert_eq(re.subkeys.length(), 2)
   assert_eq(re.subkeys[1].binding.creation_time(), Some(1700000003))
   let pubk = re.to_public()

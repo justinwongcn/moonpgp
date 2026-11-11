@@ -133,7 +133,7 @@ test "v6 dual-subkey key round-trips export and encryption" {
   let key = @api.generate_ed25519_v6_key_with_signing_subkey(
     "Dual V6 <dualv6@example.com>",
   )
-  let back = @api.PrivateKey::from_armored(key.to_armored())
+  let back = @api.PrivateKey::from_armored(key.to_armored(allow_unlocked=true))
   guard back.subkeys.length() == 2 else { abort("round-trip lost subkeys") }
   let sign = back.subkeys[1]
   // The embedded binding survives the re-export with its shape intact.

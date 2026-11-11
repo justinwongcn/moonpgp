@@ -17,7 +17,7 @@ test "private import skips a public-only bound subkey" {
     now,
   )
   let w = @packet.Writer::new()
-  w.bytes(a.to_bytes().exact_view())
+  w.bytes(a.to_bytes(allow_unlocked=true).exact_view())
   w.bytes(
     @packet.serialize_packet(
       @packet.PublicSubkey,
@@ -134,7 +134,9 @@ test "revocation signatures attach and survive re-export" {
   assert_eq(re.revocations.length(), 1)
   assert_true(re.subkeys[0].revocation is Some(_))
   // Re-export writes both revocation packets back.
-  let again = PrivateKey::from_bytes(re.to_bytes().exact_view())
+  let again = PrivateKey::from_bytes(
+    re.to_bytes(allow_unlocked=true).exact_view(),
+  )
   assert_eq(again.revocations.length(), 1)
   assert_true(again.subkeys[0].revocation is Some(_))
 }

@@ -258,7 +258,6 @@ pub fn Reader::remaining(Self) -> Int32
 pub fn Reader::to_repr(Self) -> @debug.Repr
 pub fn Reader::view(Self) -> BytesView
 
-#derive(@debug.Debug)
 pub(all) struct SecretKeyPacket {
   public : PublicKeyPacket
   s2k_usage : Int32
@@ -272,6 +271,7 @@ pub(all) struct SecretKeyPacket {
 pub fn SecretKeyPacket::parse(BytesView) -> Self raise
 pub fn SecretKeyPacket::to_body(Self) -> Bytes
 pub fn SecretKeyPacket::to_repr(Self) -> @debug.Repr
+pub impl @debug.Debug for SecretKeyPacket
 
 #derive(@debug.Debug)
 pub(all) struct SeipdPacket {

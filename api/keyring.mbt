@@ -105,14 +105,18 @@ fn key_packet_verify_usable_at(
 ///|
 /// Find an encryption-capable public key packet by 8-octet key id that is
 /// still usable at `now` (lifecycle-checked: revocation, key flags and
-/// expiry — a key without key flags counts as capable; `now = 0` skips
-/// the time checks). All public-key algorithms participate; errors from
-/// key-id computation propagate (F15): the keys were parsed on the way
-/// in, so a failure here is an invariant violation, not a lookup miss.
+/// expiry — a key without key flags counts as capable). All public-key
+/// algorithms participate; errors from key-id computation propagate (F15):
+/// the keys were parsed on the way in, so a failure here is an invariant
+/// violation, not a lookup miss. `now` is REQUIRED (audit F15): the old
+/// `0` default silently skipped the expiry half of the gate — an expired
+/// key looked selectable — and the omission was invisible at call sites.
+/// On non-native targets `unix_now()` returns 0; pass it explicitly there
+/// and document that revocation still applies while expiry cannot.
 pub fn KeyRing::find_encryption_key(
   self : KeyRing,
   key_id : BytesView,
-  now~ : Int64 = 0L,
+  now~ : Int64,
 ) -> @packet.PublicKeyPacket? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {
@@ -153,10 +157,11 @@ pub fn KeyRing::find_decryption_key(
 ///|
 /// Find a transferable key that can verify a signature from `key_id` and
 /// is still usable at `now` (revocation, sign/certify flags, expiry).
+/// `now` is REQUIRED — see `find_encryption_key` (audit F15).
 pub fn KeyRing::find_verification_key(
   self : KeyRing,
   key_id : BytesView,
-  now~ : Int64 = 0L,
+  now~ : Int64,
 ) -> PublicKey? raise {
   for key in self.public_keys {
     for p in all_public_packets(key) {

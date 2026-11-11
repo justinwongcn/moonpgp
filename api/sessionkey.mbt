@@ -11,11 +11,20 @@
 /// A symmetric session key with the cipher that interprets it. `key`
 /// must be `algo.key_size()` octets — `SessionKey::new` enforces it;
 /// direct struct construction bypasses the check and fails at first use
-/// inside the block-cipher constructor.
-#derive(Debug)
+/// inside the block-cipher constructor. Debug is hand-redacted (audit
+/// F16): the key octets show as a length, never as values.
 pub(all) struct SessionKey {
   key : Bytes
   algo : @primitives.CipherAlgo
+}
+
+///|
+impl @moonbitlang/core/debug.Debug for SessionKey with fn to_repr(
+  self : SessionKey,
+) -> @moonbitlang/core/debug.Repr {
+  @moonbitlang/core/debug.Repr::Repr(
+    "SessionKey::algo=\{self.algo.number()} key=<\{self.key.length()} octets>",
+  )
 }
 
 ///|

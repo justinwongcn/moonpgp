@@ -38,7 +38,7 @@ test "key export/import roundtrip via armor" {
     )
   }
   // Private armor roundtrip.
-  let priv_armored = key.to_armored()
+  let priv_armored = key.to_armored(allow_unlocked=true)
   let re_priv = @api.PrivateKey::from_armored(priv_armored)
   assert_eq(re_priv.fingerprint(), key.fingerprint())
   assert_false(re_priv.is_locked())
@@ -62,7 +62,7 @@ test "lock and unlock with passphrase" {
   assert_false(unlocked.is_locked())
   assert_eq(unlocked.primary.secret_material, key.primary.secret_material)
   // The locked key round-trips through armor.
-  let armored = locked.to_armored()
+  let armored = locked.to_armored(allow_unlocked=true)
   let re = @api.PrivateKey::from_armored(armored)
   assert_true(re.is_locked())
   let back = re.unlock("secret pass")

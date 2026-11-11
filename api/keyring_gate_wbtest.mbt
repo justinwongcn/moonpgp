@@ -58,14 +58,21 @@ test "ring encryption lookup judges the matched subkey's own lifetime" {
   ring.add_public(fresh.to_public())
   let expired_id = pk.subkeys[0].key.key_id()
   let fresh_id = fresh.to_public().subkeys[0].key.key_id()
-  // now = 0 turns the time checks off: both resolve.
-  assert_true(ring.find_encryption_key(expired_id) is Some(_))
+  // The clock is REQUIRED now (audit F15): with it supplied, the expired
+  // component never resolves and the fresh sibling does. On the
+  // non-native fallback clock (0) expiry cannot bind — revocation still
+  // does — and that degraded semantics is now explicit at every call.
   let now = @primitives.unix_now()
   if now != 0L {
+    // The expiry is relative to creation (RFC 9580 §5.2.3.13); past
+    // `later` the expired component is dead and the fresh sibling is not.
     let later = now + 120L
     assert_true(ring.find_encryption_key(expired_id, now=later) is None)
-    // The valid sibling key is still chosen at the same timestamp.
     assert_true(ring.find_encryption_key(fresh_id, now=later) is Some(_))
+  } else {
+    // Non-native fallback clock: expiry cannot bind, revocation still does.
+    assert_true(ring.find_encryption_key(expired_id, now~) is Some(_))
+    assert_true(ring.find_encryption_key(fresh_id, now~) is Some(_))
   }
 }
 
@@ -83,12 +90,14 @@ test "ring verification lookup judges the primary certification's lifetime" {
   ring.add_public(fresh.to_public())
   let expired_id = pk.primary.key_id()
   let fresh_id = fresh.to_public().primary.key_id()
-  assert_true(ring.find_verification_key(expired_id) is Some(_))
   let now = @primitives.unix_now()
   if now != 0L {
     let later = now + 120L
     assert_true(ring.find_verification_key(expired_id, now=later) is None)
     assert_true(ring.find_verification_key(fresh_id, now=later) is Some(_))
+  } else {
+    assert_true(ring.find_verification_key(expired_id, now~) is Some(_))
+    assert_true(ring.find_verification_key(fresh_id, now~) is Some(_))
   }
 }
 
@@ -101,9 +110,12 @@ test "ring selection refuses a revoked key outright" {
   ring.add_public(pub_half)
   // Revocation is cryptographically validated at any clock, `now = 0`
   // included: deleting the revocation check turns both lookups green.
-  assert_true(ring.find_verification_key(pub_half.primary.key_id()) is None)
+  let now = @primitives.unix_now()
   assert_true(
-    ring.find_encryption_key(pub_half.subkeys[0].key.key_id()) is None,
+    ring.find_verification_key(pub_half.primary.key_id(), now~) is None,
+  )
+  assert_true(
+    ring.find_encryption_key(pub_half.subkeys[0].key.key_id(), now~) is None,
   )
 }
 
@@ -123,8 +135,9 @@ test "verification lookup judges the matched subkey, not its siblings" {
   // sibling B is healthy: the matched packet is judged by its own
   // binding. Reverting to the any-sibling rule turns the first assert
   // green and this test red.
-  assert_true(ring.find_verification_key(a_id) is None)
-  assert_true(ring.find_verification_key(b_id) is Some(_))
+  let now = @primitives.unix_now()
+  assert_true(ring.find_verification_key(a_id, now~) is None)
+  assert_true(ring.find_verification_key(b_id, now~) is Some(_))
 }
 
 ///|

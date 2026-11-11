@@ -173,6 +173,16 @@ fn make_document_signature_with(
   hash : @primitives.HashId,
   created? : Int32,
 ) -> @packet.SignaturePacket raise {
+  // C5's issuing-side mirror (audit F13): MD5 is dead for signatures
+  // (RFC 9580 §9.5 MUST NOT) and the verification side already refuses
+  // it — an entry point that could mint a signature this library itself
+  // rejects (and gpg discards) was the lenient outlier. SHA-1 stays
+  // available for legacy interop, verification-only by policy.
+  if hash is @primitives.Md5 {
+    @error.fail(
+      "api: refusing to create an MD5 signature (RFC 9580 §9.5; use SHA-256)",
+    )
+  }
   let now = match created {
     Some(t) => t
     None => @primitives.unix_now().to_int()
@@ -521,9 +531,21 @@ fn verify_signature_packet(
       // enforces. gpg refuses signatures from an uncrossed subkey;
       // accepting them here made this library the lenient outlier, so a
       // signature gpg rejects verified as Ok.
-      if comp is Some(c) &&
-        !subkey_cross_certified(c.binding, verifier.primary, c.key) {
-        return Failed
+      if comp is Some(c) {
+        // A malformed Embedded Signature inside the binding used to
+        // raise out of verification, breaking the VerifyStatus contract
+        // (audit F12) — a poisoned binding reports Failed like any
+        // other failed gate. The issuing side keeps raising: fail-closed.
+        let crossed : Bool = subkey_cross_certified(
+          c.binding,
+          verifier.primary,
+          c.key,
+        ) catch {
+          _ => false
+        }
+        if !crossed {
+          return Failed
+        }
       }
       let digest = document_hash(sig, data, sig.sig_type())
       // RFC 9580 §5.2.4: a v6 verifier MUST reject the signature when the
@@ -761,20 +783,30 @@ pub fn decrypt_and_verify(
   // v3 PKESKs (key id) as well as SEIPD v1 and v2 — this pipeline must not
   // be able to reject a message the library itself can produce.
   let mut inner_opt : Bytes? = None
+  let mut last_error : String? = None
   for key in decryption_keys {
-    match decrypt_inner_with_key(packets, key) {
-      Some(b) => {
-        inner_opt = Some(b)
-        break
+    // Per-key tolerance mirrors decrypt_and_verify_list (audit F14): one
+    // key failing to open the message must not stop the next one.
+    let inner : Bytes? = decrypt_inner_with_key(packets, key) catch {
+      e => {
+        last_error = Some(e.to_string())
+        None
       }
-      None => ()
+    }
+    if inner is Some(b) {
+      inner_opt = Some(b)
+      break
     }
   }
   // Keep the raw inner packet stream (it may carry a one-pass signature
   // around the literal data).
   let inner : Bytes = match inner_opt {
     Some(b) => b
-    None => @error.fail("api: no matching decryption key")
+    None =>
+      match last_error {
+        Some(msg) => @error.fail(msg)
+        None => @error.fail("api: no matching decryption key")
+      }
   }
   // Walk inner packets: OPS? literal | compressed; trailing sig.
   let inner_packets = @packet.parse_packets(inner.exact_view())

@@ -625,3 +625,20 @@ test "imap: merged [UIDVALIDITY n UIDNEXT m] response code parses" {
   assert_eq(c.state.exists, 7)
   assert_eq(c.state.uidvalidity, 1234)
 }
+
+///|
+test "imap: a reply with too many untagged lines raises (F25)" {
+  let chunks : Array[Bytes] = []
+  for _ in 0..<10_002 {
+    chunks.push(sb("* 1 EXISTS\r\n"))
+  }
+  chunks.push(sb("a1 OK done\r\n"))
+  let c = new_client(imap_fake(chunks))
+  let raised = try {
+    ignore(c.read_reply("a1"))
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}

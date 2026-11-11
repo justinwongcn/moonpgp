@@ -296,3 +296,99 @@ test "an MD5 document signature fails verification (C5)" {
     ),
   )
 }
+
+///|
+test "a poisoned PKESK does not kill a later valid one (F19)" {
+  let key = generate_ed25519_key("F19 <f19@example.net>")
+  let msg = encrypt_to_recipients(b"hello", [key.to_public()])
+  let data = @armor.ArmorBlock::data(@armor.decode(msg))
+  let packets = @packet.parse_packets(data.exact_view())
+  // The victim's encryption subkey id: the poison addresses it so the
+  // match succeeds and the poisoned unwrap actually runs — which used
+  // to abort the whole message with its error (audit F19).
+  let subkey_id : Bytes = key.to_public().subkeys[0].key.key_id()
+  let w = @packet.Writer::new()
+  // A v3 ECDH-shaped PKESK (algo 18) with an empty ephemeral MPI: the
+  // address match hits, the unwrap fails ("X25519 inputs must be 32
+  // octets each"), and per RFC 9580 §10.3.2.1 the ESK is discarded —
+  // the later genuine ESK still opens the message.
+  let body = Bytes::from_array([0x03])
+    .add(subkey_id)
+    .add(Bytes::from_array([0x12, 0x00, 0x00, 0x00]))
+  w.bytes(
+    @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
+  )
+  for p in packets {
+    w.bytes(
+      @packet.serialize_packet(p.tag(), p.body().exact_view()).exact_view(),
+    )
+  }
+  let poisoned = @armor.Message.encode(w.to_bytes().exact_view())
+  let plain = decrypt_with_private_key(poisoned, key)
+  assert_eq(plain, @primitives.utf8_bytes("hello"))
+  // A poison-only message still fails cleanly (no ESK opens it).
+  let w2 = @packet.Writer::new()
+  w2.bytes(
+    @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
+  )
+  let poison_only = @armor.Message.encode(w2.to_bytes().exact_view())
+  let raised = try {
+    let _ = decrypt_with_private_key(poison_only, key)
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}
+
+///|
+test "import parse survives 50k same-uid certifications linearly (F5)" {
+  let key = generate_ed25519_key("F5 <f5@example.net>")
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(
+      @packet.SecretKey,
+      key.primary.to_body().exact_view(),
+    ).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(
+      @packet.UserId,
+      @primitives.utf8_bytes("F5 <f5@example.net>").exact_view(),
+    ).exact_view(),
+  )
+  // Minimal 10-octet v4 certification shells; only the fast_hash varies
+  // so the last-wins winner is identifiable. The old full-scan made
+  // this O(N²) before any cryptographic verification ran.
+  let mut last_fast = 0
+  for i in 0..<50000 {
+    last_fast = i & 0xFFFF
+    let sig_body = Bytes::from_array([
+      0x04,
+      0x10,
+      22,
+      8,
+      0,
+      0,
+      0,
+      0,
+      ((last_fast >> 8) & 0xFF).to_byte(),
+      (last_fast & 0xFF).to_byte(),
+      // EdDsaLegacy signature material: two 8-bit MPIs of one octet.
+      0x00,
+      0x08,
+      0x01,
+      0x00,
+      0x08,
+      0x01,
+    ])
+    w.bytes(
+      @packet.serialize_packet(@packet.Signature, sig_body.exact_view()).exact_view(),
+    )
+  }
+  let parsed = parse_transferable(
+    @packet.parse_packets(w.to_bytes().exact_view()),
+  )
+  assert_eq(parsed.user_ids.length(), 1)
+  assert_eq(parsed.user_ids[0].self_signature.fast_hash(), last_fast)
+}

@@ -305,11 +305,15 @@ fn decrypt_with_pkesk(
 /// Match a PKESK in `packets` against `key` — v6 by fingerprint, v3 by key
 /// id, over the primary key and the encryption subkey — recover the session
 /// key and return the raw inner packet stream of the SEIPD container. `None`
-/// means no PKESK belongs to this key; a matched packet that cannot be
-/// decrypted raises. A v3 PKESK with an all-zero key id (hidden recipient)
-/// is tried against every candidate: a candidate that fails to unwrap is
-/// simply not the recipient. Shared by `decrypt_binary_with_private_key` and
-/// the sign/decrypt pipeline in `sign.mbt`, so both accept the same messages.
+/// means no PKESK belongs to this key. Every ESK that cannot open the
+/// payload — unparseable, version-misaligned with the SEIPD (RFC 9580
+/// §10.3.2.1), or failing its unwrap — is discarded with its error
+/// recorded, never aborting the scan: a poisoned PKESK must not kill a
+/// later valid one (audit F19), mirroring the password path. A v3 PKESK
+/// with an all-zero key id (hidden recipient) is tried against every
+/// candidate: a candidate that fails to unwrap is simply not the
+/// recipient. Shared by `decrypt_binary_with_private_key` and the
+/// sign/decrypt pipeline in `sign.mbt`, so both accept the same messages.
 fn decrypt_inner_with_key(
   packets : Array[@packet.RawPacket],
   key : PrivateKey,
@@ -318,6 +322,7 @@ fn decrypt_inner_with_key(
   for c in key.subkeys {
     candidates.push(c.secret)
   }
+  let mut last_error : String? = None
   for p in packets {
     if p.tag() == @packet.Pkesk {
       // RFC 9580 §10.3.2.1: an ESK that cannot be parsed (a future
@@ -341,12 +346,29 @@ fn decrypt_inner_with_key(
       }
       for sk in candidates {
         if pkesk_addresses(pkesk, sk) {
-          return Some(decrypt_with_pkesk(packets, pkesk, sk))
+          // A matched ESK that cannot open the payload — a version
+          // misalignment (Table 26), corrupt framing, or a failed
+          // unwrap — is discarded and the scan continues, so one
+          // poisoned PKESK cannot kill a later valid one (audit F19;
+          // the password path already discarded per ESK).
+          let inner : Bytes? = Some(decrypt_with_pkesk(packets, pkesk, sk)) catch {
+            e => {
+              last_error = Some(e.to_string())
+              None
+            }
+          }
+          if inner is Some(b) {
+            return Some(b)
+          }
         }
       }
     }
   }
-  None
+  match last_error {
+    Some(msg) =>
+      @error.malformed("api: \{msg} (no other ESK opened the message)")
+    None => None
+  }
 }
 
 ///|

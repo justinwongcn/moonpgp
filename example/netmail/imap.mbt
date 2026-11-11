@@ -72,6 +72,11 @@ fn ImapClient::send_command(self : ImapClient, line : String) -> String raise {
 /// Read replies until the line tagged `tag` arrives. Untagged lines
 /// are collected in order. The special `+ ` continuation cannot occur
 /// in this subset (the client never sends literals) and is rejected.
+/// Untagged-response cap per reply (audit F25): a hostile server can feed
+/// untagged lines forever and the old loop retained every parse tree.
+const MAX_UNTAGGED_LINES : Int32 = 10_000
+
+///|
 fn ImapClient::read_reply(self : ImapClient, tag : String) -> ImapReply raise {
   let untagged : Array[Array[Node]] = []
   while true {
@@ -80,6 +85,11 @@ fn ImapClient::read_reply(self : ImapClient, tag : String) -> ImapReply raise {
     match nodes[0] {
       Atom("*") => {
         guard nodes.length() >= 2 else { continue }
+        guard untagged.length() < MAX_UNTAGGED_LINES else {
+          @error.fail(
+            "mailreader: reply carries more than \{MAX_UNTAGGED_LINES} untagged lines",
+          )
+        }
         untagged.push(nodes[1:nodes.length()].to_owned())
         continue
       }

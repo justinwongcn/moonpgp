@@ -230,6 +230,10 @@ fn parse_transferable(packets : Array[@packet.RawPacket]) -> ParsedKey raise {
   // User IDs pair with the certification that follows them (wire order;
   // a later certification of the same User ID replaces the earlier one).
   let bindings : Array[UserIdBinding] = []
+  // uid → position in `bindings`; keeps last-wins replacement O(1). The
+  // old full-scan made N certifications O(N²) before any signature
+  // verification ran — minutes of CPU for a few MB of hostile armor (F5).
+  let uid_index : Map[String, Int32] = Map([], capacity=16)
   let mut pending_uid : String? = None
   let mut direct : @packet.SignaturePacket? = None
   let subkeys : Array[ParsedSubkey] = []
@@ -274,15 +278,12 @@ fn parse_transferable(packets : Array[@packet.RawPacket]) -> ParsedKey raise {
               revocation: None,
             }
             // Last certification of the same User ID wins.
-            let mut replaced = false
-            for i in 0..<bindings.length() {
-              if bindings[i].user_id == uid {
-                bindings[i] = cert
-                replaced = true
+            match uid_index.get(uid) {
+              Some(i) => bindings[i] = cert
+              None => {
+                uid_index.set(uid, bindings.length())
+                bindings.push(cert)
               }
-            }
-            if !replaced {
-              bindings.push(cert)
             }
           }
           @packet.DirectSignature => direct = Some(s)
@@ -292,10 +293,10 @@ fn parse_transferable(packets : Array[@packet.RawPacket]) -> ParsedKey raise {
             // `is_user_id_revoked` can verify it lazily.
             match pending_uid {
               Some(uid) =>
-                for i in 0..<bindings.length() {
-                  if bindings[i].user_id == uid {
+                match uid_index.get(uid) {
+                  Some(i) =>
                     bindings[i] = { ..bindings[i], revocation: Some(s), }
-                  }
+                  None => ()
                 }
               None => ()
             }

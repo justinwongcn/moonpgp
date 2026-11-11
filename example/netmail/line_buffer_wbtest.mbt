@@ -113,3 +113,27 @@ test "line_buffer: EOF mid-read raises" {
   }
   assert_true(raised)
 }
+
+///|
+#cfg(target="native")
+test "line_buffer: a newline-free server stream hits the per-line cap (F25)" {
+  let fill = fn(buf : FixedArray[Byte]) -> Int32 {
+    for i in 0..<16 {
+      buf[i] = b'a'
+    }
+    16
+  }
+  let lb = LineBuffer::{
+    buf: FixedArray::make(16, b'\x00'),
+    rstart: 0,
+    rend: 0,
+    fill,
+  }
+  let raised = try {
+    ignore(lb.read_line())
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}

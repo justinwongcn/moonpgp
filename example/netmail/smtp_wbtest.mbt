@@ -307,3 +307,20 @@ async test "smtp: session after upgrade re-runs EHLO first" {
   assert_eq(cmds[1], "MAIL FROM:<a@b.example>\r\n")
   assert_eq(cmds[5], ".\r\n")
 }
+
+///|
+async test "smtp: a reply with too many continuation lines raises (F25)" {
+  let script : Array[String] = ["250-welcome"]
+  for _ in 0..<1_002 {
+    script.push("250-more")
+  }
+  script.push("250 done")
+  let sock = fake_sock(script)
+  let raised = try {
+    ignore(read_reply(sock))
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}

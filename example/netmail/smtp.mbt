@@ -52,12 +52,22 @@ fn reply_code(line : String) -> Int32 raise {
 }
 
 ///|
+/// Continuation-line cap for one SMTP reply (audit F25): the old loop
+/// retained every `250-` line without bound.
+const MAX_SMTP_REPLY_LINES : Int32 = 1_000
+
+///|
 async fn read_reply(sock : &Sock) -> (Int32, Array[String]) {
   let first = sock.read_line()
   let code = reply_code(first)
   let lines : Array[String] = []
   let mut line = first
   while line.length() >= 4 && line[3] == '-' {
+    guard lines.length() < MAX_SMTP_REPLY_LINES else {
+      @error.fail(
+        "smtp: reply carries more than \{MAX_SMTP_REPLY_LINES} continuation lines",
+      )
+    }
     lines.push(line[4:].to_owned())
     line = sock.read_line()
     let cont = reply_code(line)

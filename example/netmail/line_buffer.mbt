@@ -23,9 +23,17 @@ priv struct LineBuffer {
 /// decode of one CRLF-terminated line.
 
 ///|
+/// Per-line byte cap (audit F25): a hostile/MITM server streaming bytes
+/// with no newline otherwise grows the builder without bound (≈2×
+/// amplification as UTF-16); SO_RCVTIMEO only bounds one recv, not the
+/// total. 1 MiB is far above any legitimate IMAP/SMTP protocol line.
+const MAX_LINE_BYTES : Int32 = 1_048_576
+
+///|
 #cfg(target="native")
 fn LineBuffer::read_line(self : LineBuffer) -> String raise {
   let sb = StringBuilder()
+  let mut count = 0
   while true {
     while self.rstart < self.rend {
       let v = self.buf[self.rstart].to_int()
@@ -36,6 +44,10 @@ fn LineBuffer::read_line(self : LineBuffer) -> String raise {
           return s[0:s.length() - 1].to_owned()
         }
         return s
+      }
+      count = count + 1
+      guard count < MAX_LINE_BYTES else {
+        @error.fail("mailnet: server line exceeds \{MAX_LINE_BYTES} octets")
       }
       match v.to_char() {
         Some(c) => sb.write_char(c)
@@ -65,6 +77,9 @@ fn LineBuffer::read_raw_line(self : LineBuffer) -> Bytes raise {
       self.rstart = self.rstart + 1
       if v == b'\n' {
         return Bytes::from_array(out)
+      }
+      guard out.length() < MAX_LINE_BYTES else {
+        @error.fail("mailnet: server line exceeds \{MAX_LINE_BYTES} octets")
       }
       if pending_cr {
         out.push(b'\r')

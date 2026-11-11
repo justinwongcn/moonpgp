@@ -21,15 +21,30 @@ priv enum Node {
 /// tail ends with a `{n}` / `{n+}` marker) the exact literal and the
 /// continuation text. The marker itself is framing and is stripped
 /// from the text segment, exactly like the CRLF.
+/// Total-octet cap on one logical response line, literals included
+/// (audit F25): a hostile server can chain `{n}` markers forever and the
+/// old loop accumulated segments without bound.
+const MAX_LOGICAL_LINE_BYTES : Int32 = 67_108_864
+
+///|
 fn read_logical_line(sock : &Socket) -> Array[Seg] raise {
   let segs : Array[Seg] = []
+  let mut total = 0
   while true {
     let raw = sock.read_raw_line()
+    total = total + raw.length()
+    guard total <= MAX_LOGICAL_LINE_BYTES else {
+      @error.fail(
+        "mailreader: logical line exceeds \{MAX_LOGICAL_LINE_BYTES} octets",
+      )
+    }
     let size = literal_marker_size(raw)
     if size >= 0 {
       let cut = marker_cut_index(raw)
       segs.push(Seg::Txt(raw[0:cut].to_owned()))
-      segs.push(Seg::Lit(sock.read_exact(size)))
+      let lit = sock.read_exact(size)
+      total = total + lit.length()
+      segs.push(Seg::Lit(lit))
       continue
     }
     segs.push(Seg::Txt(raw))
@@ -125,7 +140,7 @@ fn parse_nodes(segs : Array[Seg]) -> Array[Node] raise {
           continue
         }
         if c == b'(' {
-          let (items, ni, nbi) = scan_parens(segs, si, bi + 1)
+          let (items, ni, nbi) = scan_parens(segs, si, bi + 1, 0)
           out.push(Node::Parens(items))
           si = ni
           bi = nbi
@@ -162,11 +177,25 @@ fn scan_quoted(text : Bytes, start : Int32) -> (String, Int32) raise {
 }
 
 ///|
+/// Nesting cap for IMAP response lists (audit F24): a hostile or MITM
+/// server can put 100k `(` on one line — pre-authentication, in the
+/// greeting — and the old unbounded recursion overflowed the native stack
+/// and aborted the process. The MIME side of this repo has long capped
+/// tree depth (`max_mime_depth`); this is the IMAP-side twin.
+const MAX_PARENS_DEPTH : Int32 = 50
+
+///|
 fn scan_parens(
   segs : Array[Seg],
   si : Int32,
   bi : Int32,
+  depth : Int32,
 ) -> (Array[Node], Int32, Int32) raise {
+  guard depth <= MAX_PARENS_DEPTH else {
+    @error.malformed(
+      "mailreader: IMAP response list nested deeper than \{MAX_PARENS_DEPTH}",
+    )
+  }
   let items : Array[Node] = []
   let mut s = si
   let mut b = bi
@@ -195,7 +224,7 @@ fn scan_parens(
           return (items, s, b + 1)
         }
         if c == b'(' {
-          let (inner, ns, nb) = scan_parens(segs, s, b + 1)
+          let (inner, ns, nb) = scan_parens(segs, s, b + 1, depth + 1)
           items.push(Node::Parens(inner))
           s = ns
           b = nb

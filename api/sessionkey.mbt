@@ -157,6 +157,7 @@ pub fn recover_session_key_with_key(
   for c in key.subkeys {
     candidates.push(c.secret)
   }
+  let mut last_error : String? = None
   for p in packets {
     if p.tag() == @packet.Pkesk {
       // RFC 9580 §10.3.2.1: an ESK that cannot be parsed is discarded,
@@ -184,12 +185,28 @@ pub fn recover_session_key_with_key(
       }
       for sk in candidates {
         if pkesk_addresses(pkesk, sk) {
-          return recover_pkesk_session(packets, pkesk, sk)
+          // A matched ESK that cannot open the payload is discarded and
+          // the scan continues (Table 26; audit F19).
+          let recovered : SessionKey? = Some(
+            recover_pkesk_session(packets, pkesk, sk),
+          ) catch {
+            e => {
+              last_error = Some(e.to_string())
+              None
+            }
+          }
+          if recovered is Some(s) {
+            return s
+          }
         }
       }
     }
   }
-  @error.fail("api: message is not encrypted to this key")
+  match last_error {
+    Some(msg) =>
+      @error.malformed("api: \{msg} (no other ESK yielded a session key)")
+    None => @error.fail("api: message is not encrypted to this key")
+  }
 }
 
 ///|

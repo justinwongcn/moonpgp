@@ -17,20 +17,25 @@
 /// MSB-first bit reader over a byte string.
 priv struct BzBits {
   data : BytesView
-  mut pos : Int32
+  /// Bit cursor in Int64: the limit comparison `pos + n <= length * 8`
+  /// wraps in Int32 once the stream passes 2^31 bits (~256 MiB input),
+  /// letting a guard pass into an out-of-bounds read (audit F1; the
+  /// SIGABRT was reproduced by a whitebox probe).
+  mut pos : Int64
 }
 
 ///|
 /// Read `n` bits (n <= 32), most significant bit first.
 fn BzBits::get(self : BzBits, n : Int32) -> Int32 raise {
-  guard n >= 1 && self.pos + n <= self.data.length() * 8 else {
+  guard n >= 1 &&
+    self.pos + n.to_int64() <= Int64::from_int(self.data.length()) * 8L else {
     @error.malformed("compress: truncated bzip2 stream")
   }
   let mut v = 0
   for _ in 0..<n {
-    let byte = self.data[self.pos >> 3].to_int()
-    v = (v << 1) | ((byte >> (7 - (self.pos & 7))) & 1)
-    self.pos += 1
+    let byte = self.data[(self.pos >> 3).to_int()].to_int()
+    v = (v << 1) | ((byte >> (7 - (self.pos & 7L).to_int())) & 1)
+    self.pos = self.pos + 1L
   }
   v
 }
@@ -39,14 +44,16 @@ fn BzBits::get(self : BzBits, n : Int32) -> Int32 raise {
 /// Read up to 48 bits into an Int64 — wide enough for the 48-bit block
 /// magics and the 32-bit CRCs, which do not fit a 31-bit Int.
 fn BzBits::get64(self : BzBits, n : Int32) -> Int64 raise {
-  guard n >= 1 && n <= 48 && self.pos + n <= self.data.length() * 8 else {
+  guard n >= 1 &&
+    n <= 48 &&
+    self.pos + n.to_int64() <= Int64::from_int(self.data.length()) * 8L else {
     @error.malformed("compress: truncated bzip2 stream")
   }
   let mut v = 0L
   for _ in 0..<n {
-    let byte = self.data[self.pos >> 3].to_int()
-    v = (v << 1) | ((byte >> (7 - (self.pos & 7))) & 1).to_int64()
-    self.pos += 1
+    let byte = self.data[(self.pos >> 3).to_int()].to_int()
+    v = (v << 1) | ((byte >> (7 - (self.pos & 7L).to_int())) & 1).to_int64()
+    self.pos = self.pos + 1L
   }
   v
 }
@@ -188,7 +195,7 @@ pub fn bzip2_decompress_capped(
   max_out : Int32,
 ) -> Bytes raise {
   guard max_out >= 0 else { @error.fail("compress: bad output cap") }
-  let bits : BzBits = { data, pos: 0, }
+  let bits : BzBits = { data, pos: 0L, }
   // Stream header: "BZh" + level digit.
   guard bits.get(8) == 0x42 && bits.get(8) == 0x5A && bits.get(8) == 0x68 else {
     @error.malformed("compress: not a bzip2 stream")

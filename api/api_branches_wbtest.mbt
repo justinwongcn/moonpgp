@@ -159,7 +159,7 @@ test "bare v6 key accessors fall back to the direct signature" {
 /// The structural (clock-less) encryption_key selection: last
 /// encryption-flagged subkey, else the RSA primary.
 test "encryption_key picks the encryption subkey structurally" {
-  let key = generate_key("EK <ek@example.com>", bits=2048)
+  let key = generate_key("EK <ek@example.com>", bits=3072)
   match key.to_public().encryption_key() {
     Some(k) =>
       assert_true(k.key_id().equal(key.subkeys[0].secret.public.key_id()))

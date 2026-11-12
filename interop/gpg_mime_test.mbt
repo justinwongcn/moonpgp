@@ -91,7 +91,7 @@ test "gpg encrypt+sign mime: embedded signature ok with attachment" {
   @mime.decrypt_mime(message, [key], verifiers=[key.to_public()], callbacks=cb)
   assert_eq(cb.errors, [])
   assert_eq(cb.verified, [@api.Ok])
-  assert_eq(cb.bodies, [("inline signed mime body", "text/plain")])
+  assert_eq(cb.bodies, [("inline signed mime body\r\n", "text/plain")])
   assert_eq(cb.attachments.length(), 1)
   let (headers, data) = cb.attachments[0]
   assert_eq(data, @primitives.utf8_bytes("ATTACHMENTBYTES"))

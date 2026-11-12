@@ -48,6 +48,14 @@ fn reply_code(line : String) -> Int32 raise {
     }
     code = code * 10 + v
   }
+  // RFC 5321 §4.2: the code is followed by SP or '-' (or ends the line).
+  // "2500 foo" used to parse as 250 with text "0 foo" (audit F32).
+  guard line.length() == 3 ||
+    line[3] == ' ' ||
+    line[3] == '-' ||
+    line[3] == '\r' else {
+    @error.fail("smtp: reply code not followed by a separator '\{line}'")
+  }
   code
 }
 
@@ -143,6 +151,22 @@ async fn smtp_starttls_ehlo(sock : &Sock, ehlo_domain : String) -> Unit {
 }
 
 ///|
+/// Wire-layer envelope discipline (audit F31): the historical defense
+/// lived in @mail's address builder, but netmail is a pub library — any
+/// caller that bypasses @mail and hands us a CRLF-carrying address would
+/// inject SMTP commands. Printable ASCII, no CTL, no angle brackets (the
+/// envelope adds its own).
+fn validate_envelope_address(addr : String, what : String) -> Unit raise {
+  guard addr.length() > 0 else { @error.fail("smtp: empty \{what}") }
+  for c in addr {
+    let v = c.to_int()
+    guard v >= 0x20 && v <= 0x7E && c != '<' && c != '>' else {
+      @error.fail("smtp: \{what} contains a forbidden character")
+    }
+  }
+}
+
+///|
 /// Post-negotiation session: EHLO → [AUTH PLAIN] → MAIL FROM →
 /// RCPT TO×N → DATA (dot-stuffed) → "." → QUIT. `from` and
 /// `recipients` are envelope addr-specs (no display names). The QUIT
@@ -173,12 +197,14 @@ async fn smtp_session(
     }
     None => ()
   }
+  validate_envelope_address(from, "envelope from")
   smtp_command(sock, "MAIL FROM:<\{from}>")
   ignore(expect(sock, 250, "MAIL FROM"))
   guard !recipients.is_empty() else {
     @error.fail("smtp: no envelope recipients")
   }
   for r in recipients {
+    validate_envelope_address(r, "envelope recipient")
     smtp_command(sock, "RCPT TO:<\{r}>")
     ignore(expect(sock, 250, "RCPT TO"))
   }

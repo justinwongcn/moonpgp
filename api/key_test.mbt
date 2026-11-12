@@ -1,6 +1,6 @@
 ///|
 test "generate key with verifiable self-signatures" {
-  let key = @api.generate_key("Tester <tester@example.com>", bits=2048)
+  let key = @api.generate_key("Tester <tester@example.com>", bits=3072)
   // Primary self-certification verifies.
   let ok = @api.verify_key_signature(
     key.self_signature(),
@@ -24,7 +24,7 @@ test "generate key with verifiable self-signatures" {
 
 ///|
 test "key export/import roundtrip via armor" {
-  let key = @api.generate_key("Round Trip <rt@example.com>", bits=2048)
+  let key = @api.generate_key("Round Trip <rt@example.com>", bits=3072)
   let pub_armored = key.to_public().to_armored()
   let reimported = @api.PublicKey::from_armored(pub_armored)
   assert_eq(reimported.fingerprint(), key.to_public().fingerprint())
@@ -46,7 +46,7 @@ test "key export/import roundtrip via armor" {
 
 ///|
 test "lock and unlock with passphrase" {
-  let key = @api.generate_key("Locked <lk@example.com>", bits=2048)
+  let key = @api.generate_key("Locked <lk@example.com>", bits=3072)
   let locked = key.lock("secret pass")
   assert_true(locked.is_locked())
   // Wrong passphrase fails.
@@ -71,7 +71,7 @@ test "lock and unlock with passphrase" {
 
 ///|
 test "public key encrypt / private key decrypt" {
-  let key = @api.generate_key("Alice <alice@example.com>", bits=2048)
+  let key = @api.generate_key("Alice <alice@example.com>", bits=3072)
   let plaintext = @primitives.utf8_bytes("hello Alice, this is RSA + SEIPD")
   let armored = @api.encrypt_to_recipients(
     plaintext,
@@ -84,8 +84,8 @@ test "public key encrypt / private key decrypt" {
 
 ///|
 test "decrypt fails with wrong key" {
-  let alice = @api.generate_key("Alice <alice@example.com>", bits=2048)
-  let bob = @api.generate_key("Bob <bob@example.com>", bits=2048)
+  let alice = @api.generate_key("Alice <alice@example.com>", bits=3072)
+  let bob = @api.generate_key("Bob <bob@example.com>", bits=3072)
   let plaintext = @primitives.utf8_bytes("for alice only")
   let armored = @api.encrypt_to_recipients(plaintext, [bob.to_public()])
   let raised = try {
@@ -99,8 +99,8 @@ test "decrypt fails with wrong key" {
 
 ///|
 test "two recipients can both decrypt" {
-  let alice = @api.generate_key("Alice <alice@example.com>", bits=2048)
-  let bob = @api.generate_key("Bob <bob@example.com>", bits=2048)
+  let alice = @api.generate_key("Alice <alice@example.com>", bits=3072)
+  let bob = @api.generate_key("Bob <bob@example.com>", bits=3072)
   let plaintext = @primitives.utf8_bytes("shared message")
   let armored = @api.encrypt_to_recipients(plaintext, [
     alice.to_public(),

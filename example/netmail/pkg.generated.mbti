@@ -38,6 +38,7 @@ pub(all) struct ImapClient {
   sock : &Socket
   mut tag_n : Int32
   state : MailboxState
+  budget : LineBudget
 }
 pub fn ImapClient::imap_fetch_message(Self, Int32) -> Bytes raise
 pub fn ImapClient::imap_fetch_recent(Self, Int32) -> Array[MailSummary] raise
@@ -46,6 +47,11 @@ pub fn ImapClient::imap_login(Self, String, String) -> Unit raise
 pub fn ImapClient::imap_logout(Self) -> Unit
 pub fn ImapClient::imap_select(Self, String) -> Unit raise
 pub fn ImapClient::read_greeting(Self) -> Unit raise
+
+pub(all) struct LineBudget {
+  mut remaining : Int64
+}
+pub fn LineBudget::new(Int64) -> Self
 
 pub(all) struct MailSummary {
   seq : Int32

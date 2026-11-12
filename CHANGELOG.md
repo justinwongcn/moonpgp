@@ -11,6 +11,111 @@ a released version when that version is published to mooncakes.io.
 
 ### Fixed
 
+- BZip2 bit-reader crash: the limit comparison `pos + n <= length * 8`
+  ran in Int32, so a Compressed packet of ~256 MB wrapped the guard into
+  passing and the read aborted the process out of bounds (reproduced by
+  a whitebox probe). The bit cursor is Int64 now.
+- A poisoned PKESK no longer kills private-key decryption: an ESK that
+  matches the key but cannot open the payload — a version misaligned
+  with the SEIPD (RFC 9580 §10.3.2.1 Table 26), corrupt framing, or a
+  failed unwrap — is discarded with its error recorded and the scan
+  continues, mirroring the password path. `decrypt_and_verify` also
+  tolerates a failing key mid-list instead of aborting before the next
+  one is tried.
+- IMAP response lists cap nesting at 50 levels: one line of `(` from a
+  hostile server overflowed the native stack and aborted the client,
+  pre-authentication. MIME responses had a depth cap all along.
+- Import no longer spends quadratic CPU before any signature
+  verification: last-wins certification replacement uses a uid→index
+  map instead of a full scan per certification.
+- netmail reads are bounded: per-line 1 MiB, per-logical-line 64 MB,
+  10k untagged lines per reply, 1000 SMTP continuation lines, and a
+  512 MiB cumulative session budget over every literal and line. A
+  hostile or hijacked server can no longer hang the client with a
+  trickle or grow memory without limit, and FETCH literals are capped
+  at 4 MB (headers are KB-scale; the old cap was 100 MB).
+- Decoded RFC 2047 words strip C0 control characters (tab survives):
+  the encode side always refused them, and a B-encoded word let CR/LF/
+  ESC reach terminal-bound From/Subject output — list-row forgery and
+  terminal escape injection.
+- `sanitize_filename` scans separators in UTF-16 code-unit space (it
+  counted characters while slicing by code units) and refuses a base
+  that starts with a separator, closing the index-drift path to a
+  leading `/`.
+- The String MIME helpers (`content_type_boundary`, `split_multipart`)
+  now use the strict parameter parser and exact close-delimiter
+  semantics of the byte layer: a quoted `note="see boundary=REAL"` no
+  longer hijacks the boundary, quoted-pair escapes resolve, and
+  `--B--evil` does not close a part.
+- PGP/MIME delivery matches the verified surface: the delivered body is
+  the canonicalized text the signature was checked over, so trailing
+  whitespace an attacker appends in transit can verify `Ok` without
+  changing what the recipient sees. Binary attachments stay byte-exact.
+- AES key unwrap checks the integrity value with a constant-time
+  comparison like every other check in the library.
+- A non-empty plaintext under an AEAD final tag is refused in the tag-20
+  layer (the v2 SEIPD layer already refused it).
+- SMTP envelope addresses are validated at the wire layer (netmail is a
+  published library; the check used to live only in @mail's builder),
+  and a reply code must be followed by SP, `-` or end of line —
+  "2500 oops" no longer parses as 250.
+- `SELECT` folder arguments get the same character whitelist LOGIN had.
+- The folded-header join in mailreader is StringBuilder-based; a
+  server-controlled HEADER.FIELDS literal no longer buys quadratic CPU.
+- `aes_key_unwrap`'s integrity check went through `ct_equal` like every
+  other check (the early-exit byte loop was the lone constant-time
+  outlier).
+
+### Changed
+
+- **Breaking:** `KeyRing::find_encryption_key`/`find_verification_key`
+  take `now` as a required argument — the old `0` default silently
+  skipped the expiry half of the lifecycle gate, and the omission was
+  invisible at call sites. Callers should pass `@primitives.unix_now()`.
+- **Breaking:** `PrivateKey::to_bytes`/`to_armored` refuse to serialize
+  an unlocked key unless `allow_unlocked: true` is passed — an unlocked
+  export writes the raw secret material to disk. Locked keys export
+  unchanged.
+- **Breaking:** RSA key generation refuses below 3072 bits (RFC 9580
+  §12.4 says MUST NOT generate below 3072; the code previously accepted
+  2048 while its own comment quoted the 3072 rule). Verification of
+  smaller keys is unchanged. Measured cost: ~10 s per 3072-bit keygen
+  (`pki/bench_test.mbt`).
+- **Breaking (behavior):** `decrypt_and_verify` and the PGP/MIME body
+  delivery described above return/emit canonicalized text where they
+  previously returned the raw bytes; both changes align the delivered
+  surface with the verified one.
+- **Breaking:** `ImapClient` carries a `budget : LineBudget` field (512
+  MiB session read cap); struct-literal constructions must supply it.
+- Debug formatting of `SecretKeyPacket` and `SessionKey` is hand-written
+  and redacted: `secret_material`/session keys render as lengths, never
+  octets. The derived Debug printed live key material (an Ed25519 seed,
+  RSA d/p/q/u) into any log or snapshot.
+- Signature creation refuses MD5 (`make_document_signature_with`): the
+  verification side already rejected MD5; a mint path that produced
+  signatures this library itself fails was the lenient outlier. SHA-1
+  stays mintable for legacy interop.
+- RSA public keys from the wire must carry `3 <= e < n` with e odd: an
+  attacker-minted `e = 1` key with a victim-shaped UID made every
+  signature trivially forgeable for anyone who imported it.
+- The per-message S2K budget computes in Int64 (a caller-supplied cap
+  above 2^23 KiB overflowed the unit product negative and bypassed the
+  clamp), and the budget parameter of the single-SKESK unwrap is
+  required — a defaulted budget silently granted unlimited derivations
+  to any future call site that forgot it.
+- The C3 verification gate (signing-subkey cross-certification)
+  reports `Failed` on a malformed embedded signature instead of raising;
+  mailreader now persists per-folder UIDVALIDITY and refuses a `--fetch`
+  against a different mailbox generation than the one last listed.
+
+### Security
+
+- Full line-by-line audit of cipher/, primitives/ and pki/ (the last
+  unaudited packages) closed the coverage gap: RFC-level re-derivation
+  of CFB/SEIPD/AEAD framing, GCM/EAX/OCB arithmetic, Argon2, BLAKE2b,
+  CAST5, 3DES, the bigint layer and the curve/Ed/RSA surfaces found the
+  key-unwrap constant-time outlier above and confirmed the rest clean.
+
 - An expired primary key no longer decrypts to a working encryption path:
   `can_encrypt`/`encryption_packet_at` and both KeyRing `usable_at` gates
   only judged a subkey by its own binding, so a live encryption subkey

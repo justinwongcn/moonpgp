@@ -27,6 +27,8 @@ priv struct LineBuffer {
 /// with no newline otherwise grows the builder without bound (≈2×
 /// amplification as UTF-16); SO_RCVTIMEO only bounds one recv, not the
 /// total. 1 MiB is far above any legitimate IMAP/SMTP protocol line.
+/// Native-only like the readers themselves.
+#cfg(target="native")
 const MAX_LINE_BYTES : Int32 = 1_048_576
 
 ///|

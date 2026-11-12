@@ -12,7 +12,7 @@ fn wrap_uncompressed(inner : Bytes) -> Bytes raise {
 
 ///|
 test "S03: deeply nested uncompressed packets are rejected" {
-  let key = @api.generate_key("S3 <s3@example.com>", bits=2048)
+  let key = @api.generate_key("S3 <s3@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("nested payload")
   let literal = @packet.serialize_packet(
     @packet.Literal,
@@ -51,7 +51,7 @@ test "S03: deeply nested uncompressed packets are rejected" {
 
 ///|
 test "S03: nested decompression draws from one cumulative budget" {
-  let key = @api.generate_key("S3b <s3b@example.com>", bits=2048)
+  let key = @api.generate_key("S3b <s3b@example.com>", bits=3072)
   // 2000 octets of highly compressible literal data.
   let data = Bytes::make(2000, b'A')
   let literal = @packet.serialize_packet(
@@ -97,7 +97,7 @@ test "S03: nested decompression draws from one cumulative budget" {
 
 ///|
 test "S04: a tampered RSA PKESK fails uniformly inside the SEIPD check" {
-  let recipient = @api.generate_key("S4 <s4@example.com>", bits=2048)
+  let recipient = @api.generate_key("S4 <s4@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("secret payload")
   let msg = @api.encrypt_to_recipients(data.exact_view(), [
     recipient.to_public(),
@@ -130,7 +130,7 @@ test "S04: a tampered RSA PKESK fails uniformly inside the SEIPD check" {
 
 ///|
 test "S13: a hidden-recipient PKESK (all-zero key id) still decrypts" {
-  let recipient = @api.generate_key("S13 <s13@example.com>", bits=2048)
+  let recipient = @api.generate_key("S13 <s13@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("hidden recipient payload")
   let msg = @api.encrypt_to_recipients(data.exact_view(), [
     recipient.to_public(),
@@ -168,7 +168,7 @@ test "S13: a hidden-recipient PKESK (all-zero key id) still decrypts" {
 
 ///|
 test "S14: created is honored by the inline and cleartext entries" {
-  let key = @api.generate_key("S14 <s14@example.com>", bits=2048)
+  let key = @api.generate_key("S14 <s14@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("reproducible")
   let fixed : Int32 = 1_234_567_890
   // Inline: the trailing signature packet carries the fixed time.

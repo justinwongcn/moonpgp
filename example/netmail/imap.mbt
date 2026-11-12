@@ -42,6 +42,9 @@ pub(all) struct ImapClient {
   sock : &Socket
   mut tag_n : Int32
   state : MailboxState
+  /// Cumulative octets this session may still read (audit F27); 512 MiB
+  /// unless the constructor overrides it.
+  budget : LineBudget
 }
 
 ///|
@@ -80,7 +83,7 @@ const MAX_UNTAGGED_LINES : Int32 = 10_000
 fn ImapClient::read_reply(self : ImapClient, tag : String) -> ImapReply raise {
   let untagged : Array[Array[Node]] = []
   while true {
-    let nodes = parse_nodes(read_logical_line(self.sock))
+    let nodes = parse_nodes(read_logical_line(self.sock, self.budget))
     guard nodes.length() >= 1 else { continue }
     match nodes[0] {
       Atom("*") => {
@@ -145,7 +148,7 @@ fn ImapClient::expect_ok(
 /// skip the login this client must perform and BYE means no session.
 pub fn ImapClient::read_greeting(self : ImapClient) -> Unit raise {
   while true {
-    let nodes = parse_nodes(read_logical_line(self.sock))
+    let nodes = parse_nodes(read_logical_line(self.sock, self.budget))
     guard nodes.length() >= 2 else {
       @error.fail("mailreader: malformed greeting")
     }
@@ -183,6 +186,7 @@ pub fn connect_imap(
   let sock = connect_socket(host, port)
   let client = ImapClient::{
     sock,
+    budget: LineBudget::new(SESSION_BUDGET_BYTES),
     tag_n: 0,
     state: MailboxState::{ exists: 0, uidvalidity: 0, },
   }
@@ -233,6 +237,9 @@ pub fn ImapClient::imap_select(
   self : ImapClient,
   folder : String,
 ) -> Unit raise {
+  // Same argument discipline as LOGIN (audit F30): a CRLF or quote in
+  // `folder` reshapes the command stream.
+  validate_login_arg(folder, "folder")
   let tag = self.send_command("SELECT \{folder}")
   let reply = self.expect_ok(tag, "SELECT")
   for line in reply.untagged {

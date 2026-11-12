@@ -279,15 +279,19 @@ pub fn aead_open(
     total.push(((total_i64 >> shift) & 0xFFL).to_int().to_byte())
   }
   let fad = aead_ad(header5, index, Bytes::from_array(total).exact_view())
-  ignore(
-    aead_open_chunk(
-      bc,
-      mode,
-      iv,
-      index,
-      fad.exact_view(),
-      cipher[pos:cipher.length()],
-    ),
+  let tail = aead_open_chunk(
+    bc,
+    mode,
+    iv,
+    index,
+    fad.exact_view(),
+    cipher[pos:cipher.length()],
   )
+  // Parity with seipd_v2_open (audit O2): the final tag covers an empty
+  // plaintext; accepting a non-empty one let framing drift silently
+  // between the two AEAD encapsulations.
+  guard tail.length() == 0 else {
+    @error.fail("aead: the final tag covers a non-empty plaintext")
+  }
   out.to_bytes()
 }

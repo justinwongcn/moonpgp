@@ -39,7 +39,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
   match command {
     "keygen" => {
       check_args(rest.length(), 3)
-      let key = @api.generate_key(rest[0], bits=parse_bits(rest, 2048))
+      let key = @api.generate_key(rest[0], bits=parse_bits(rest, 3072))
       // Key generation writes the fresh unlocked key by definition (F17):
       // the export gate stays, and the intent is explicit here.
       @fs.write_string_to_file(rest[1], key.to_armored(allow_unlocked=true))

@@ -59,14 +59,22 @@ impl @mime.MimeCallbacks for FetchRecorder with fn on_attachment(
 /// separators/control characters are rejected (empty result = caller
 /// keeps its numbered fallback).
 fn sanitize_filename(name : String) -> String {
+  // Scan separators in UTF-16 code-unit space (audit F22): `for i, c in`
+  // counts CHARACTERS while `name[i:j]` slices by CODE UNIT — the two
+  // index spaces diverged on any supplementary-plane character, letting
+  // a separator survive into the base by index drift. `s[i]` is the
+  // code-unit Int, matching the slice below.
   let mut last = -1
-  for i, c in name {
-    if c == '/' || c == '\\' {
+  for i in 0..<name.length() {
+    if name[i] == 0x2F || name[i] == 0x5C {
       last = i
     }
   }
   let base = name[last + 1:name.length()].to_owned()
   guard base != "" && base != "." && base != ".." else { return "" }
+  // The drifted index used to be able to START the base on a separator
+  // ("/.."); refuse that shape outright instead of trusting join_path.
+  guard base[0] != 0x2F && base[0] != 0x5C else { return "" }
   for c in base {
     let v = c.to_int()
     guard v >= 0x20 && v <= 0x7E else { return "" }
@@ -218,7 +226,10 @@ fn require_env(name : String) -> String raise {
 fn header_value(headers : Bytes, name : String) -> String? {
   let text = @netmail.bytes_lossy(headers)
   let mut current_name = ""
-  let mut current_value = ""
+  // StringBuilder (audit F23): the per-continuation `a + " " + b` made
+  // the folding join O(total^2) — server-controlled HEADER.FIELDS
+  // literal became quadratic CPU.
+  let mut value = StringBuilder()
   let mut found : String? = None
   for raw_line in text.split("\r\n") {
     let line = raw_line.to_owned()
@@ -228,26 +239,27 @@ fn header_value(headers : Bytes, name : String) -> String? {
     if (line.has_prefix(" ") || line.has_prefix("\t")) && current_name != "" {
       // RFC 5322 unfolding: the CRLF is removed, the folding whitespace
       // is kept as a single space
-      current_value = current_value + " " + line.trim().to_owned()
+      value.write_string(" ")
+      value.write_string(line.trim().to_owned())
       continue
     }
     // flush the previous header before starting a new one
     if current_name != "" {
       if current_name == name {
-        found = Some(current_value)
+        found = Some(value.to_string())
       }
-      current_value = ""
+      value = StringBuilder()
     }
     let colon = line.split(":").collect()
     if colon.length() >= 2 {
       current_name = colon[0].to_lower().to_owned()
-      current_value = line[colon[0].length() + 1:line.length()]
-        .trim()
-        .to_owned()
+      value.write_string(
+        line[colon[0].length() + 1:line.length()].trim().to_owned(),
+      )
     }
   }
   if current_name != "" && current_name == name {
-    found = Some(current_value)
+    found = Some(value.to_string())
   }
   found
 }
@@ -285,6 +297,62 @@ fn join_path(dir : String, name : String) -> String {
 }
 
 ///|
+/// UIDVALIDITY persistence (audit F26): list and fetch are separate
+/// sessions and a mailbox rebuilt between them silently re-points UIDs.
+/// The state file records host|user|folder→uidvalidity: `--last`
+/// refreshes the record (the user saw that list), `--fetch` refuses on a
+/// mismatch — delete the state file to accept a deliberate reset.
+fn uidvalidity_state_path(cfg : Config) -> String {
+  join_path(cfg.out_dir, ".mailreader-uidvalidity.txt")
+}
+
+///|
+fn record_uidvalidity(
+  cfg : Config,
+  user : String,
+  folder : String,
+  uidvalidity : Int32,
+) -> Unit raise {
+  let key = "\{cfg.host}|\{user}|\{folder}"
+  let path = uidvalidity_state_path(cfg)
+  let existing = @fs.read_file_to_string(path) catch { _ => "" }
+  let kept : Array[String] = []
+  for line in existing.split("\n") {
+    let l = line.to_owned()
+    if l != "" && !l.has_prefix("\{key}|") {
+      kept.push(l)
+    }
+  }
+  kept.push("\{key}|\{uidvalidity}")
+  @fs.write_string_to_file(path, kept.join("\n") + "\n")
+}
+
+///|
+fn check_uidvalidity(
+  cfg : Config,
+  user : String,
+  folder : String,
+  uidvalidity : Int32,
+) -> Unit raise {
+  let key = "\{cfg.host}|\{user}|\{folder}"
+  let existing = @fs.read_file_to_string(uidvalidity_state_path(cfg)) catch {
+    _ => ""
+  }
+  for line in existing.split("\n") {
+    if line.has_prefix("\{key}|") {
+      let stored = line[key.length() + 1:line.length()]
+      let got = uidvalidity.to_string()
+      guard stored == got else {
+        @error.fail(
+          "mailreader: UIDVALIDITY for \{folder} changed (\{stored} -> \{got}); UIDs may point at different mail — delete \{uidvalidity_state_path(cfg)} if the reset is intentional",
+        )
+      }
+      return
+    }
+  }
+}
+
+///|
 fn list_mailbox(cfg : Config, user : String, password : String) -> Unit raise {
   @netmail.with_imap_session(
     cfg.host,
@@ -298,6 +366,9 @@ fn list_mailbox(cfg : Config, user : String, password : String) -> Unit raise {
       println(
         "folder \{cfg.folder}: \{client.state.exists} message(s), uidvalidity \{client.state.uidvalidity}, showing newest \{summaries.length()}",
       )
+      // A fresh list refreshes the baseline: the user just saw this
+      // mailbox generation (audit F26).
+      record_uidvalidity(cfg, user, cfg.folder, client.state.uidvalidity)
       for s in summaries {
         let from = match header_value(s.headers, "from") {
           Some(v) => @mail.decode_rfc2047(v)
@@ -339,6 +410,9 @@ fn fetch_and_decrypt(
     password,
     cfg.folder,
     fn(client) -> Unit raise {
+      // The mailbox generation must match what the user last listed
+      // (audit F26); a mismatch means UIDs may point at different mail.
+      check_uidvalidity(cfg, user, cfg.folder, client.state.uidvalidity)
       let raw = client.imap_fetch_message(uid)
       let eml_path = join_path(cfg.out_dir, "msg-\{uid}.eml")
       @fs.write_bytes_to_file(eml_path, raw)

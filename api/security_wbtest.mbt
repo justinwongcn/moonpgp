@@ -83,7 +83,7 @@ fn signed_key_revocation(
 
 ///|
 test "S01: an unknown critical subpacket fails document verification" {
-  let key = generate_key("S1 <s1@example.com>", bits=2048)
+  let key = generate_key("S1 <s1@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("signed body")
   let hostile : Array[@packet.SigSubpacket] = [
     {
@@ -119,7 +119,7 @@ test "S01: an unknown critical subpacket fails document verification" {
 
 ///|
 test "S01: a certification with an unknown critical subpacket does not verify" {
-  let key = generate_key("S1b <s1b@example.com>", bits=2048)
+  let key = generate_key("S1b <s1b@example.com>", bits=3072)
   let forged = recertify_with_extra(key, [
     { critical: true, sub_type: 100, body: @primitives.utf8_bytes("x"), },
   ])
@@ -146,7 +146,7 @@ test "S01: a certification with an unknown critical subpacket does not verify" {
 
 ///|
 test "S02: a signature from a self-revoked key reports KeyRevoked" {
-  let key = generate_key("S2 <s2@example.com>", bits=2048)
+  let key = generate_key("S2 <s2@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("body")
   let sig = document_signature_with_extra(
     key,
@@ -167,7 +167,7 @@ test "S02: a signature from a self-revoked key reports KeyRevoked" {
 
 ///|
 test "S02: an expired signature reports Expired" {
-  let key = generate_key("S2b <s2b@example.com>", bits=2048)
+  let key = generate_key("S2b <s2b@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("body")
   let created = 1_600_000_000 // 2020-09-13
   let sixty : Int32 = 60
@@ -194,7 +194,7 @@ test "S02: an expired signature reports Expired" {
 
 ///|
 test "S02: a signature from an expired primary key reports Expired" {
-  let key = generate_key("S2c <s2c@example.com>", bits=2048)
+  let key = generate_key("S2c <s2c@example.com>", bits=3072)
   let data = @primitives.utf8_bytes("body")
   let sig = document_signature_with_extra(
     key,

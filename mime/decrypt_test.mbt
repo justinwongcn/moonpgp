@@ -42,7 +42,7 @@ impl @mime.MimeCallbacks for CollectCallbacks with fn on_error(self, message) {
 
 ///|
 test "@mime.decrypt_mime: signed then encrypted roundtrip" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let inner = @mime.build_pgp_mime_signed("mime body\nsecond line\n", key)
   let armored = @api.encrypt_to_recipients(@primitives.utf8_bytes(inner), [
     key.to_public(),
@@ -58,7 +58,7 @@ test "@mime.decrypt_mime: signed then encrypted roundtrip" {
 
 ///|
 test "@mime.decrypt_mime: tampered inner signature fails and still delivers" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let signed = @mime.build_pgp_mime_signed("authentic body\n", key)
   let tampered = signed.replace(old="authentic", new="tampered body")
   let armored = @api.encrypt_to_recipients(@primitives.utf8_bytes(tampered), [
@@ -76,7 +76,7 @@ test "@mime.decrypt_mime: tampered inner signature fails and still delivers" {
 
 ///|
 test "@mime.decrypt_mime: unsigned payload with verifiers reports NotSigned" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let armored = @api.encrypt_to_recipients(
     @primitives.utf8_bytes(
       "Content-Type: text/plain\r\n\r\njust a plain payload\n",
@@ -88,12 +88,12 @@ test "@mime.decrypt_mime: unsigned payload with verifiers reports NotSigned" {
   // Both sides NotSigned -> status NotSigned (gopenpgp scenario_11 shape).
   assert_eq(cb.errors.length(), 2)
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("just a plain payload\n", "text/plain")])
+  assert_eq(cb.bodies, [("just a plain payload\r\n", "text/plain")])
 }
 
 ///|
 test "@mime.decrypt_mime: no verifiers skips on_verified entirely" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let inner = @mime.build_pgp_mime_signed("quiet body\n", key)
   let armored = @api.encrypt_to_recipients(@primitives.utf8_bytes(inner), [
     key.to_public(),
@@ -107,7 +107,7 @@ test "@mime.decrypt_mime: no verifiers skips on_verified entirely" {
 
 ///|
 test "@mime.decrypt_mime: password path verifies inner signature" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let inner = @mime.build_pgp_mime_signed("password mime\n", key)
   let armored = @api.encrypt_with_password(@primitives.utf8_bytes(inner), "pp")
   let cb = new_callbacks()
@@ -125,8 +125,8 @@ test "@mime.decrypt_mime: password path verifies inner signature" {
 
 ///|
 test "@mime.decrypt_mime: wrong key reports error, no delivery" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
-  let other = @api.generate_key("Other <other@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
+  let other = @api.generate_key("Other <other@example.com>", bits=3072)
   let armored = @api.encrypt_to_recipients(@primitives.utf8_bytes("secret\n"), [
     key.to_public(),
   ])
@@ -139,7 +139,7 @@ test "@mime.decrypt_mime: wrong key reports error, no delivery" {
 
 ///|
 test "@mime.decrypt_mime: non-mime plaintext payload with verifiers is NotSigned" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let armored = @api.encrypt_to_recipients(
     @primitives.utf8_bytes("Content-Type: text/plain\r\n\r\nplain payload\n"),
     [key.to_public()],
@@ -147,7 +147,7 @@ test "@mime.decrypt_mime: non-mime plaintext payload with verifiers is NotSigned
   let cb = new_callbacks()
   @mime.decrypt_mime(armored, [key], verifiers=[key.to_public()], callbacks=cb)
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("plain payload\n", "text/plain")])
+  assert_eq(cb.bodies, [("plain payload\r\n", "text/plain")])
 }
 
 ///|
@@ -160,7 +160,7 @@ test "@mime.decrypt_mime: missing decryption material errors" {
 
 ///|
 test "@mime.decrypt_mime: password path with verifiers and unsigned payload is NotSigned" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let armored = @api.encrypt_with_password(
     @primitives.utf8_bytes(
       "Content-Type: text/plain\r\n\r\nplain password payload\n",
@@ -179,12 +179,12 @@ test "@mime.decrypt_mime: password path with verifiers and unsigned payload is N
   // two errors (the password path must not fake an Ok).
   assert_eq(cb.errors.length(), 2)
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("plain password payload\n", "text/plain")])
+  assert_eq(cb.bodies, [("plain password payload\r\n", "text/plain")])
 }
 
 ///|
 test "@mime.decrypt_mime: proton shape (extra blank line) verifies ok" {
-  let key = @api.generate_key("Proton <p@example.com>", bits=2048)
+  let key = @api.generate_key("Proton <p@example.com>", bits=3072)
   // Signed data = part bytes including the trailing CRLF; the extra
   // blank line between part and boundary is the Proton builder shape.
   let part1 = "Content-Type: text/plain; charset=utf-8\r\n\r\nproton body\r\n"
@@ -206,7 +206,7 @@ test "@mime.decrypt_mime: proton shape (extra blank line) verifies ok" {
 
 ///|
 test "@mime.decrypt_mime: embedded ok masks failed mime signature" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   // Inner multipart/signed whose body was tampered after signing; the
   // OPS signature over the tampered bytes itself verifies.
   let signed = @mime.build_pgp_mime_signed("authentic\n", key)
@@ -227,8 +227,8 @@ test "@mime.decrypt_mime: embedded ok masks failed mime signature" {
 
 ///|
 test "@mime.decrypt_mime: unknown issuer embedded with unsigned mime" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
-  let other = @api.generate_key("Other <o@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
+  let other = @api.generate_key("Other <o@example.com>", bits=3072)
   // Inline signature by `other`; the verifier list only contains `key`.
   let armored = @api.sign_and_encrypt(
     @primitives.utf8_bytes("Content-Type: text/plain\r\n\r\nunsigned mime\n").exact_view(),
@@ -241,12 +241,12 @@ test "@mime.decrypt_mime: unknown issuer embedded with unsigned mime" {
   // -> two errors, worst status NoVerifier.
   assert_eq(cb.errors.length(), 2)
   assert_eq(cb.verified, [@api.NoVerifier])
-  assert_eq(cb.bodies, [("unsigned mime\n", "text/plain")])
+  assert_eq(cb.bodies, [("unsigned mime\r\n", "text/plain")])
 }
 
 ///|
 test "@mime.decrypt_mime: headerless payload delivers empty body" {
-  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=2048)
+  let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let armored = @api.encrypt_to_recipients(
     @primitives.utf8_bytes("just text, no mime structure\n"),
     [key.to_public()],
@@ -257,4 +257,30 @@ test "@mime.decrypt_mime: headerless payload delivers empty body" {
   // behaves the same inside gopenpgp): empty body, NotSigned + 2 errors.
   assert_eq(cb.verified, [@api.NotSigned])
   assert_eq(cb.bodies, [("", "text/plain")])
+}
+
+///|
+test "@mime.decrypt_mime: delivered body matches the verified canonical form (F29)" {
+  let key = @api.generate_key("F29 <f29@example.com>", bits=3072)
+  let signed = @mime.build_pgp_mime_signed("authentic body\n", key)
+  // Append trailing whitespace to a body line: the signer did not sign
+  // it, and the verifier's canonicalization ignores it — the delivered
+  // body used to differ from the verified surface by exactly that gap.
+  let tampered_ws = signed.replace(
+    old="authentic body\r\n",
+    new="authentic body \r\n",
+  )
+  let armored = @api.encrypt_to_recipients(
+    @primitives.utf8_bytes(tampered_ws),
+    [key.to_public()],
+  )
+  let cb = new_callbacks()
+  @mime.decrypt_mime(armored, [key], verifiers=[key.to_public()], callbacks=cb)
+  // The signature still verifies (trailing WS is not part of the signed
+  // surface), and the DELIVERED body now carries the same
+  // canonicalization — no invisible divergence between the two.
+  assert_eq(cb.verified, [@api.Ok])
+  assert_eq(cb.bodies.length(), 1)
+  assert_true(!cb.bodies[0].0.contains("authentic body "))
+  assert_true(cb.bodies[0].0.contains("authentic body"))
 }

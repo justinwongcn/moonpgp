@@ -37,7 +37,7 @@ fn with_key_expiration(
 
 ///|
 test "ring encryption lookup judges the matched subkey's own lifetime" {
-  let key = generate_key("X <x@example.com>", bits=2048)
+  let key = generate_key("X <x@example.com>", bits=3072)
   let expired_binding = with_key_expiration(key.subkeys[0].binding, 60)
   let pk = {
     ..key,
@@ -53,7 +53,7 @@ test "ring encryption lookup judges the matched subkey's own lifetime" {
   // The differential pair: an expired component and a valid component
   // in one ring, looked up at a real clock. If the gate were deleted,
   // the expired id would resolve too and this test would fail.
-  let fresh = generate_key("F <f@example.com>", bits=2048)
+  let fresh = generate_key("F <f@example.com>", bits=3072)
   ring.add_public(pk)
   ring.add_public(fresh.to_public())
   let expired_id = pk.subkeys[0].key.key_id()

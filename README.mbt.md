@@ -129,7 +129,10 @@ CI covers native, wasm, and js; for day-to-day work, use native. Key generation 
 - RSA, Ed25519, and X25519 arithmetic runs on `@bigint` and is not constant-time, and a GC runtime makes no promise about wiping private keys from memory.
 - Decrypting untrusted Argon2-protected data is capped at 64 MiB of memory by default; over-limit requests are rejected before anything is allocated. Some APIs let you set a different limit.
 - One message can only ask for so much key derivation: each SKESK attempt books its KDF work against a shared per-message budget — roughly three saturated Argon2 derivations, or about six gpg-default iterated ones — and once the line is crossed, further attempts are rejected explicitly before any work is spent.
-- Verification refuses MD5 signatures outright (RFC 9580 §9.5 says MUST NOT; gpg refuses them too). SHA-1 still verifies for legacy mail.
+- Verification refuses MD5 signatures outright (RFC 9580 §9.5 says MUST NOT; gpg refuses them too). SHA-1 still verifies for legacy mail, and signature creation refuses MD5 on its side as well.
+- RSA key generation requires 3072 bits or more (RFC 9580 §12.4). Verifying and decrypting with smaller legacy keys still works.
+- Exporting an unlocked private key is an explicit `allow_unlocked: true` decision; locked keys export as usual. Debug formatting of key material is redacted to lengths.
+- PGP/MIME delivers the body in the canonicalized form the signature was verified over; binary attachments stay byte-exact.
 - The encryption APIs don't pad v2 SEIPD messages, so ciphertext length gives away roughly how long the plaintext is.
 - On targets without a platform clock, expiration checks are off and revocation dates can't be evaluated; revocation signatures are still checked cryptographically.
 

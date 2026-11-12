@@ -23,8 +23,8 @@ export MOONPGP_SMOKE_PASSPHRASE="smoke-passphrase"
 echo "== help =="
 run help >/dev/null
 
-echo "== keygen (RSA 2048, default minimum bits) =="
-run keygen "Smoke <smoke@example.com>" "$work/sec.asc" "$work/pub.asc" 2048
+echo "== keygen (RSA 3072, the generation floor of RFC 9580 §12.4) =="
+run keygen "Smoke <smoke@example.com>" "$work/sec.asc" "$work/pub.asc" 3072
 
 echo "== edkeygen / v6keygen =="
 run edkeygen "Smoke <smoke@example.com>" "$work/ed.asc" "$work/ed-pub.asc"

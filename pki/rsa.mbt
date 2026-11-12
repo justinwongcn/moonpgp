@@ -199,10 +199,15 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
 /// candidate after trial division.
 pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise {
   // RFC 9580 §12.4: an implementation MUST NOT generate keys below 3072
-  // bits and MUST NOT encrypt, sign or verify below 2048; 2048 is the
-  // absolute floor we accept for explicit opt-in (S12).
-  guard bits >= 2048 else {
-    @error.fail("rsa: refusing to generate keys under 2048 bits")
+  // bits (verification of smaller keys stays allowed for legacy mail).
+  // The floor used to sit at 2048 "for explicit opt-in" while the comment
+  // quoted the 3072 MUST — code and cited rule disagreed (audit O1).
+  // Generated keys are now 3072+; measured cost: ~10 s per 3072-bit
+  // keygen on the reference machine (pki/bench_test.mbt).
+  guard bits >= 3072 else {
+    @error.fail(
+      "rsa: refusing to generate keys under 3072 bits (RFC 9580 §12.4); verification of smaller keys stays available",
+    )
   }
   guard bits % 2 == 0 else { @error.fail("rsa: bit count must be even") }
   let e = BigInt::from_int(65537)

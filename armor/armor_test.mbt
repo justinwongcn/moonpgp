@@ -133,7 +133,7 @@ test "junk riding on the END line is refused (F7)" {
   // The END check used to be a prefix match, so trailing garbage on the
   // END line rode in while BEGIN was strict.
   let raised = try {
-    let _ = decode(
+    let _ = @armor.decode(
       "-----BEGIN PGP MESSAGE-----\n\naGVsbG8=\n=R/WK\n-----END PGP MESSAGE-----junk\n",
     )
     false
@@ -147,7 +147,7 @@ test "junk riding on the END line is refused (F7)" {
 test "the CRC line tolerates transport whitespace (F7)" {
   // "=8PFE " is a valid CRC of "hello" with trailing transport padding;
   // the CRC line used to decode strictly while the body did not.
-  let block = decode(
+  let block = @armor.decode(
     "-----BEGIN PGP MESSAGE-----\n\naGVsbG8=\n=R/WK \n-----END PGP MESSAGE-----\n",
   )
   assert_eq(block.data(), b"hello")
@@ -157,7 +157,7 @@ test "the CRC line tolerates transport whitespace (F7)" {
 test "an empty payload with its CRC line parses (F7)" {
   // The "=CRC" line of an empty body used to be swallowed into the body
   // and fail as invalid base64; CRC AAAA is the CRC of zero octets.
-  let block = decode(
+  let block = @armor.decode(
     "-----BEGIN PGP MESSAGE-----\n\n=twTO\n-----END PGP MESSAGE-----\n",
   )
   assert_eq(block.data().length(), 0)

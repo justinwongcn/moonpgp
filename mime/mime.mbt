@@ -48,26 +48,23 @@ pub fn parse_message(text : String) -> MimeMessage {
 
 ///|
 /// Extract the `boundary` parameter of a Content-Type header value.
+/// Delegates to the strict parameter parser (audit F28): the old scan
+/// grabbed the FIRST "boundary=" anywhere in the value — a quoted
+/// parameter value like `note="see boundary=REAL"` hijacked it — and its
+/// quote scan ignored quoted-pair escapes. Malformed values now yield
+/// None instead of a best-guess boundary.
 pub fn content_type_boundary(content_type : String) -> String? {
-  let lower = content_type.to_lower()
-  guard lower.contains("boundary=") else { return None }
-  let idx = match lower.find("boundary=") {
-    Some(i) => i + "boundary=".length()
-    None => return None
+  let mt : MediaType? = Some(parse_content_type(content_type)) catch {
+    _ => None
   }
-  let rest = content_type[idx:content_type.length()]
-  let rest = if rest.has_prefix("\"") {
-    match rest[1:rest.length()].find("\"") {
-      Some(end) => rest[1:1 + end].to_owned()
-      None => rest[1:rest.length()].to_owned()
-    }
-  } else {
-    match rest.find(";") {
-      Some(end) => rest[0:end].to_owned()
-      None => rest.to_owned()
-    }
+  match mt {
+    Some(mt) =>
+      match param_of(mt.params, "boundary") {
+        Some(b) if b != "" => Some(b)
+        _ => None
+      }
+    None => None
   }
-  Some(rest)
 }
 
 ///|
@@ -79,15 +76,21 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
   let lines : Array[StringView] = normalized.split("\n").collect()
   let parts : Array[String] = []
   let mut current : Array[StringView]? = None
+  let close = dash_boundary + "--"
   for line in lines {
-    let is_delimiter = line == dash_boundary ||
-      line.has_prefix(dash_boundary + "--")
-    if is_delimiter {
+    // Close-detection parity with the byte version's line_is_close +
+    // rest_is_padding (audit F28): the delimiter must be exactly the
+    // dash-boundary, and a closing delimiter may only carry whitespace
+    // padding — "--B--evil" used to close a part.
+    let is_close = line == close ||
+      (line.has_prefix(close) && line_is_ws_padding(line[close.length():]))
+    let is_delim = line == dash_boundary
+    if is_close || is_delim {
       match current {
         Some(c) => parts.push(join_lines(c))
         None => ()
       }
-      if line.has_prefix(dash_boundary + "--") {
+      if is_close {
         current = None
       } else {
         current = Some([])
@@ -103,6 +106,19 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
     @error.malformed("mime: no multipart parts found")
   }
   parts
+}
+
+///|
+/// Everything after a closing delimiter must be whitespace (the String
+/// twin of walk.mbt's rest_is_padding).
+fn line_is_ws_padding(rest : StringView) -> Bool {
+  for c in rest {
+    let v = c.to_int()
+    if v != 0x20 && v != 0x09 {
+      return false
+    }
+  }
+  true
 }
 
 ///|

@@ -58,3 +58,57 @@ test "aead final-tag internals match the rfc4880bis A.4 sample" {
   )
   assert_eq(@primitives.to_hex(tag), "d571bcd83b20add3a08b73af15b9a098")
 }
+
+///|
+test "a non-empty plaintext under the final tag is refused (O2)" {
+  // Craft what a hostile encoder could produce: the final tag opens to
+  // actual bytes. seipd_v2_open has refused this shape all along; the
+  // tag-20 layer silently ignored it.
+  let bc = @primitives.new_block_cipher(
+    @primitives.Aes256,
+    @primitives.random_bytes(32).exact_view(),
+  )
+  let iv = @primitives.random_bytes(15)
+  let header5 = Bytes::from_array([0xD4, 0x01, 0x09, 0x02, 0x06])
+  // Zero data chunks: the final tag's index is 0 and the AD tail carries
+  // the 8-octet total octet count (0).
+  let final_nonce = aead_chunk_nonce(iv.exact_view(), 0L)
+  let fad = aead_ad(
+    header5.exact_view(),
+    0L,
+    Bytes::make(8, b'\x00').exact_view(),
+  )
+  let smuggled = ocb_encrypt(
+    bc,
+    final_nonce.exact_view(),
+    fad.exact_view(),
+    b"junk",
+  )
+  let raised = try {
+    ignore(
+      aead_open(
+        bc,
+        Ocb,
+        header5.exact_view(),
+        iv.exact_view(),
+        6,
+        smuggled.exact_view(),
+      ),
+    )
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+  // The honest shape (empty final chunk) still opens (control).
+  let honest = ocb_encrypt(bc, final_nonce.exact_view(), fad.exact_view(), b"")
+  let out = aead_open(
+    bc,
+    Ocb,
+    header5.exact_view(),
+    iv.exact_view(),
+    6,
+    honest.exact_view(),
+  )
+  assert_eq(out.length(), 0)
+}

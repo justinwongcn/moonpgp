@@ -27,7 +27,24 @@ priv enum Node {
 const MAX_LOGICAL_LINE_BYTES : Int32 = 67_108_864
 
 ///|
-fn read_logical_line(sock : &Socket) -> Array[Seg] raise {
+/// Per-session byte budget (audit F27): every raw line and literal a
+/// server makes us read is charged here; exhaustion raises. 512 MiB is
+/// far above any real mailbox session and bounds the OOM an
+/// adversarial server can buy with tiny commands.
+pub(all) struct LineBudget {
+  mut remaining : Int64
+}
+
+///|
+pub fn LineBudget::new(cap : Int64) -> LineBudget {
+  { remaining: cap, }
+}
+
+///|
+const SESSION_BUDGET_BYTES : Int64 = 536_870_912L
+
+///|
+fn read_logical_line(sock : &Socket, budget : LineBudget) -> Array[Seg] raise {
   let segs : Array[Seg] = []
   let mut total = 0
   while true {
@@ -38,12 +55,20 @@ fn read_logical_line(sock : &Socket) -> Array[Seg] raise {
         "mailreader: logical line exceeds \{MAX_LOGICAL_LINE_BYTES} octets",
       )
     }
+    budget.remaining = budget.remaining - raw.length().to_int64()
+    guard budget.remaining >= 0L else {
+      @error.fail("mailreader: session byte budget exhausted")
+    }
     let size = literal_marker_size(raw)
     if size >= 0 {
       let cut = marker_cut_index(raw)
       segs.push(Seg::Txt(raw[0:cut].to_owned()))
       let lit = sock.read_exact(size)
       total = total + lit.length()
+      budget.remaining = budget.remaining - lit.length().to_int64()
+      guard budget.remaining >= 0L else {
+        @error.fail("mailreader: session byte budget exhausted")
+      }
       segs.push(Seg::Lit(lit))
       continue
     }
@@ -78,7 +103,10 @@ fn literal_marker_size(b : Bytes) -> Int32 raise {
   // to read_exact it. The accumulation is overflow-checked: a 2^32+k
   // digit string wraps to a small Int and would sneak past a plain
   // post-hoc bound (review finding m1).
-  let max_literal = 100_000_000
+  // 4 MiB (audit F27): message headers are KB-scale; the old 100 MB cap
+  // let every FETCH summary claim a hundred-megabyte literal. The
+  // per-session cumulative budget lives in `LineBudget`.
+  let max_literal = 4_194_304
   let start = k + 1
   let stop = digits_end + 1
   let mut v = 0

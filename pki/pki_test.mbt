@@ -125,11 +125,12 @@ test "verify rejects tampered signature" {
 }
 
 ///|
-test "generated key roundtrip (2048-bit)" {
-  let key = @pki.generate_rsa_key(bits=2048)
+test "generated key roundtrip (3072-bit)" {
+  let key = @pki.generate_rsa_key(bits=3072)
   let msg = @primitives.utf8_bytes("roundtrip message for our own key")
   let ct = key.public.pkcs1_v15_encrypt(msg.exact_view())
-  assert_eq(ct.length(), 256)
+  // 3072-bit modulus = 384 octets of RSA-2048-era 256.
+  assert_eq(ct.length(), 384)
   let pt = key.pkcs1_v15_decrypt(ct.exact_view())
   assert_eq(pt, msg)
   let digest = @primitives.Sha256.digest(msg.exact_view())

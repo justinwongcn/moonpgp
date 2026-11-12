@@ -42,3 +42,48 @@ test "cli: CLI --fetch with a non-numeric UID fails loudly" {
   }
   assert_true(raised2)
 }
+
+///|
+test "sanitize_filename keeps the separator out of the base (F22)" {
+  // Supplementary-plane char before the separator: the old char-count
+  // scan vs UTF-16 slice drift let a leading '/' survive into the base.
+  assert_eq(sanitize_filename("😀/x"), "x")
+  // The drifted base used to be "/..", passing the dotdot whitelist.
+  assert_eq(sanitize_filename("😀x/../.."), "")
+  // Ordinary names behave as before.
+  assert_eq(sanitize_filename("report.pdf"), "report.pdf")
+  assert_eq(sanitize_filename("a/b/c.txt"), "c.txt")
+  assert_eq(sanitize_filename(".."), "")
+  assert_eq(sanitize_filename(""), "")
+}
+
+///|
+test "uidvalidity persistence accepts the recorded generation (F26)" {
+  let cfg = Config::new()
+  cfg.host = "imap.test"
+  cfg.out_dir = "/tmp"
+  let user = "alice@test"
+  record_uidvalidity(cfg, user, "INBOX", 42)
+  // Same generation: fine.
+  check_uidvalidity(cfg, user, "INBOX", 42)
+  // A different folder is independent.
+  check_uidvalidity(cfg, user, "Archive", 7)
+}
+
+///|
+test "uidvalidity mismatch refuses the fetch (F26)" {
+  let cfg = Config::new()
+  cfg.host = "imap.test2"
+  cfg.out_dir = "/tmp"
+  let user = "bob@test"
+  record_uidvalidity(cfg, user, "INBOX", 100)
+  let raised = try {
+    check_uidvalidity(cfg, user, "INBOX", 200)
+    false
+  } catch {
+    e =>
+      // The refusal names the changed generation.
+      e.to_string().contains("UIDVALIDITY")
+  }
+  assert_true(raised)
+}

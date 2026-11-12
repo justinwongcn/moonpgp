@@ -324,3 +324,43 @@ async test "smtp: a reply with too many continuation lines raises (F25)" {
   }
   assert_true(raised)
 }
+
+///|
+async test "smtp: envelope addresses are validated at the wire layer (F31)" {
+  // A CRLF-carrying recipient used to ride on the @mail-layer check;
+  // netmail is a pub library, so the wire layer enforces it itself.
+  let sock = fake_sock(["250 sink", "250 ok"])
+  let raised = try {
+    ignore(
+      smtp_session(
+        sock,
+        "hi",
+        "a@b.test",
+        ["bad\r\nRCPT TO:<x@y.test>"],
+        "relay.test",
+        None,
+      ),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("forbidden character")
+  }
+  assert_true(raised)
+}
+
+///|
+async test "smtp: reply code demands a separator after three digits (F32)" {
+  let sock = fake_sock(["2500 oops"])
+  let raised = try {
+    ignore(read_reply(sock))
+    false
+  } catch {
+    e => e.to_string().contains("separator")
+  }
+  assert_true(raised)
+  // A proper "250 ok" still parses (control).
+  let sock2 = fake_sock(["250 ok"])
+  let (code, lines) = read_reply(sock2)
+  assert_eq(code, 250)
+  assert_eq(lines, ["ok"])
+}

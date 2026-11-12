@@ -167,3 +167,22 @@ replacement seam），非新发现。
 | **B（推荐）** 生成下限提到 3072（`guard bits >= 3072`） | 默认行为对齐 RFC，安全姿态增强；密钥导入面不受影响 | ci_smoke/示例/README 示例需改 3072；keygen 变慢（CI 时长上升，需实测 3072 位在本实现的生成耗时再定是否影响门禁） |
 
 推荐理由：B 修复的是"代码与自己引用的规范不符"这一致性缺陷；若 3072 keygen 实测过慢拖垮 CI 门禁，退 A 并把实测数字写进注释。
+
+## 执行记录（2026-11-12，全部四批完成）
+
+| 批 | 提交 | 内容 | 验收 |
+|---|---|---|---|
+| B1 | `安全:B1 崩溃与 DoS 修复` | bzip2 位游标 Int64 / 毒 PKESK 丢弃继续（pubkey+sessionkey，含 F19+F14 差分）/ scan_parens 50 层上限 / 导入哈希表 / netmail 四处总量上限 | compress+api+netmail 全绿，bzip2 近回绕回归测试钉死 |
+| B2 | `安全:B2 密钥材料与门禁对称性` | Debug 脱敏（手写 to_repr+嵌套继承）/ MD5 签发拒绝 / RSA e 三闸 / S2KBudget Int64+必填 / C3 catch→Failed / per-key catch / now 必填 / allow_unlocked~（.mbti 预期 diff 落地） | api 260/260，.mbti diff 恰为计划两处+raise 传递 |
+| B3 | `健壮性:B3 解析严格性` | zlib 减法判式 / key_len≤255 / 224-254 拒收 / Issuer 精确长度 / MPI 恰好消费 / armor 三处 / 写侧四 guard（RSA 包裹走 MPI 不受长度字节约束——实施中实测厘清并收窄 guard 作用域）/ to_body 短参数 malformed | packet+armor 白盒 12 测，560/560 |
+| B4+B5 | 本提交 | RFC2047 CTL 过滤 / sanitize_filename 索引空间+前导分隔符拒绝 / 折叠头 StringBuilder / UIDVALIDITY 持久化 / literal 4MiB+会话 512MiB 预算 / String MIME 严格化 / PGP/MIME 交付规范化（LF-only 正文随规范化统一为 CRLF——四个旧断言按新语义更新）/ SELECT 校验 / smtp 信封线层校验 / reply_code 分隔符 / KW ct_equal / tag-20 终块空 guard / RSA 3072 下限 | 各包全绿；3072 keygen 实测 10s（bench 留档） |
+
+文档同步：CHANGELOG [Unreleased]（Fixed/Changed/Security 三节）、README 中英安全节、本文件入库（决策 5）。
+
+## 遗留任务（留给以后）
+
+1. **上游 flate 位游标核查**：moonbit-community/flate inflater 内部位算术是否同用 Int32（本轮 F1 同族窗口）——依赖代码未逐行审，B3.1 修的是本库包装层。给上游提 issue 或审计其源码。
+2. **PGP/MIME 二进制附件的行尾空白残余**（B4.7 文档化残余）：行尾篡改对附件仍属"验证 Ok 交付原样"——规范化会破坏二进制，需上游签名层方案（如交付 raw+canonical 双份回调）再评估。
+3. **UIDVALIDITY 状态文件的多机同步**（B4.4 最小实现）：单机单目录语义；多设备用户需 account-level 同步策略。
+4. **3072 keygen 性能**：10 s/把（纯 bigint，无优化）。若 CI 时长成问题，考虑缓存质数域或批量预生成测试密钥。
+5. **interop/tmp_ct_test.mbt 临时文件**：历史上的手工探针遗留，内容已被正式测试覆盖，可删除（本轮未动，避免与本批无关 diff）。

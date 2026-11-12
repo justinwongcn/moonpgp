@@ -134,10 +134,16 @@ pub fn aes_key_unwrap(kek : BytesView, ciphertext : BytesView) -> Bytes raise {
       }
     }
   }
-  for i in 0..<8 {
-    guard a[i] == kw_iv[i] else {
-      @error.fail("cipher: key-unwrap integrity check failed")
-    }
+  // Constant-time comparison (audit L1): every other integrity check in
+  // this library goes through ct_equal; the early-exit byte loop here was
+  // the lone outlier and a textbook timing differential on an
+  // attacker-chosen ciphertext.
+  let recovered = Bytes::from_array(a)
+  guard @primitives.ct_equal(
+    recovered.exact_view(),
+    Bytes::from_array(kw_iv).exact_view(),
+  ) else {
+    @error.fail("cipher: key-unwrap integrity check failed")
   }
   let out : Array[Byte] = []
   for blk in r {

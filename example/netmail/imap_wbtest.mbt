@@ -111,6 +111,7 @@ fn sent_text(f : FakeImapSock) -> String {
 fn new_client(sock : FakeImapSock) -> ImapClient {
   ImapClient::{
     sock,
+    budget: LineBudget::new(SESSION_BUDGET_BYTES),
     tag_n: 0,
     state: MailboxState::{ exists: 0, uidvalidity: 0, },
   }

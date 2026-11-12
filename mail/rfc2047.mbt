@@ -92,11 +92,29 @@ fn hex_val(c : Char) -> Int32? {
 }
 
 ///|
+/// C0 control characters are stripped from decoded output (audit F21):
+/// the ENCODE side has required their absence since `require_no_ctl`, but
+/// a B-encoded word can carry CR/LF/ESC past it — and a terminal-fed
+/// From/Subject line then forges list rows or injects escape sequences.
+/// Tab survives (legal folding whitespace).
+fn strip_ctl(bytes : Bytes) -> Bytes {
+  let out : Array[Byte] = []
+  for b in bytes {
+    let v = b.to_int()
+    if v >= 0x20 || v == 0x09 {
+      out.push(b)
+    }
+  }
+  Bytes::from_array(out)
+}
+
+///|
 /// Decode one encoded word body with the given transfer encoding
 /// (B = base64, Q = quoted-printable variant with `_` for space).
 fn decode_word_data(enc : String, data : String) -> Bytes? {
   match enc {
-    "B" | "b" => Some(@base64.decode(data) catch { _ => return None })
+    "B" | "b" =>
+      Some(strip_ctl(@base64.decode(data) catch { _ => return None }))
     "Q" | "q" => {
       let bytes : Array[Byte] = []
       let chars : Array[Char] = data.iter().collect()
@@ -123,7 +141,7 @@ fn decode_word_data(enc : String, data : String) -> Bytes? {
           i = i + 1
         }
       }
-      Some(Bytes::from_array(bytes))
+      Some(strip_ctl(Bytes::from_array(bytes)))
     }
     _ => None
   }

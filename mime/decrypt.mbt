@@ -316,7 +316,19 @@ pub fn decrypt_mime(
   let (body, attachments) = collect_body_and_attachments(collect_root)
   match body {
     Some(b) =>
-      callbacks.on_body(@utf8.decode_lossy(b.content.exact_view()), b.mimetype)
+      // Delivery parity with the verification input (audit F29): the
+      // signature was verified over the canonicalized representation, so
+      // the visible body is delivered canonicalized too — trailing
+      // whitespace the verifier ignored can no longer differ from what
+      // was signed. Binary attachments stay byte-exact (line-based
+      // canonicalization would corrupt them; the residual surface is
+      // documented in the package README).
+      callbacks.on_body(
+        @utf8.decode_lossy(
+          mime_canonicalize(b.content.exact_view()).exact_view(),
+        ),
+        b.mimetype,
+      )
     None => callbacks.on_body("", "text/plain")
   }
   for att in attachments {

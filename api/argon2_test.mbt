@@ -86,7 +86,7 @@ test "argon2 SKESK rejects the wrong passphrase" {
 /// A key locked with Argon2id + AES-256/OCB (usage 253) unlocks again, and
 /// the packet really carries the AEAD protection.
 test "argon2 AEAD secret key lock/unlock round trip" {
-  let key = @api.generate_key("Argon2 <a2@example.com>", bits=2048)
+  let key = @api.generate_key("Argon2 <a2@example.com>", bits=3072)
   let locked = key.lock_argon2(
     "passphrase",
     passes=1,
@@ -114,7 +114,7 @@ test "argon2 AEAD secret key lock/unlock round trip" {
 test "argon2 specifier is rejected with S2K usage 254/255" {
   let salt = Bytes::make(@s2k.ARGON2_SALT_SIZE, b'\x01')
   let spec = @s2k.Argon2(salt, 1, 1, 5).encode()
-  let public = @api.generate_key("X <x@example.com>", bits=2048).primary.public
+  let public = @api.generate_key("X <x@example.com>", bits=3072).primary.public
   for usage in [254, 255] {
     let key : @packet.SecretKeyPacket = {
       public,

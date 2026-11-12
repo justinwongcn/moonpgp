@@ -71,7 +71,7 @@ test "multipart/mixed: attachments are base64 with disposition" {
 
 ///|
 test "signed entity: verifies and round-trips the exact bytes" {
-  let key = @api.generate_key("Mail Build <mb@example.com>", bits=2048)
+  let key = @api.generate_key("Mail Build <mb@example.com>", bits=3072)
   let entity = "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\nsigned entity body\r\n"
   let signed = @mail.build_pgp_mime_signed_entity(entity, key)
   let extracted = @mime.extract_pgp_signed(signed)
@@ -86,7 +86,7 @@ test "signed entity: verifies and round-trips the exact bytes" {
 
 ///|
 test "encrypted mail: one-shot compose then decrypt_mime roundtrip" {
-  let key = @api.generate_key("Mail Build <mb@example.com>", bits=2048)
+  let key = @api.generate_key("Mail Build <mb@example.com>", bits=3072)
   let att : @mail.MailAttachment = {
     filename: "note.txt",
     content_type: "text/plain",
@@ -123,18 +123,16 @@ test "encrypted mail: one-shot compose then decrypt_mime roundtrip" {
   @mime.decrypt_mime(message, [key], verifiers=[key.to_public()], callbacks=cb)
   assert_eq(cb.errors, [])
   assert_eq(cb.verified, [@api.Ok])
-  // The parser delivers the body as transmitted: composed text is
-  // CRLF-normalized on assembly, and the CRLF before the boundary
-  // belongs to the boundary (RFC 2046) — so the trailing newline is
-  // not part of the delivered body. Same asymmetry as gopenpgp.
-  assert_eq(cb.bodies, [("hello bob\r\nsecond line", "text/plain")])
+  // Delivered body = verified surface (B4.7/F29): the canonical form the
+  // signature covers ends with CRLF, so delivery carries it too.
+  assert_eq(cb.bodies, [("hello bob\r\nsecond line\r\n", "text/plain")])
   assert_eq(cb.attachments.length(), 1)
   assert_eq(cb.attachments[0].1, @primitives.utf8_bytes("attachment body"))
 }
 
 ///|
 test "encrypted mail: non-ascii subject is RFC 2047 encoded" {
-  let key = @api.generate_key("Mail Build <mb@example.com>", bits=2048)
+  let key = @api.generate_key("Mail Build <mb@example.com>", bits=3072)
   let mail_text = @mail.build_encrypted_mail(
     { display_name: "", addr: "a@b.example", },
     [{ display_name: "", addr: "c@d.example", }],

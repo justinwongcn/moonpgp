@@ -65,7 +65,7 @@ test "revoke_subkey drops the subkey from selection but not from decryption" {
 
 ///|
 test "revoke_subkey with an unknown key id fails loudly" {
-  let key = @api.generate_key("Rsa <rsa@example.com>", bits=2048)
+  let key = @api.generate_key("Rsa <rsa@example.com>", bits=3072)
   // The primary's id is not a subkey id.
   let raised = try {
     let _ = @api.revoke_subkey(key, key.primary.public.key_id())

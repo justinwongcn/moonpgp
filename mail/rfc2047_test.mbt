@@ -113,7 +113,7 @@ test "format_address encodes non-ASCII display names" {
 ///|
 test "build_encrypted_mail encodes a Chinese subject end-to-end" {
   // Minimal RSA key pair (1024-bit keeps the test fast).
-  let key = @api.generate_key("测试者 <t@example.com>", bits=2048)
+  let key = @api.generate_key("测试者 <t@example.com>", bits=3072)
   let mail_text = @mail.build_encrypted_mail(
     { display_name: "王小明", addr: "alice@example.com", },
     [{ display_name: "Bob", addr: "bob@example.com", }],
@@ -141,4 +141,20 @@ test "build_encrypted_mail encodes a Chinese subject end-to-end" {
       )
     }
   }
+}
+
+///|
+test "decoded encoded words strip C0 controls but keep tab (F21)" {
+  // B-encoded CR/LF/ESC: the encode side refuses them; the decode side
+  // used to pass them raw into terminal-bound output.
+  let crlf = @mail.decode_rfc2047("=?utf-8?B? YQ0KYg==?=")
+  assert_true(!crlf.contains("\r"))
+  assert_true(!crlf.contains("\n"))
+  let esc = @mail.decode_rfc2047("=?utf-8?B?G1sySg==?=")
+  assert_true(!esc.contains("\u{1B}"))
+  // Q-encoded tab survives (legal whitespace), other CTLs do not.
+  let tab = @mail.decode_rfc2047("=?utf-8?Q?a=09b?=")
+  assert_true(tab.contains("\t"))
+  let bel = @mail.decode_rfc2047("=?utf-8?Q?a=07b?=")
+  assert_true(!bel.contains("\u{7}"))
 }

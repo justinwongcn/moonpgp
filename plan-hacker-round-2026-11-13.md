@@ -108,3 +108,22 @@ raw+canonical 双交付回调设计)/#3(UIDVALIDITY 多机同步,产品级)/#4
 
 门禁:native 600/600、mime 99/99、fmt+deny-warn 过、wasm/js 见提交、
 ci_smoke 复跑。变更零 .mbti diff(本轮全部私有函数/包内改动)。
+
+## 四项遗留的处置决定(2026-11-13,用户逐项拍板)
+
+1. **#2 PGP/MIME 二进制附件行尾残余 → 改判"业内固有、被 base64 传输中和"**。
+   接受建议:论证写入新建的 mime/README.md(交付语义三档 + 两条中和论据:
+   7bit/base64 传输使空白篡改解码后字节不变;binary 签名类型 0x00 是规格
+   留给非文本部件的闭合手段);不建 raw+canonical 双交付回调 API。
+2. **#3 UIDVALIDITY → 采 mbsync 形态**。`--fetch` 配 `--resync`:代际变化时
+   采纳服务器当前世代并重新列信(mbsync 自动恢复语义),替代硬拒+人工删
+   状态文件;跨机同步按业内实践不做(每机独立缓存+对服务器权威重对账是
+   标准形态,mbsync/Thunderbird 均如此)。
+3. **#4 3072 keygen → 按业内常用用法落文档**。守 3072 下限;README 中英
+   写明 ~10s/把是纯 bigint 的已知代价(生产栈靠 GMP 类原生大数)、新密钥
+   建议 Ed25519/X25519(OpenSSH/Signal 同款行业默认);跨密钥素数缓存
+   明确不可行。
+4. **A1 packet 层 pub(all) → 登记 0.5.0+ 方向性决定,现在不动**。业内
+   标准形态是 Go 系内化 wire-format 层 / Rust 系类型包装+zeroize+能力化;
+   对 moonpgp 即"内化 packet 包"或"秘钥序列化能力闸",二者都是 0.5.0
+   量级的架构决定,按用户政策登记延后。

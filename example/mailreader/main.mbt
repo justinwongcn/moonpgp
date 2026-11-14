@@ -101,6 +101,7 @@ struct Config {
   mut folder : String
   mut last_n : Int32
   mut fetch_uid : Int32?
+  mut resync : Bool
   mut out_dir : String
   keys : Array[String]
   certs : Array[String]
@@ -117,6 +118,7 @@ fn Config::new() -> Config {
     folder: "INBOX",
     last_n: 5,
     fetch_uid: None,
+    resync: false,
     out_dir: ".",
     keys: [],
     certs: [],
@@ -131,6 +133,7 @@ fn usage() -> Unit {
     "  --imap-port N          default 1143", "  --user ADDRESS         mailbox login (required)",
     "  --pass-env NAME        env var holding the auth code (required)", "  --folder NAME          default INBOX (the v1 subset)",
     "  --last N               list the newest N messages (default 5)", "  --fetch UID            fetch one message by UID, then decrypt+verify",
+    "  --resync               with --fetch: accept a UIDVALIDITY change and re-list",
     "  --keys PATH            armored private key, repeatable (for --fetch)", "  --certs PATH           armored public key, repeatable (verifiers)",
     "  --out DIR              where .eml and attachments are written", "  --allow-insecure       opt-in for plaintext to a non-local host",
   ]
@@ -160,6 +163,7 @@ fn parse_args(argv : Array[String]) -> Config raise {
       "--pass-env" => cfg.pass_env = Some(val)
       "--folder" => cfg.folder = val
       "--last" => cfg.last_n = parse_count(val)
+      "--resync" => cfg.resync = true
       "--fetch" => {
         // an unparseable --fetch must fail loudly, not silently
         // degrade to list mode (review finding m5)
@@ -396,38 +400,71 @@ fn list_mailbox(cfg : Config, user : String, password : String) -> Unit raise {
     user,
     password,
     cfg.folder,
-    fn(client) -> Unit raise {
-      let summaries = client.imap_fetch_recent(cfg.last_n)
-      println(
-        "folder \{cfg.folder}: \{client.state.exists} message(s), uidvalidity \{client.state.uidvalidity}, showing newest \{summaries.length()}",
-      )
-      // A fresh list refreshes the baseline: the user just saw this
-      // mailbox generation (audit F26).
-      record_uidvalidity(cfg, user, cfg.folder, client.state.uidvalidity)
-      for s in summaries {
-        let from = match header_value(s.headers, "from") {
-          Some(v) => @mail.decode_rfc2047(v)
-          None => "?"
-        }
-        let subject = match header_value(s.headers, "subject") {
-          Some(v) => @mail.decode_rfc2047(v)
-          None => "?"
-        }
-        let date = match header_value(s.headers, "date") {
-          // Server-controlled text hits the terminal directly here (the
-          // decoded from/subject go through decode_rfc2047's filter); a
-          // hostile server escapes through the sibling field otherwise
-          // (hacker-round composition finding E2).
-          Some(v) => @mail.sanitize_terminal(v)
-          None => @mail.sanitize_terminal(s.internaldate)
-        }
-        let flags = @mail.sanitize_terminal(s.flags)
-        println(
-          "seq=\{s.seq} uid=\{s.uid} size=\{s.size} \{flags} | \{date} | \{from} | \{subject}",
-        )
-      }
-    },
+    fn(client) -> Unit raise { print_recent(client, cfg, user) },
   )
+}
+
+///|
+/// The --last listing, shared with the --resync recovery path: fresh
+/// baseline record plus the newest messages (F26 + leftover #3).
+fn print_recent(
+  client : @netmail.ImapClient,
+  cfg : Config,
+  user : String,
+) -> Unit raise {
+  let summaries = client.imap_fetch_recent(cfg.last_n)
+  println(
+    "folder \{cfg.folder}: \{client.state.exists} message(s), uidvalidity \{client.state.uidvalidity}, showing newest \{summaries.length()}",
+  )
+  // A fresh list refreshes the baseline: the user just saw this
+  // mailbox generation (audit F26).
+  record_uidvalidity(cfg, user, cfg.folder, client.state.uidvalidity)
+  for s in summaries {
+    let from = match header_value(s.headers, "from") {
+      Some(v) => @mail.decode_rfc2047(v)
+      None => "?"
+    }
+    let subject = match header_value(s.headers, "subject") {
+      Some(v) => @mail.decode_rfc2047(v)
+      None => "?"
+    }
+    let date = match header_value(s.headers, "date") {
+      // Server-controlled text hits the terminal directly here (the
+      // decoded from/subject go through decode_rfc2047's filter); a
+      // hostile server escapes through the sibling field otherwise
+      // (hacker-round composition finding E2).
+      Some(v) => @mail.sanitize_terminal(v)
+      None => @mail.sanitize_terminal(s.internaldate)
+    }
+    let flags = @mail.sanitize_terminal(s.flags)
+    println(
+      "seq=\{s.seq} uid=\{s.uid} size=\{s.size} \{flags} | \{date} | \{from} | \{subject}",
+    )
+  }
+}
+
+///|
+/// Would `check_uidvalidity` reject this generation? Separate predicate
+/// so the --resync path can branch before the hard rejection (leftover
+/// #3). Absent baseline means no mismatch (the record is created by
+/// --last / --resync).
+fn uidvalidity_mismatch(
+  cfg : Config,
+  user : String,
+  folder : String,
+  got : Int64,
+) -> Bool {
+  let existing = @fs.read_file_to_string(uidvalidity_state_path(cfg)) catch {
+    _ => ""
+  }
+  let key = uidvalidity_state_key(cfg, user, folder)
+  for line in existing.split("\n") {
+    if line.has_prefix("\{key}|") {
+      let stored = line[key.length() + 1:line.length()]
+      return stored != got.to_string()
+    }
+  }
+  false
 }
 
 ///|
@@ -452,6 +489,18 @@ fn fetch_and_decrypt(
     fn(client) -> Unit raise {
       // The mailbox generation must match what the user last listed
       // (audit F26); a mismatch means UIDs may point at different mail.
+      // --resync (mbsync-style, leftover #3 user decision): adopt the
+      // server's current generation and re-list — UIDs are meaningless
+      // across generations, so recovery is re-reconcile by listing and
+      // picking a fresh UID, exactly what mbsync does on its own.
+      if cfg.resync &&
+        uidvalidity_mismatch(cfg, user, cfg.folder, client.state.uidvalidity) {
+        println(
+          "mailreader: UIDVALIDITY changed; resyncing — old UIDs are invalid, showing newest messages",
+        )
+        print_recent(client, cfg, user)
+        return
+      }
       check_uidvalidity(cfg, user, cfg.folder, client.state.uidvalidity)
       let raw = client.imap_fetch_message(uid)
       let eml_path = join_path(cfg.out_dir, "msg-\{uid}.eml")

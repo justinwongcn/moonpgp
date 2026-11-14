@@ -453,6 +453,9 @@ pub fn decrypt_mime(
       // user content (trailing spaces, final newline) without any
       // verification reason. Signed bodies are delivered canonicalized;
       // unsigned bodies byte-exact. Binary attachments stay byte-exact
+      // either way — see the package README for why the line-ending
+      // residual that remains there is industry-inherent and neutralized
+      // by base64 transport
       // either way (line-based canonicalization would corrupt them).
       callbacks.on_body(
         @utf8.decode_lossy(

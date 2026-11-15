@@ -141,6 +141,11 @@ pub fn recover_session_key_with_password(
   passphrase : String,
   argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> SessionKey raise {
+  // Fail fast on a nonsensical cap (JEV j4/j13): there is no legitimate
+  // 0-KiB Argon2 memory cap.
+  guard argon2_max_memory_kib >= 1 else {
+    @error.fail("api: argon2_max_memory_kib must be positive")
+  }
   let block = @armor.decode(message)
   let packets = @packet.parse_packets(
     @armor.ArmorBlock::data(block).exact_view(),

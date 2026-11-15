@@ -73,11 +73,15 @@ fn validate_argon2(
   parallelism : Int32,
   memory_exp : Int32,
 ) -> Unit raise {
-  guard passes != 0 else {
-    @error.fail("s2k: Argon2 passes t must be non-zero")
+  // Positivity, not just non-zero-ness (hacker-round residual, JEV j4):
+  // a direct-constructed negative `passes` also flows into the api
+  // layer's charge_argon2, turning the S2K budget counter negative and
+  // disabling it for the rest of the message.
+  guard passes >= 1 else {
+    @error.fail("s2k: Argon2 passes t must be positive")
   }
-  guard parallelism != 0 else {
-    @error.fail("s2k: Argon2 parallelism p must be non-zero")
+  guard parallelism >= 1 else {
+    @error.fail("s2k: Argon2 parallelism p must be positive")
   }
   guard memory_exp >= 0 && memory_exp <= 31 else {
     @error.fail("s2k: Argon2 encoded memory \{memory_exp} is out of range")
@@ -219,6 +223,13 @@ pub fn S2k::derive_key_capped(
   key_len : Int32,
   max_memory_kib : Int32,
 ) -> Bytes raise {
+  // OpenPGP key sizes top out at 32; the wire can never ask for more
+  // (audit F3 + hacker-round residual, JEV j4). The gate sits on the
+  // funnel — `derive_hash_key` only covered the Simple/Salted branches,
+  // leaving Iterated and Argon2 to allocate `key_len` bytes unchecked.
+  guard key_len >= 0 && key_len <= 255 else {
+    @error.fail("s2k: derived key length \{key_len} out of range")
+  }
   match self {
     // Argon2 has no OpenPGP hash octet: the derivation is entirely different
     // from the hash-based forms, so it is a separate branch.

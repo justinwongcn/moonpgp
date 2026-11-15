@@ -57,6 +57,118 @@ fn status_message(status : @api.VerifyStatus) -> String {
 }
 
 ///|
+/// Locate the armored PGP payload by MIME structure instead of scanning
+/// the whole text for the first armor block (cleanup round E3): the
+/// first-block-anywhere scan let a decoy armor block — a PUBLIC KEY
+/// part, a stray SIGNATURE — placed earlier in the mail hijack the
+/// decryption attempt and break delivery of the real message. Depth
+/// first over the parsed tree: the first leaf whose body opens with a
+/// PGP MESSAGE marker wins (inside a RFC 3156 multipart/encrypted that
+/// is the application/octet-stream protocol part; either slot ordering
+/// works). Input that is not MIME, or carries no MESSAGE-marked leaf,
+/// passes through unchanged so the historical whole-text scan — which
+/// tolerates leading prose — keeps covering bare armored messages.
+fn extract_encrypted_payload(text : String) -> String {
+  // Non-MIME garbage raises in parse_mime_tree and falls back to the
+  // historical whole-text scan via the None branch.
+  let marked : Bytes? = try {
+    let tree = parse_mime_tree(@primitives.utf8_bytes(text))
+    find_encrypted_leaf(tree)
+  } catch {
+    _ => None
+  }
+  match marked {
+    Some(body) => @utf8.decode_lossy(body.exact_view())
+    None => text
+  }
+}
+
+///|
+fn opens_pgp_message(data : Bytes) -> Bool {
+  let marker : Bytes = b"-----BEGIN PGP MESSAGE-----"
+  let n = data.length()
+  let m = marker.length()
+  // Tolerate leading whitespace between the part headers and the armor.
+  let mut start = 0
+  while start < n {
+    let v = data[start].to_int()
+    if v == 13 || v == 10 || v == 32 || v == 9 {
+      start = start + 1
+    } else {
+      break
+    }
+  }
+  guard n - start >= m else { return false }
+  for k in 0..<m {
+    if data[start + k] != marker[k] {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn find_encrypted_leaf(part : MimePart) -> Bytes? {
+  if opens_pgp_message(part.body) {
+    return Some(part.body)
+  }
+  for child in part.parts {
+    match find_encrypted_leaf(child) {
+      Some(b) => return Some(b)
+      None => ()
+    }
+  }
+  None
+}
+
+///|
+/// True when the payload's header block (up to the first empty line)
+/// carries a Content-Type header — the marker of an actual MIME tree
+/// (cleanup round N1).
+fn has_content_type_header(data : BytesView) -> Bool {
+  let n = data.length()
+  let mut pos = 0
+  while pos < n {
+    match next_line(data, pos) {
+      None => break
+      Some((cs, ce, np)) => {
+        if ce == cs {
+          // End of the header block.
+          break
+        }
+        let line = data[cs:ce]
+        if line.length() >= 12 && lower_ascii_starts_with(line, "content-type:") {
+          return true
+        }
+        pos = np
+      }
+    }
+  }
+  false
+}
+
+///|
+fn lower_ascii_starts_with(line : BytesView, prefix : String) -> Bool {
+  if line.length() < prefix.length() {
+    return false
+  }
+  let chars : Array[Char] = prefix.iter().collect()
+  if chars.length() != prefix.length() {
+    return false
+  }
+  for k in 0..<chars.length() {
+    let c = line[k].to_int()
+    let p = chars[k].to_int()
+    // ASCII case folding: A-Z folds by 0x20; anything else must match.
+    let folded = if c >= 65 && c <= 90 { c + 32 } else { c }
+    if folded != p {
+      return false
+    }
+  }
+  true
+}
+
+///|
 /// PGP-layer outcome: the decrypted payload plus the embedded signature
 /// status (None when no verification was attempted).
 priv struct DecryptOutcome {
@@ -257,9 +369,14 @@ pub fn decrypt_mime(
   callbacks~ : &MimeCallbacks,
   password? : String,
 ) -> Unit {
-  // 1. PGP layer.
+  // 1. PGP layer, over the payload the MIME structure points at (E3):
+  // a decoy armor block earlier in the mail can no longer hijack the
+  // decryption attempt; non-MIME input falls back to the whole-text scan.
   let outcome = decrypt_payload(
-    armored_message, decryption_keys, password, verifiers,
+    extract_encrypted_payload(armored_message),
+    decryption_keys,
+    password,
+    verifiers,
   ) catch {
     e => {
       callbacks.on_error("mime: decryption failed: \{e}")
@@ -268,7 +385,20 @@ pub fn decrypt_mime(
   }
   // 2. MIME tree over the raw decrypted bytes (sanitizing happens later,
   // on the delivered body only, so binary leaves stay intact).
-  let root = parse_mime_tree(outcome.data) catch {
+  // The payload may be raw content rather than MIME — decrypt_mime also
+  // accepts bare armored messages, and a headerless literal's lines were
+  // parsed AS headers and delivered empty (cleanup round N1). A MIME
+  // tree always advertises Content-Type, so a header block without one
+  // means raw content: wrap it as text/plain before parsing.
+  let data = if !has_content_type_header(outcome.data.exact_view()) {
+    @primitives.concat2(
+      @primitives.utf8_bytes("Content-Type: text/plain\r\n\r\n"),
+      outcome.data,
+    )
+  } else {
+    outcome.data
+  }
+  let root = parse_mime_tree(data) catch {
     e => {
       callbacks.on_error("mime: \{e}")
       return
@@ -316,16 +446,21 @@ pub fn decrypt_mime(
   let (body, attachments) = collect_body_and_attachments(collect_root)
   match body {
     Some(b) =>
-      // Delivery parity with the verification input (audit F29): the
-      // signature was verified over the canonicalized representation, so
-      // the visible body is delivered canonicalized too — trailing
-      // whitespace the verifier ignored can no longer differ from what
-      // was signed. Binary attachments stay byte-exact (line-based
-      // canonicalization would corrupt them; the residual surface is
-      // documented in the package README).
+      // Delivery parity with the verification input (audit F29), scoped
+      // to signed content (hacker-round JEV j12): "verification face =
+      // delivery face" only holds where a signature was actually
+      // verified — for unsigned mail the canonicalizer silently edited
+      // user content (trailing spaces, final newline) without any
+      // verification reason. Signed bodies are delivered canonicalized;
+      // unsigned bodies byte-exact. Binary attachments stay byte-exact
+      // either way (line-based canonicalization would corrupt them).
       callbacks.on_body(
         @utf8.decode_lossy(
-          mime_canonicalize(b.content.exact_view()).exact_view(),
+          (if verifiable {
+            mime_canonicalize(b.content.exact_view())
+          } else {
+            b.content
+          }).exact_view(),
         ),
         b.mimetype,
       )

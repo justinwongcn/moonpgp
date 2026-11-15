@@ -98,11 +98,20 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
     key_id = r.read_bytes(8)
   }
   let algo = pub_key_algo_of_number(r.read_u8())
+  // Exact consumption for every shaped branch (audit F6 + hacker-round
+  // residual, JEV j5): the F6 guard landed on the RSA branch alone, so
+  // trailing octets after an X25519/ECDH wrapped key were silently
+  // dropped — and dropped again on re-serialization.
   match algo {
     X25519 => {
       let eph = r.read_bytes(32)
       let size = r.read_u8()
       let wrapped = r.read_bytes(size)
+      guard r.remaining() == 0 else {
+        @error.malformed(
+          "packet: X25519 PKESK has \{r.remaining()} trailing octets after the wrapped key",
+        )
+      }
       PkeskPacket::{
         version,
         key_id,
@@ -117,6 +126,11 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
       let eph = r.read_mpi()
       let size = r.read_u8()
       let wrapped = r.read_bytes(size)
+      guard r.remaining() == 0 else {
+        @error.malformed(
+          "packet: ECDH PKESK has \{r.remaining()} trailing octets after the wrapped key",
+        )
+      }
       PkeskPacket::{
         version,
         key_id,

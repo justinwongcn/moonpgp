@@ -356,6 +356,14 @@ fn S2KBudget::charge_argon2(
   memory_kib : Int32,
 ) -> Unit {
   let units = (passes.to_int64() * memory_kib.to_int64() + 65535L) / 65536L
+  // A charge may never DECREASE the counter (hacker-round residual, JEV
+  // j4/j13): a caller-supplied negative cap flows straight into this
+  // product, and a negative `charged` disables the budget gate for the
+  // rest of the message. Non-positive units book nothing; the negative
+  // cap itself is refused at the pub entry points.
+  if units <= 0L {
+    return
+  }
   self.charged = self.charged +
     (if units > S2K_MAX_CHARGE.to_int64() {
       S2K_MAX_CHARGE
@@ -390,6 +398,12 @@ pub fn decrypt_binary_with_password(
   argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
   max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> Bytes raise {
+  // Fail fast on a nonsensical cap (JEV j4/j13): zero or negative only
+  // ever served to poison the S2K budget (or fail Argon2 derivation
+  // obscurely); there is no legitimate 0-KiB memory cap.
+  guard argon2_max_memory_kib >= 1 else {
+    @error.fail("api: argon2_max_memory_kib must be positive")
+  }
   let packets = @packet.parse_packets(data)
   // A definitive passphrase failure frames the final report; any other
   // error (Argon2 cap, malformed packet) is re-raised unchanged so its
@@ -437,7 +451,19 @@ pub fn decrypt_binary_with_password(
           if unwrap_definitive {
             // The AEAD unwrap already proved the passphrase right; a
             // payload failure here is corruption, not a passphrase
-            // problem.
+            // problem. NOTE (E7, cleanup round): the v4-SKESK branch
+            // below deliberately does the OPPOSITE — a v4 SKESK has no
+            // integrity of its own, so a wrong passphrase can unwrap to
+            // structurally plausible garbage whose wrongness only
+            // surfaces at the MDC, and the failure MUST be classified as
+            // a passphrase error to keep the retry loop honest. The key
+            // path (api/pubkey.mbt) reports the same MDC failure as
+            // Malformed because a PKESK unwrap with the right key is
+            // deterministic. The class drift between the two entry
+            // points is inherent to the v4 SKESK format, not a bug: the
+            // password path cannot distinguish tampering from a wrong
+            // passphrase, and guessing "corruption" would break the
+            // wrong-passphrase retry for every legacy message.
             last_error = Some(@error.Malformed(msg~))
           } else {
             passphrase_error = Some(msg)

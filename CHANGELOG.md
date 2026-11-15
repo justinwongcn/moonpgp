@@ -65,6 +65,85 @@ a released version when that version is published to mooncakes.io.
 - `aes_key_unwrap`'s integrity check went through `ct_equal` like every
   other check (the early-exit byte loop was the lone constant-time
   outlier).
+- Decoded header output gets a full control-character filter (C0, C1,
+  DEL) applied once at the decode boundary: raw header text never went
+  through the encoded-word-only filter, so a plain `Subject: \x1B[2J`
+  reached the terminal verbatim, and UTF-8 C1 controls (U+009B CSI,
+  U+0085 NEL) plus DEL rode through the byte filter inside multibyte
+  sequences. The encode side refuses the C1 band too.
+- The String MIME helpers (`split_multipart`) match the byte layer on
+  two more RFC 2046 shapes: delimiter lines may carry transport padding
+  (trailing blanks/tabs), and a message missing its closing delimiter
+  delivers the trailing part instead of failing.
+- Armor END lines tolerate trailing transport whitespace exactly like
+  BEGIN lines (a regression from the 2026-11-12 strictness round: one
+  trailing space made valid armor unparseable).
+- S2K derivation caps `key_len` on every specifier flavor (Iterated and
+  Argon2 were unbounded on direct construction), Argon2 parameters must
+  be positive rather than merely non-zero, the decrypt entry points
+  refuse a zero/negative Argon2 memory cap, and a budget charge can
+  never decrease the counter — a negative cap used to disable the S2K
+  budget for the rest of the message.
+- X25519/ECDH PKESK parsing consumes the body exactly; trailing octets
+  were silently dropped (and dropped again on re-serialization) while
+  the RSA branch already refused them.
+- Issuer Key ID/Fingerprint length gates cover the unhashed signature
+  area too — where gpg actually places Issuer Key ID — and
+  `issuer_key_id()` skips ragged bodies on directly constructed packets.
+- mailreader header parsing: a nameless header line (`:junk`) no longer
+  glues attacker-controlled text onto the next header's value, nor
+  blanks the last real one (a StringBuilder-rewrite regression).
+- SMTP validates the EHLO domain with the same wire discipline as the
+  envelope addresses (a CRLF in the pub `ehlo_domain` parameter
+  injected commands), and the TLS path's line reader carries the same
+  1 MiB per-line cap the plaintext path has.
+- The mailreader UIDVALIDITY state file percent-encodes `|`, `%`, CR
+  and LF in its key components (a folder like `Work|2024` collided
+  across entries and false-rejected a legitimate generation), SELECT
+  scans the bracketed response code for UIDVALIDITY in any position
+  (RFC 3501 allows any code order), and the value parses the full
+  unsigned 32-bit range.
+- The export gate requires EVERY component locked, not just one: a
+  mixed certificate (plaintext primary key, passphrase-protected
+  subkey) passed the old "any component locked" check and wrote the
+  primary's plaintext secret material to disk by default.
+- mailreader's list rows pass server-controlled fields (IMAP flags,
+  dates) through the same terminal-control filter as decoded headers —
+  a hostile server could otherwise escape the terminal through the
+  sibling field.
+- `verify_pgp_mime_signed` and `decrypt_mime` verify against the same
+  canonicalizer: they used to disagree on messages carrying trailing
+  whitespace or an extra blank line (one reported Ok, the other Failed).
+- The String `split_multipart` ignores the epilogue after the closing
+  delimiter exactly like the byte layer (an epilogue line shaped like
+  the boundary used to revive a phantom part).
+
+- Debug formatting of the pki value carriers (`RsaPrivateKey`,
+  `Ed25519SecretKey`, `X25519SecretKey`) is redacted to lengths; the
+  derived Debug printed CRT factors, Ed25519 seeds and X25519 scalars
+  into any log or snapshot.
+- RFC 2047 decoding is linear again: every failed encoded-word opener
+  rescanned the whole remaining header value, so a Subject crafted from
+  `=?A?B?C?D?` repetitions made mailreader hang (600 KB ran for tens of
+  minutes; the scan is bounded to the RFC 2047 word length now, ~1 ms).
+- `verify_cleartext` accepts CRLF line endings (Windows gpg clearsign,
+  SMTP-stored mail): the header-section parser treated the CR of the
+  blank-line terminator as a header and raised "illegal armor header".
+- `decrypt_mime` locates the armored payload by MIME structure instead
+  of scanning the whole mail for the first armor block: a decoy PUBLIC
+  KEY or SIGNATURE part placed earlier used to hijack the decryption
+  attempt and break delivery of the real message. Bare armored input
+  still decrypts through the fallback scan.
+- A headerless decrypted payload (bare armored message carrying plain
+  text) delivers its content as text/plain instead of an empty body:
+  its lines were parsed AS headers and dropped.
+- `SecretKeyPacket::to_body` refuses S2K usage 255 and legacy cipher-id
+  usage octets on a v6 packet — the same shapes `parse` rejects — so a
+  direct construction can no longer serialize a packet this library
+  refuses to read.
+- mailreader's delivery gate now matches its own comment: NotSigned and
+  NoVerifier with verifiers requested exit non-zero instead of
+  archiving silently.
 
 ### Changed
 
@@ -107,6 +186,22 @@ a released version when that version is published to mooncakes.io.
   reports `Failed` on a malformed embedded signature instead of raising;
   mailreader now persists per-folder UIDVALIDITY and refuses a `--fetch`
   against a different mailbox generation than the one last listed.
+- **Breaking:** `serialize_packet_old` raises on unknown packet tags;
+  the old-format header truncated the tag number and silently
+  re-labeled `Unknown(70)` as tag 6 (PublicKey). Signature changes from
+  `Bytes` to `Bytes raise`.
+- **Breaking (behavior):** PGP/MIME delivers unsigned bodies byte-exact;
+  only signature-covered bodies are canonicalized. The previous blanket
+  canonicalization silently edited unsigned mail (stripped trailing
+  spaces, forced a trailing CRLF).
+- FETCH literals are capped at 64 MB (was 4 MB): a full-message
+  `BODY.PEEK[]` fetch is one literal and real attachment mail exceeds
+  4 MB, which made legitimate mail unfetchable. The 512 MiB cumulative
+  session budget still bounds abuse, and headers stay KB-scale.
+- `MailboxState::uidvalidity` widened to Int64: UIDVALIDITY is an
+  unsigned 32-bit value and Int32 parsing turned every value >= 2^31
+  into "unparsed", mismatching the stored generation and hard-rejecting
+  legitimate sessions.
 
 ### Security
 

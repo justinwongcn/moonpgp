@@ -27,6 +27,8 @@ pub fn message_id(Bytes, String) -> String raise
 
 pub fn rfc5322_date(Int64, Int32) -> String
 
+pub fn sanitize_terminal(String) -> String
+
 // Errors
 
 // Types and methods

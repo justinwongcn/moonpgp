@@ -73,7 +73,7 @@ pub fn salt_size_of_hash(Int32) -> Int32 raise
 
 pub fn serialize_packet(PacketTag, BytesView) -> Bytes raise
 
-pub fn serialize_packet_old(PacketTag, BytesView) -> Bytes
+pub fn serialize_packet_old(PacketTag, BytesView) -> Bytes raise
 
 pub fn session_key_checksum(BytesView) -> Int32
 

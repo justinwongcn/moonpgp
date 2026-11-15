@@ -22,7 +22,10 @@
 /// the stale-UID safety net is the UID echo check in imap_fetch_message.
 pub(all) struct MailboxState {
   mut exists : Int32
-  mut uidvalidity : Int32
+  // Int64 (JEV j14): UIDVALIDITY is an unsigned 32-bit value on the
+  // wire; Int32 parsing turned every value >= 2^31 into "unparsed" (0),
+  // and a stored 42 vs unparsed 0 hard-rejected a legitimate session.
+  mut uidvalidity : Int64
 }
 
 ///|
@@ -257,25 +260,57 @@ pub fn ImapClient::imap_select(
         }
       _ => ()
     }
-    // `* OK [UIDVALIDITY v] ...`; both the single-code and the merged
-    // `[UIDVALIDITY n UIDNEXT m]` forms occur in the wild
+    // `* OK [UIDVALIDITY v] ...` — response codes may appear in any
+    // order inside the brackets (RFC 3501 resp-text-code; servers also
+    // emit the merged `[UIDNEXT n UIDVALIDITY m]` form), so scan the
+    // bracketed code for the UIDVALIDITY token instead of pinning it
+    // first (JEV j14): a reordered code left uidvalidity at 0 and the
+    // recorded generation hard-rejected a legitimate fetch.
     if line.length() >= 2 {
       match line[1] {
-        Atom(code) =>
-          if code.has_prefix("[UIDVALIDITY ") && code.has_suffix("]") {
-            let inner = code[13:code.length() - 1].to_owned()
+        Atom(code) => {
+          let c = code.to_string()
+          if c.has_prefix("[") && c.has_suffix("]") && c.length() >= 2 {
+            let inner = c[1:c.length() - 1].to_owned()
             let tokens = inner.split(" ").collect()
-            if tokens.length() >= 1 {
-              match parse_int(tokens[0].to_owned()) {
-                Some(v) => self.state.uidvalidity = v
-                None => ()
+            for idx in 0..<(tokens.length() - 1) {
+              if tokens[idx] == "UIDVALIDITY" {
+                let mut val = tokens[idx + 1].to_owned()
+                if val.has_suffix("]") {
+                  val = val[0:val.length() - 1].to_owned()
+                }
+                match parse_int64(val) {
+                  Some(v) => self.state.uidvalidity = v
+                  None => ()
+                }
               }
             }
           }
+        }
         _ => ()
       }
     }
   }
+}
+
+///|
+
+///|
+/// Same discipline as `parse_int`, widening to Int64 so the full
+/// unsigned 32-bit range (UIDVALIDITY, UID) stays representable (JEV
+/// j14).
+pub fn parse_int64(s : String) -> Int64? {
+  guard s.length() > 0 else { return None }
+  let mut v = 0L
+  for c in s {
+    let d = c.to_int() - 48
+    guard d >= 0 && d <= 9 else { return None }
+    if v > (2147483647L * 2L + 1L - d.to_int64()) / 10L {
+      return None
+    }
+    v = v * 10L + d.to_int64()
+  }
+  Some(v)
 }
 
 ///|

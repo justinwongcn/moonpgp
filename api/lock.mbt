@@ -296,6 +296,11 @@ pub fn PrivateKey::unlock(
   passphrase : String,
   argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
 ) -> PrivateKey raise {
+  // Fail fast on a nonsensical cap (JEV j4/j13): there is no legitimate
+  // 0-KiB Argon2 memory cap.
+  guard argon2_max_memory_kib >= 1 else {
+    @error.fail("api: argon2_max_memory_kib must be positive")
+  }
   let subkeys : Array[SecretSubkeyCert] = []
   for c in self.subkeys {
     subkeys.push(SecretSubkeyCert::{
@@ -389,6 +394,25 @@ pub fn PrivateKey::lock_argon2(
     subkeys,
     revocations: self.revocations,
   }
+}
+
+///|
+/// True when EVERY secret component (primary key and every subkey) is
+/// passphrase-protected or a dummy. The export gate needs the
+/// conjunction (hacker-round composition finding E1): `is_locked`'s
+/// "any component" semantics let a mixed certificate — plaintext
+/// primary, locked subkey — pass the gate and write the primary's
+/// plaintext material to disk by default.
+fn PrivateKey::is_fully_locked(self : PrivateKey) -> Bool {
+  if self.primary.s2k_usage == 0 {
+    return false
+  }
+  for c in self.subkeys {
+    if c.secret.s2k_usage == 0 {
+      return false
+    }
+  }
+  true
 }
 
 ///|

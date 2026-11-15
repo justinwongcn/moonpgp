@@ -88,7 +88,7 @@ test "@mime.decrypt_mime: unsigned payload with verifiers reports NotSigned" {
   // Both sides NotSigned -> status NotSigned (gopenpgp scenario_11 shape).
   assert_eq(cb.errors.length(), 2)
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("just a plain payload\r\n", "text/plain")])
+  assert_eq(cb.bodies, [("just a plain payload\n", "text/plain")])
 }
 
 ///|
@@ -147,7 +147,7 @@ test "@mime.decrypt_mime: non-mime plaintext payload with verifiers is NotSigned
   let cb = new_callbacks()
   @mime.decrypt_mime(armored, [key], verifiers=[key.to_public()], callbacks=cb)
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("plain payload\r\n", "text/plain")])
+  assert_eq(cb.bodies, [("plain payload\n", "text/plain")])
 }
 
 ///|
@@ -179,7 +179,7 @@ test "@mime.decrypt_mime: password path with verifiers and unsigned payload is N
   // two errors (the password path must not fake an Ok).
   assert_eq(cb.errors.length(), 2)
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("plain password payload\r\n", "text/plain")])
+  assert_eq(cb.bodies, [("plain password payload\n", "text/plain")])
 }
 
 ///|
@@ -241,11 +241,11 @@ test "@mime.decrypt_mime: unknown issuer embedded with unsigned mime" {
   // -> two errors, worst status NoVerifier.
   assert_eq(cb.errors.length(), 2)
   assert_eq(cb.verified, [@api.NoVerifier])
-  assert_eq(cb.bodies, [("unsigned mime\r\n", "text/plain")])
+  assert_eq(cb.bodies, [("unsigned mime\n", "text/plain")])
 }
 
 ///|
-test "@mime.decrypt_mime: headerless payload delivers empty body" {
+test "@mime.decrypt_mime: headerless payload delivers as raw text (N1)" {
   let key = @api.generate_key("DecryptMime <dm@example.com>", bits=3072)
   let armored = @api.encrypt_to_recipients(
     @primitives.utf8_bytes("just text, no mime structure\n"),
@@ -253,10 +253,12 @@ test "@mime.decrypt_mime: headerless payload delivers empty body" {
   )
   let cb = new_callbacks()
   @mime.decrypt_mime(armored, [key], verifiers=[key.to_public()], callbacks=cb)
-  // No blank line means everything is headers per RFC 5322 (net/mail
-  // behaves the same inside gopenpgp): empty body, NotSigned + 2 errors.
+  // A headerless literal is raw content, not MIME — its header block
+  // carries no Content-Type, so its lines used to be parsed AS headers
+  // and delivered empty (cleanup round N1 flips the old strict-RFC
+  // pin). The payload is unsigned: NotSigned with verifiers requested.
   assert_eq(cb.verified, [@api.NotSigned])
-  assert_eq(cb.bodies, [("", "text/plain")])
+  assert_eq(cb.bodies, [("just text, no mime structure\n", "text/plain")])
 }
 
 ///|

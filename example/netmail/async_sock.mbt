@@ -74,6 +74,7 @@ impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn read_line(
   self : AsyncSock[R],
 ) -> String raise {
   let sb = StringBuilder()
+  let mut count = 0
   while true {
     while self.rstart < self.rend {
       let v = self.buf[self.rstart].to_int()
@@ -84,6 +85,13 @@ impl[R : @io.Reader + @io.Writer] Sock for AsyncSock[R] with fn read_line(
           return s[0:s.length() - 1].to_owned()
         }
         return s
+      }
+      // The F25 port skipped the cap it was ported for (JEV j9): a
+      // hostile TLS-path server streaming bytes without a newline grew
+      // the builder without bound. Same limit as LineBuffer.
+      count = count + 1
+      guard count < MAX_LINE_BYTES else {
+        @error.fail("mailnet: server line exceeds \{MAX_LINE_BYTES} octets")
       }
       match v.to_char() {
         Some(c) => sb.write_char(c)

@@ -118,17 +118,14 @@ test "content_type_boundary uses strict parameter parsing (F28)" {
 test "split_multipart requires an exact close delimiter (F28)" {
   let body = "--B\r\nalpha\r\n--B--evil\r\ntrailer\r\n"
   // "--B--evil" is not a close of boundary B: the whole body is one
-  // unterminated part... which the strict split rejects (no closed part).
-  let raised = try {
-    ignore(@mime.split_multipart(body, "B"))
-    false
-  } catch {
-    _ => true
-  }
-  assert_true(raised)
-  // A padded close still closes (control).
-  let padded = "--B\r\nalpha\r\n--B--  \r\n"
-  let parts = @mime.split_multipart(padded, "B")
+  // unterminated part, which the byte version flushes at EOF — the
+  // String twin now matches (hacker-round parity, JEV j2).
+  let parts = @mime.split_multipart(body, "B")
   assert_eq(parts.length(), 1)
   assert_true(parts[0].contains("alpha"))
+  // A padded close still closes (control).
+  let padded = "--B\r\nalpha\r\n--B--  \r\n"
+  let parts2 = @mime.split_multipart(padded, "B")
+  assert_eq(parts2.length(), 1)
+  assert_true(parts2[0].contains("alpha"))
 }

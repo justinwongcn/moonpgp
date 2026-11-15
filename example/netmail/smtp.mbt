@@ -140,6 +140,10 @@ async fn smtp_greeting(sock : &Sock) -> Unit {
 // positive.
 #warnings("-unused_value")
 async fn smtp_starttls_ehlo(sock : &Sock, ehlo_domain : String) -> Unit {
+  // Same wire discipline as the envelope (F31 residual, JEV j9):
+  // ehlo_domain is a pub parameter, and a CRLF in it injects commands
+  // exactly like a CRLF in an address would.
+  validate_envelope_address(ehlo_domain, "EHLO domain")
   smtp_command(sock, "EHLO \{ehlo_domain}")
   let (_, caps) = expect(sock, 250, "EHLO")
   let has_starttls = caps.iter().any(line => line.has_prefix("STARTTLS"))
@@ -180,6 +184,10 @@ async fn smtp_session(
   ehlo_domain : String,
   auth : (String, String)?,
 ) -> Unit {
+  // Same wire discipline as the envelope (F31 residual, JEV j9):
+  // ehlo_domain is a pub parameter, and a CRLF in it injects commands
+  // exactly like a CRLF in an address would.
+  validate_envelope_address(ehlo_domain, "EHLO domain")
   smtp_command(sock, "EHLO \{ehlo_domain}")
   let (_, caps) = expect(sock, 250, "EHLO")
   match auth {

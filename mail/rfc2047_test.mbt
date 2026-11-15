@@ -147,7 +147,7 @@ test "build_encrypted_mail encodes a Chinese subject end-to-end" {
 test "decoded encoded words strip C0 controls but keep tab (F21)" {
   // B-encoded CR/LF/ESC: the encode side refuses them; the decode side
   // used to pass them raw into terminal-bound output.
-  let crlf = @mail.decode_rfc2047("=?utf-8?B? YQ0KYg==?=")
+  let crlf = @mail.decode_rfc2047("=?utf-8?B?YQ0KYg==?=")
   assert_true(!crlf.contains("\r"))
   assert_true(!crlf.contains("\n"))
   let esc = @mail.decode_rfc2047("=?utf-8?B?G1sySg==?=")

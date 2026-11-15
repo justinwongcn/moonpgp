@@ -204,7 +204,11 @@ pub fn decode_all(text : String) -> Array[ArmorBlock] raise {
           let l = lines[i]
           // END line matches whole (audit F7): the BEGIN side is strict,
           // and a prefix match let trailing junk ride in on the END line.
-          if l == armor_type.end_marker() {
+          // Trailing blanks/tabs stay tolerated (hacker-round residual,
+          // JEV j3): `line_is_marker` is the same helper the BEGIN side
+          // uses — whole-line equality modulo transport whitespace, so
+          // "END-----ANYTHING" still fails while "END----- " parses.
+          if line_is_marker(l, armor_type.end_marker()) {
             closed = true
             i = i + 1
             break

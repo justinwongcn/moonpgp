@@ -551,7 +551,11 @@ test "unlocked export requires explicit opt-in (F17)" {
   let armored = key.to_armored(allow_unlocked=true)
   assert_true(armored.contains("BEGIN PGP PRIVATE KEY BLOCK"))
   // A locked key exports without the opt-in: its material is encrypted.
+  // The third state needs its own assertion (hacker-round A6): if the
+  // gate were ever tightened to `allow_unlocked || is_locked` becoming
+  // `&&`, this is the assertion that goes red.
   let locked = key.lock("passphrase-1")
+  assert_true(locked.to_armored().contains("BEGIN PGP PRIVATE KEY BLOCK"))
   assert_true(
     locked
     .to_armored(allow_unlocked=true)

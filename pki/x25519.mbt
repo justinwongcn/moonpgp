@@ -21,7 +21,6 @@ pub fn curve25519_oid() -> Bytes {
 /// from parsed/generated wire material and reads the fields directly.
 /// The guarded, invariant-checked surface is `@api.PrivateKey`/`PublicKey`;
 /// treat this struct as plain data (policy note, HANDOFF 2026-10-06).
-#derive(Debug)
 pub(all) struct X25519SecretKey {
   /// 32-octet little-endian scalar, already clamped.
   scalar : Bytes
@@ -136,6 +135,16 @@ pub fn ecdh_kdf_sha256(
 /// (RFC 9580 §11.5).
 pub fn ecdh_anonymous_sender() -> Bytes {
   @primitives.utf8_bytes("Anonymous Sender    ")
+}
+
+///|
+/// Redacting Debug (F16 residual, JEV j11): the scalar IS the private key.
+pub impl @moonbitlang/core/debug.Debug for X25519SecretKey with fn to_repr(
+  self : X25519SecretKey,
+) -> @moonbitlang/core/debug.Repr {
+  @moonbitlang/core/debug.Repr::Repr(
+    "X25519SecretKey scalar=<\{self.scalar.length()} octets> public=<\{self.public.length()} octets>",
+  )
 }
 
 ///|

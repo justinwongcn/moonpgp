@@ -243,6 +243,16 @@ fn header_value(headers : Bytes, name : String) -> String? {
       value.write_string(line.trim().to_owned())
       continue
     }
+    let colon = line.split(":").collect()
+    // A line that does not parse as a header — no colon, or a nameless
+    // ":junk" — is skipped wholesale (F23 regression, JEV j8). It is not
+    // a header start, so it must neither write into `value` (that glued
+    // attacker text onto the next real header's value: "junk"+"real" ->
+    // "junkreal") nor flush the previous header (that reset `value` and
+    // made the last real header read back as empty).
+    if colon.length() < 2 || colon[0] == "" {
+      continue
+    }
     // flush the previous header before starting a new one
     if current_name != "" {
       if current_name == name {
@@ -250,13 +260,10 @@ fn header_value(headers : Bytes, name : String) -> String? {
       }
       value = StringBuilder()
     }
-    let colon = line.split(":").collect()
-    if colon.length() >= 2 {
-      current_name = colon[0].to_lower().to_owned()
-      value.write_string(
-        line[colon[0].length() + 1:line.length()].trim().to_owned(),
-      )
-    }
+    current_name = colon[0].to_lower().to_owned()
+    value.write_string(
+      line[colon[0].length() + 1:line.length()].trim().to_owned(),
+    )
   }
   if current_name != "" && current_name == name {
     found = Some(value.to_string())
@@ -307,13 +314,41 @@ fn uidvalidity_state_path(cfg : Config) -> String {
 }
 
 ///|
+/// Percent-encode one state-file key component (JEV j14): `|` is the
+/// record separator, so a folder like "Work|2024" collided across
+/// entries and made `check_uidvalidity` hard-reject a legitimate
+/// generation. `%` escapes itself to keep the encoding unambiguous.
+fn state_key_component(s : String) -> String {
+  let out = StringBuilder()
+  for c in s {
+    match c {
+      '%' => out.write_string("%25")
+      '|' => out.write_string("%7C")
+      '\r' => out.write_string("%0D")
+      '\n' => out.write_string("%0A")
+      _ => out.write_char(c)
+    }
+  }
+  out.to_string()
+}
+
+///|
+fn uidvalidity_state_key(
+  cfg : Config,
+  user : String,
+  folder : String,
+) -> String {
+  "\{state_key_component(cfg.host)}|\{state_key_component(user)}|\{state_key_component(folder)}"
+}
+
+///|
 fn record_uidvalidity(
   cfg : Config,
   user : String,
   folder : String,
-  uidvalidity : Int32,
+  uidvalidity : Int64,
 ) -> Unit raise {
-  let key = "\{cfg.host}|\{user}|\{folder}"
+  let key = uidvalidity_state_key(cfg, user, folder)
   let path = uidvalidity_state_path(cfg)
   let existing = @fs.read_file_to_string(path) catch { _ => "" }
   let kept : Array[String] = []
@@ -332,9 +367,9 @@ fn check_uidvalidity(
   cfg : Config,
   user : String,
   folder : String,
-  uidvalidity : Int32,
+  uidvalidity : Int64,
 ) -> Unit raise {
-  let key = "\{cfg.host}|\{user}|\{folder}"
+  let key = uidvalidity_state_key(cfg, user, folder)
   let existing = @fs.read_file_to_string(uidvalidity_state_path(cfg)) catch {
     _ => ""
   }
@@ -379,11 +414,16 @@ fn list_mailbox(cfg : Config, user : String, password : String) -> Unit raise {
           None => "?"
         }
         let date = match header_value(s.headers, "date") {
-          Some(v) => v
-          None => s.internaldate
+          // Server-controlled text hits the terminal directly here (the
+          // decoded from/subject go through decode_rfc2047's filter); a
+          // hostile server escapes through the sibling field otherwise
+          // (hacker-round composition finding E2).
+          Some(v) => @mail.sanitize_terminal(v)
+          None => @mail.sanitize_terminal(s.internaldate)
         }
+        let flags = @mail.sanitize_terminal(s.flags)
         println(
-          "seq=\{s.seq} uid=\{s.uid} size=\{s.size} \{s.flags} | \{date} | \{from} | \{subject}",
+          "seq=\{s.seq} uid=\{s.uid} size=\{s.size} \{flags} | \{date} | \{from} | \{subject}",
         )
       }
     },
@@ -439,20 +479,38 @@ fn fetch_and_decrypt(
         @fs.write_bytes_to_file(path, a.1)
         println("attachment: \{path} (\{a.1.length()} bytes)")
       }
-      if cb.verified is [Ok] {
-        println("decrypt+verify OK")
-      } else if cb.errors.length() > 0 ||
-        cb.verified is [Failed] ||
-        cb.verified is [KeyRevoked] ||
-        cb.verified is [Expired] {
-        // D2: a signature from a revoked or expired key is not a
-        // success either — only [Ok] (or the empty/no-verifier case)
-        // counts as a clean delivery, and anything else must not be
-        // archived silently with exit code 0.
-        abort("mailreader: decrypt/verify FAILED")
+      match delivery_failure(cb.errors.length(), cb.verified) {
+        None => println("decrypt+verify OK")
+        Some(why) =>
+          // D2: a signature from a revoked or expired key is not a
+          // success either — only [Ok] (or the empty/no-verifier case)
+          // counts as a clean delivery, and anything else must not be
+          // archived silently with exit code 0. The gate below is the
+          // comment made true (cleanup round E6): NotSigned/NoVerifier
+          // used to fall between the branches and exit 0.
+          abort("mailreader: decrypt/verify FAILED (\{why})")
       }
     },
   )
+}
+
+///|
+/// D2 delivery gate (cleanup round E6): non-zero exit and no archiving
+/// unless the delivery is clean — verification [Ok] (or nothing
+/// attempted, when no verifiers were requested) and no reported errors.
+fn delivery_failure(
+  error_count : Int32,
+  verified : Array[@api.VerifyStatus],
+) -> String? {
+  if error_count > 0 {
+    return Some("\{error_count} error(s) reported")
+  }
+  for s in verified {
+    if !(s is @api.Ok) {
+      return Some(@netmail.status_names([s]))
+    }
+  }
+  None
 }
 
 ///|

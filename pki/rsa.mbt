@@ -24,7 +24,6 @@ pub(all) struct RsaPublicKey {
 ///|
 /// RSA private key with CRT parameters. Value carrier, deliberately
 /// `pub(all)` (see RsaPublicKey).
-#derive(Debug)
 pub(all) struct RsaPrivateKey {
   public : RsaPublicKey
   d : BigInt
@@ -236,6 +235,18 @@ pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise {
   let d = mod_inverse(e, phi)
   let u = mod_inverse(p, q)
   RsaPrivateKey::{ public: { n, e, }, d, p, q, u, }
+}
+
+///|
+/// Redacting Debug (F16 residual, JEV j11): the CRT factors are the
+/// private key itself — the derived repr printed them in full. Public
+/// material stays visible; secret components show a bit length only.
+pub impl @moonbitlang/core/debug.Debug for RsaPrivateKey with fn to_repr(
+  self : RsaPrivateKey,
+) -> @moonbitlang/core/debug.Repr {
+  @moonbitlang/core/debug.Repr::Repr(
+    "RsaPrivateKey public=\{self.public.to_repr().to_string()} d=<\{self.d.bit_length()} bits> p=<\{self.p.bit_length()} bits> q=<\{self.q.bit_length()} bits> u=<\{self.u.bit_length()} bits>",
+  )
 }
 
 ///|

@@ -52,15 +52,14 @@ pub(all) struct Ed25519PublicKeyValue {
 pub fn Ed25519PublicKeyValue::to_repr(Self) -> @debug.Repr
 pub fn Ed25519PublicKeyValue::verify(Self, BytesView, BytesView) -> Bool raise
 
-#derive(@debug.Debug)
 pub(all) struct Ed25519SecretKey {
   seed : Bytes
   public : Bytes
 }
 pub fn Ed25519SecretKey::sign(Self, BytesView) -> Bytes raise
 pub fn Ed25519SecretKey::to_repr(Self) -> @debug.Repr
+pub impl @debug.Debug for Ed25519SecretKey
 
-#derive(@debug.Debug)
 pub(all) struct RsaPrivateKey {
   public : RsaPublicKey
   d : @bigint.BigInt
@@ -72,6 +71,7 @@ pub fn RsaPrivateKey::pkcs1_v15_decrypt(Self, BytesView) -> Bytes raise
 pub fn RsaPrivateKey::pkcs1_v15_sign(Self, @primitives.HashId, BytesView) -> Bytes raise
 pub fn RsaPrivateKey::raw_decrypt(Self, @bigint.BigInt) -> @bigint.BigInt
 pub fn RsaPrivateKey::to_repr(Self) -> @debug.Repr
+pub impl @debug.Debug for RsaPrivateKey
 
 #derive(@debug.Debug)
 pub(all) struct RsaPublicKey {
@@ -84,13 +84,13 @@ pub fn RsaPublicKey::pkcs1_v15_verify(Self, @primitives.HashId, BytesView, Bytes
 pub fn RsaPublicKey::raw_encrypt(Self, @bigint.BigInt) -> @bigint.BigInt
 pub fn RsaPublicKey::to_repr(Self) -> @debug.Repr
 
-#derive(@debug.Debug)
 pub(all) struct X25519SecretKey {
   scalar : Bytes
   public : Bytes
 }
 pub fn X25519SecretKey::to_repr(Self) -> @debug.Repr
 pub fn X25519SecretKey::wire_mpi(Self) -> Bytes
+pub impl @debug.Debug for X25519SecretKey
 
 // Type aliases
 

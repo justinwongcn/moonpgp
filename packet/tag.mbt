@@ -125,7 +125,15 @@ pub fn serialize_packet(tag : PacketTag, body : BytesView) -> Bytes raise {
 
 ///|
 /// Serialize one packet with an old-format header and fixed-length encoding.
-pub fn serialize_packet_old(tag : PacketTag, body : BytesView) -> Bytes {
+pub fn serialize_packet_old(tag : PacketTag, body : BytesView) -> Bytes raise {
+  // Same unknown-tag refusal as the new-format path (audit F8 + hacker
+  // round residual, JEV j7): `0x80 | (n << 2) | mode` truncates `n` into
+  // the tag bits, silently re-labeling e.g. Unknown(70) as tag 6.
+  match tag {
+    PacketTag::Unknown(_) =>
+      @error.malformed("packet: refusing to serialize an unknown packet tag")
+    _ => ()
+  }
   let w = Writer::new()
   let len = body.length()
   let mode : Int32 = if len < 256 { 0 } else if len < 65536 { 1 } else { 2 }

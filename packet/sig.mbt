@@ -341,6 +341,28 @@ fn validate_hashed_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
 }
 
 ///|
+/// The Issuer exact-length gates alone (audit F5, hacker-round residual):
+/// applied to the unhashed area as well, where gpg actually places Issuer
+/// Key ID and where a ragged body would flow back out of
+/// `issuer_key_id()` to slicing callers. All other subpacket types stay
+/// lenient on the unhashed side (untrusted carrier data).
+fn validate_issuer_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
+  for sp in subs {
+    let n = sp.body.length()
+    let bad = match sp.sub_type {
+      SIGSUB_ISSUER_KEY_ID => n != 8
+      SIGSUB_ISSUER_FINGERPRINT => n != 21 && n != 33
+      _ => false
+    }
+    guard !bad else {
+      @error.malformed(
+        "packet: signature subpacket \{sp.sub_type} has an invalid body length of \{n}",
+      )
+    }
+  }
+}
+
+///|
 /// RFC 9580 §9.5 Table 23: the v6 signature salt size for a hash
 /// algorithm. Only SHA-2/SHA-3 have v6 salt sizes (MD5/SHA-1/RIPEMD-160
 /// are "N/A").
@@ -373,6 +395,12 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   validate_hashed_subpackets(hashed)
   let unhashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let unhashed = parse_subpackets(r.read_bytes(unhashed_len).exact_view())
+  // Issuer shapes are exact in BOTH areas (audit F5 + hacker-round
+  // residual, JEV j6): gpg puts Issuer Key ID in the unhashed area, and
+  // issuer_key_id() hands those bodies to callers who slice them — the
+  // F5 gate initially covered only the hashed side. Everything else
+  // stays lenient here, per the unhashed-area contract below.
+  validate_issuer_subpackets(unhashed)
   let fast = r.read_u16()
   let salt : Bytes = if v6 {
     let salt_len = r.read_u8()
@@ -585,12 +613,15 @@ pub fn SignaturePacket::creation_time(self : SignaturePacket) -> Int32? {
 /// Issuer key id, preferring the type 16 (Issuer Key ID) subpacket; falls
 /// back to the issuer-fingerprint subpacket's trailing key id.
 pub fn SignaturePacket::issuer_key_id(self : SignaturePacket) -> Bytes? {
+  // Exact-length discipline even on direct construction (the struct is
+  // constructible without parse): a ragged body is skipped, never handed
+  // to slicing callers.
   match find_subpacket(self.hashed_subpackets, SIGSUB_ISSUER_KEY_ID) {
-    Some(b) => return Some(b)
+    Some(b) => if b.length() == 8 { return Some(b) }
     None => ()
   }
   match find_subpacket(self.unhashed_subpackets, SIGSUB_ISSUER_KEY_ID) {
-    Some(b) => return Some(b)
+    Some(b) => if b.length() == 8 { return Some(b) }
     None => ()
   }
   let fp = match

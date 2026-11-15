@@ -125,6 +125,13 @@ pub fn verify_cleartext(
   message : String,
   verifier : PublicKey,
 ) -> (String, VerifyStatus) raise {
+  // Line endings are normalized up front (cleanup round E5): Windows gpg
+  // and SMTP-stored mail carry CRLF, and the header-section parser's
+  // empty-line check turned the "\r" terminator into "illegal armor
+  // header". The digest canonicalization below normalizes either way,
+  // so LF and CRLF variants of the same message verify identically —
+  // the returned text is byte-equal too.
+  let message = message.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = message.split("\n").collect()
   let n = lines.length()
   let mut i = 0

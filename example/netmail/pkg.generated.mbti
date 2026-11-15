@@ -20,6 +20,8 @@ pub fn is_local_host(String) -> Bool
 
 pub fn parse_int(String) -> Int32?
 
+pub fn parse_int64(String) -> Int64?
+
 pub async fn smtp_send(&Sock, String, String, Array[String], String, (String, String)?) -> Unit
 
 pub fn status_names(Array[@api.VerifyStatus]) -> String
@@ -64,7 +66,7 @@ pub(all) struct MailSummary {
 
 pub(all) struct MailboxState {
   mut exists : Int32
-  mut uidvalidity : Int32
+  mut uidvalidity : Int64
 }
 
 pub(all) enum SmtpTlsMode {

@@ -77,20 +77,29 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
   let parts : Array[String] = []
   let mut current : Array[StringView]? = None
   let close = dash_boundary + "--"
+  // Byte-version parity (walk.mbt `finished`): everything after the
+  // close delimiter is epilogue and must be ignored entirely — without
+  // the stop flag, an epilogue line shaped like the dash-boundary would
+  // revive a part here (self-review finding F-R1).
+  let mut finished = false
   for line in lines {
+    if finished {
+      break
+    }
     // Close-detection parity with the byte version's line_is_close +
-    // rest_is_padding (audit F28): the delimiter must be exactly the
-    // dash-boundary, and a closing delimiter may only carry whitespace
-    // padding — "--B--evil" used to close a part.
-    let is_close = line == close ||
-      (line.has_prefix(close) && line_is_ws_padding(line[close.length():]))
-    let is_delim = line == dash_boundary
+    // line_is_delim (audit F28 + hacker-round residual): a delimiter may
+    // carry RFC 2046 transport padding (blanks/tabs before the CRLF),
+    // and a closing delimiter may only carry whitespace padding —
+    // "--B--evil" is neither close nor delimiter.
+    let is_close = line_is_delim_ws(line, close)
+    let is_delim = line_is_delim_ws(line, dash_boundary)
     if is_close || is_delim {
       match current {
         Some(c) => parts.push(join_lines(c))
         None => ()
       }
       if is_close {
+        finished = true
         current = None
       } else {
         current = Some([])
@@ -102,10 +111,29 @@ pub fn split_multipart(body : String, boundary : String) -> Array[String] raise 
       }
     }
   }
+  // Byte-version parity (walk.mbt flushes the trailing child at EOF):
+  // a message missing its closing delimiter still delivers the final
+  // part instead of discarding it.
+  match current {
+    Some(c) => parts.push(join_lines(c))
+    None => ()
+  }
   guard parts.length() > 0 else {
     @error.malformed("mime: no multipart parts found")
   }
   parts
+}
+
+///|
+/// Delimiter matching with transport-padding tolerance — the String twin
+/// of walk.mbt's `line_is_delim`/`rest_is_padding`: the line must be the
+/// delimiter followed only by blanks/tabs. "-evil" suffixes fail this,
+/// keeping "--B--evil" inert.
+fn line_is_delim_ws(line : StringView, delim : String) -> Bool {
+  if !line.has_prefix(delim) {
+    return false
+  }
+  line_is_ws_padding(line[delim.length():])
 }
 
 ///|
@@ -198,14 +226,18 @@ pub fn extract_pgp_signed(mime_text : String) -> PgpMimeSigned raise {
   }
   // The signature part's body (after its blank line) is the armor.
   let sig_armor = strip_leading_headers_keep_body(parts[1])
-  // The signed content: the raw first part, re-encoded to CRLF exactly as
-  // transmitted. Per the RFC 3156 convention the signed data ends with a
-  // CRLF; the split dropped it as boundary-attached, so restore it.
-  let signed_raw = parts[0].replace_all(old="\n", new="\r\n") + "\r\n"
-  PgpMimeSigned::{
-    signed_bytes: @primitives.utf8_bytes(signed_raw),
-    signature_armor: sig_armor,
-  }
+  // The signed content goes through the SAME canonicalizer the
+  // decrypt_mime verification path uses (hacker-round composition
+  // finding E4): extract_pgp_signed used to re-encode newlines without
+  // trimming trailing whitespace and to append a CRLF unconditionally,
+  // so a message with transport whitespace verified Ok here but Failed
+  // in decrypt_mime (or the reverse for the extra-blank-line shape).
+  // mime_canonicalize handles both the GnuPG and the Proton builder
+  // shapes and matches gpg's trailing-whitespace stripping.
+  let signed_bytes = mime_canonicalize(
+    @primitives.utf8_bytes(parts[0]).exact_view(),
+  )
+  PgpMimeSigned::{ signed_bytes, signature_armor: sig_armor, }
 }
 
 ///|

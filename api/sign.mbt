@@ -783,13 +783,19 @@ pub fn decrypt_and_verify(
   // v3 PKESKs (key id) as well as SEIPD v1 and v2 — this pipeline must not
   // be able to reject a message the library itself can produce.
   let mut inner_opt : Bytes? = None
-  let mut last_error : String? = None
+  // The caught error VALUE, not its string (hacker-round residual, JEV
+  // j13): re-raising preserves the error variant, while `fail(msg)`
+  // flattened unsupported/malformed into a generic failure whose text
+  // was the last failed key's message — attacker-influenced via a
+  // crafted PKESK, and a breaking change for callers matching on
+  // variants (the same mistake decrypt_binary_with_password never made).
+  let mut last_error : Error? = None
   for key in decryption_keys {
     // Per-key tolerance mirrors decrypt_and_verify_list (audit F14): one
     // key failing to open the message must not stop the next one.
     let inner : Bytes? = decrypt_inner_with_key(packets, key) catch {
       e => {
-        last_error = Some(e.to_string())
+        last_error = Some(e)
         None
       }
     }
@@ -804,7 +810,7 @@ pub fn decrypt_and_verify(
     Some(b) => b
     None =>
       match last_error {
-        Some(msg) => @error.fail(msg)
+        Some(e) => raise e
         None => @error.fail("api: no matching decryption key")
       }
   }

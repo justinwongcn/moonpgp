@@ -10,7 +10,12 @@
 ///|
 fn require_no_ctl(s : String, what : String) -> Unit raise {
   for c in s {
-    guard c.to_int() >= 32 else {
+    let v = c.to_int()
+    // C1 controls (U+0080–U+009F) and DEL ride through a bare `>= 32`
+    // check (audit F21 residual): UTF-8 CSI (U+009B) executes as a
+    // terminal escape, NEL (U+0085) forges list rows. é (U+00E9) and
+    // every real non-ASCII character sit above the C1 band and pass.
+    guard v >= 32 && v != 0x7F && !(v >= 0x80 && v <= 0x9F) else {
       @error.fail("mail: control character in \{what} (header injection?)")
     }
   }
@@ -148,6 +153,13 @@ fn decode_word_data(enc : String, data : String) -> Bytes? {
 }
 
 ///|
+/// RFC 2047 §2 caps an encoded word at 75 octets and real encoders stay
+/// at or under it; a scan window with no "?=" inside this bound is not
+/// an encoded word. The bound keeps the decoder linear (F-R3: every
+/// opener used to rescan the whole remaining header — quadratic).
+const MAX_ENCODED_WORD_CHARS : Int32 = 99
+
+///|
 /// Try to parse an encoded word at char position `start`. Returns the
 /// decoded bytes and the position just past the closing `?=`.
 fn try_parse_encoded_word(
@@ -163,8 +175,9 @@ fn try_parse_encoded_word(
   // "?=" closes the word.
   let parts : Array[String] = []
   let buf = StringBuilder()
+  let limit = start + MAX_ENCODED_WORD_CHARS
   let mut i = start + 2
-  while i < chars.length() {
+  while i < chars.length() && i < limit {
     if chars[i] == '?' {
       parts.push(buf.to_string())
       buf.reset()
@@ -212,6 +225,37 @@ fn acc_flush(out : StringBuilder, acc : Array[Byte]) -> Unit {
 }
 
 ///|
+/// Output-boundary control-character filter (audit F21 residual). The
+/// byte-level `strip_ctl` only sees encoded-word payloads; raw header
+/// text reaches the output verbatim, C1 controls survive the byte filter
+/// inside multibyte sequences, and DEL passes both (`>= 0x20`). The
+/// filter therefore runs once on the assembled string — the only point
+/// every path (raw text, pending gaps, cross-word byte reassembly)
+/// converges. Tab survives (legal folding whitespace).
+fn strip_ctl_string(s : String) -> String {
+  let out = StringBuilder()
+  for c in s {
+    let v = c.to_int()
+    if v == 0x09 || (v >= 0x20 && v != 0x7F && !(v >= 0x80 && v <= 0x9F)) {
+      out.write_char(c)
+    }
+  }
+  out.to_string()
+}
+
+///|
+/// Strip terminal-hostile control characters (C0 except tab, DEL, the
+/// C1 band) from server-supplied text destined for a terminal. Same
+/// discipline as the decode_rfc2047 output filter (audit F21 + hacker
+/// round), exposed for callers that print OTHER server-controlled
+/// fields (IMAP flags, dates) next to decoded headers — a hostile
+/// server otherwise escapes the same terminal through the sibling
+/// field.
+pub fn sanitize_terminal(s : String) -> String {
+  strip_ctl_string(s)
+}
+
+///|
 /// Decode RFC 2047 encoded words in a header value. Whitespace between
 /// adjacent encoded words is dropped (RFC 2047 §6.2). Unsupported
 /// charsets pass through as raw text.
@@ -248,7 +292,22 @@ pub fn decode_rfc2047(value : String) -> String {
           acc_flush(out, acc)
           out.write_char(c)
         }
-        i = i + 1
+        // F-R3: a failed attempt already scanned its whole bounded
+        // window. When this position was an opener, skip past "?=" — the
+        // position in between is a '?' and cannot open a word, so the
+        // skip is lossless and the same window is not re-scanned from
+        // one character later. The skipped '?' still belongs to the raw
+        // passthrough (unsupported charsets fall back to verbatim text).
+        if c == '=' && i + 1 < chars.length() && chars[i + 1] == '?' {
+          if last_was_word {
+            pending.write_char(chars[i + 1])
+          } else {
+            out.write_char(chars[i + 1])
+          }
+          i = i + 2
+        } else {
+          i = i + 1
+        }
       }
     }
   }
@@ -256,5 +315,5 @@ pub fn decode_rfc2047(value : String) -> String {
     acc_append(acc, pending.to_string())
   }
   acc_flush(out, acc)
-  out.to_string()
+  strip_ctl_string(out.to_string())
 }

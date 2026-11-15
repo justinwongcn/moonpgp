@@ -545,10 +545,12 @@ fn v6_params_length(key : SecretKeyPacket) -> Int32 {
 ///|
 /// Serialize: public body followed by the secret-material wire bytes.
 ///
-/// The caller is responsible for the RFC 9580 §5.5.3 generation rules that
-/// `parse` enforces (no usage 255 on a v6 packet, and a v6 S2K parameter
-/// block that fits its 1-octet count); `api.lock_secret_key` is the only
-/// producer of protected packets and validates them there.
+/// The caller is responsible for the RFC 9580 §5.5.3 generation rules
+/// (a v6 S2K parameter block that fits its 1-octet count);
+/// `api.lock_secret_key` is the only producer of protected packets and
+/// validates them there. The version-dependent rejections `parse`
+/// enforces — no usage 255 and no legacy cipher-id usage on a v6 packet —
+/// are replayed here directly (cleanup round j15).
 pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes raise {
   let w = Writer::new()
   w.bytes(self.public.to_body().exact_view())
@@ -580,6 +582,11 @@ pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes raise {
     w.bytes(self.iv.exact_view())
     w.bytes(self.secret_material.exact_view())
   } else if self.s2k_usage == 254 || self.s2k_usage == 255 {
+    // Round-trip parity with parse (cleanup round j15, user-approved):
+    // parse rejects usage 255 on a v6 packet — serialize must too.
+    guard !(v6 && self.s2k_usage == 255) else {
+      @error.malformed("packet: a v6 secret key must not use S2K usage 255")
+    }
     w.u8(self.s2k_usage)
     if v6 {
       guard v6_params_length(self) <= 255 else {
@@ -600,6 +607,13 @@ pub fn SecretKeyPacket::to_body(self : SecretKeyPacket) -> Bytes raise {
     w.bytes(self.secret_material.exact_view())
   } else {
     // Legacy usage octet is the cipher id; IV follows, simple S2K implied.
+    // Round-trip parity with parse (cleanup round j15): parse rejects
+    // cipher-id usages on a v6 packet per RFC 9580 §5.5.3.
+    guard !v6 else {
+      @error.malformed(
+        "packet: a v6 secret key must not use a legacy cipher-id usage octet \{self.s2k_usage}",
+      )
+    }
     w.u8(self.cipher_algo)
     w.bytes(self.iv.exact_view())
     w.bytes(self.secret_material.exact_view())

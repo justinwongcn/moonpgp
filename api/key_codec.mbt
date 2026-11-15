@@ -12,9 +12,12 @@ pub fn PrivateKey::to_bytes(
   self : PrivateKey,
   allow_unlocked~ : Bool = false,
 ) -> Bytes raise {
-  guard allow_unlocked || self.is_locked() else {
+  // The gate needs EVERY component locked (hacker-round E1): is_locked's
+  // "any component" semantics let a mixed certificate export its
+  // plaintext components by default.
+  guard allow_unlocked || self.is_fully_locked() else {
     @error.fail(
-      "api: refusing to export an unlocked private key (its secret material would be written in plaintext); pass allow_unlocked=true if this is intentional, or lock the key first",
+      "api: refusing to export a private key with unlocked components (their secret material would be written in plaintext); pass allow_unlocked=true if this is intentional, or lock the key first",
     )
   }
   let w = @packet.Writer::new()

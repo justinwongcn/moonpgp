@@ -103,10 +103,13 @@ fn literal_marker_size(b : Bytes) -> Int32 raise {
   // to read_exact it. The accumulation is overflow-checked: a 2^32+k
   // digit string wraps to a small Int and would sneak past a plain
   // post-hoc bound (review finding m1).
-  // 4 MiB (audit F27): message headers are KB-scale; the old 100 MB cap
-  // let every FETCH summary claim a hundred-megabyte literal. The
-  // per-session cumulative budget lives in `LineBudget`.
-  let max_literal = 4_194_304
+  // 64 MiB per literal (audit F27 + hacker-round residual, JEV j10):
+  // HEADER.FIELDS summaries are KB-scale, but `BODY.PEEK[]` full-message
+  // fetches are one literal and real mail with attachments exceeds the
+  // 4 MiB the F27 round chose — legitimate mail became unfetchable. A
+  // single literal still cannot claim the old 100 MB, and the
+  // per-session cumulative budget (`LineBudget`) bounds total use.
+  let max_literal = 67_108_864
   let start = k + 1
   let stop = digits_end + 1
   let mut v = 0

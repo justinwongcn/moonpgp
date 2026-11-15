@@ -15,7 +15,6 @@ pub fn ed25519_oid() -> Bytes {
 ///|
 /// Value carrier, deliberately `pub(all)` (same policy as X25519SecretKey:
 /// assembled by the api layer, guarded surface is @api.PrivateKey).
-#derive(Debug)
 pub(all) struct Ed25519SecretKey {
   /// 32-octet seed.
   seed : Bytes
@@ -131,6 +130,16 @@ pub fn Ed25519PublicKeyValue::verify(
 
 ///|
 pub extend Ed25519PublicKeyValue with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
+/// Redacting Debug (F16 residual, JEV j11): the seed IS the private key.
+pub impl @moonbitlang/core/debug.Debug for Ed25519SecretKey with fn to_repr(
+  self : Ed25519SecretKey,
+) -> @moonbitlang/core/debug.Repr {
+  @moonbitlang/core/debug.Repr::Repr(
+    "Ed25519SecretKey seed=<\{self.seed.length()} octets> public=<\{self.public.length()} octets>",
+  )
+}
 
 ///|
 pub extend Ed25519SecretKey with @moonbitlang/core/debug.Debug::{to_repr}

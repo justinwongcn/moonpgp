@@ -145,7 +145,7 @@ test "generated key roundtrip (3072-bit)" {
 }
 
 ///|
-test "S12: RSA generation refuses sizes below 2048 bits" {
+test "S12: RSA generation refuses sizes below 3072 bits" {
   let raised = try {
     let _ = @pki.generate_rsa_key(bits=1024)
     false

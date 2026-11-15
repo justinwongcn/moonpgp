@@ -180,6 +180,15 @@ fn read_public_fields(
 pub fn PublicKeyPacket::parse(body : BytesView) -> PublicKeyPacket raise {
   let r = Reader::new(body)
   let (version, creation_time, algo, params) = read_public_fields(r)
+  // Exact consumption (audit pk3, the F6 parity): trailing octets used
+  // to survive parse but vanish in to_body — the certificate bytes
+  // changed across a round trip and the v4 fingerprint drifted from what
+  // gpg computes over the original body. (public_part_length keeps its
+  // own unguarded call — it measures the public part inside a secret key
+  // body, where trailing S2K material belongs.)
+  guard r.remaining() == 0 else {
+    @error.malformed("packet: trailing octets after public key fields")
+  }
   PublicKeyPacket::{ version, creation_time, algo, params, }
 }
 

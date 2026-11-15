@@ -99,12 +99,28 @@ pub fn ArmorBlock::header(self : ArmorBlock, key : String) -> String? {
 const VERSION_STRING : String = "moonpgp 0.4.0"
 
 ///|
+/// Armor headers are printable ASCII per RFC 9580 §6.3. A value carrying
+/// CR/LF would forge armor lines inside the header section (decode stops
+/// its header scan at any '-----' line), so the same fail-fast injection
+/// guard the mail side enforces via require_ascii lives here too (R1).
+fn require_armor_header(key : String, value : String) -> Unit raise {
+  for name in [key, value] {
+    for c in name {
+      let v = c.to_int()
+      guard v >= 32 && v <= 126 else {
+        @error.fail("armor: header key/value must be printable ASCII")
+      }
+    }
+  }
+}
+
+///|
 /// Encode `data` into ASCII armor with this block type and headers.
 pub fn ArmorType::encode(
   self : ArmorType,
   data : BytesView,
   headers? : Array[(String, String)],
-) -> String {
+) -> String raise {
   let buf = StringBuilder()
   buf.write_string(self.begin_marker())
   buf.write_char('\n')
@@ -112,6 +128,7 @@ pub fn ArmorType::encode(
   match headers {
     Some(hs) =>
       for pair in hs {
+        require_armor_header(pair.0, pair.1)
         buf.write_string(pair.0)
         buf.write_string(": ")
         buf.write_string(pair.1)
@@ -148,7 +165,10 @@ pub fn ArmorType::encode(
 
 ///|
 /// Convenience for `Message.encode(data)`.
-pub fn encode(data : BytesView, headers? : Array[(String, String)]) -> String {
+pub fn encode(
+  data : BytesView,
+  headers? : Array[(String, String)],
+) -> String raise {
   Message.encode(data, headers?)
 }
 

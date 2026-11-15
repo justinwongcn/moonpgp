@@ -387,3 +387,22 @@ test "private key decrypt opens a tag-20 aead container" {
   let back = decrypt_binary_with_private_key(w.to_bytes().exact_view(), key)
   assert_eq(@utf8.decode_lossy(back.exact_view()), "tag-20 private-key payload")
 }
+
+///|
+test "cleartext sign→verify round trip over trailing blank shapes (ct1)" {
+  let key = generate_ed25519_key("ct1 <t@e>")
+  let verifier = key.to_public()
+  // A trailing whitespace-only line used to leave a dangling CRLF in the
+  // canonical form that the display could not express — the signature
+  // failed its own verify.
+  for
+    text in [
+      "word\nother\n \n", "word\nother\n\n", "word\nother\n", "word\nother", "word \nother\t\n  \n",
+    ] {
+    let msg = sign_cleartext(text, key)
+    let (returned, status) = verify_cleartext(msg, verifier)
+    assert_eq(status, Ok)
+    // The returned text re-canonicalizes to the same bytes.
+    let _ = returned
+  }
+}

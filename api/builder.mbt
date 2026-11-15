@@ -141,14 +141,23 @@ pub fn EncryptionBuilder::finish(
   let compress = self.compress
   fn(data : BytesView) -> String raise {
     if !recipients.is_empty() {
-      // Public-key path; wrap an inline signature when a signer is set.
-      // `file_name` applies to both branches (N9).
-      let armored = match signer {
-        Some(sk) =>
-          sign_and_encrypt(data, sk, recipients, file_name~, compress?)
-        None => encrypt_to_recipients(data, recipients, file_name~, compress?)
+      // Public-key path. The documented combination semantics are now
+      // real (audit api2): supplied passphrases ride along under ONE
+      // shared session key (one v4 SKESK each), and the inline signer
+      // wraps whatever gets sealed. v6 recipients cannot take v4 SKESKs
+      // (mixed ESK generations) — an explicit failure, not a silent drop.
+      if !passwords.is_empty() {
+        guard recipients[0].primary.version() < 6 else {
+          @error.fail(
+            "api: cannot mix v6 recipients with v4 passphrases; use password_v6",
+          )
+        }
       }
-      return armored
+      let inner = match signer {
+        Some(sk) => signed_inner_stream(data, sk, file_name~, compress?)
+        None => literal_inner_stream(data, file_name~, compress?)
+      }
+      return seal_esks_and_seipd(inner.exact_view(), recipients, passwords)
     }
     if !passwords_v6.is_empty() {
       guard passwords.is_empty() else {
@@ -156,17 +165,23 @@ pub fn EncryptionBuilder::finish(
           "api: cannot mix v4 and v6 passphrase shapes in one message",
         )
       }
-      return seal_skesks_v6_with_passwords(
-        data,
-        passwords_v6,
-        file_name~,
-        compress?,
-      )
+      // audit api2: an inline signer is honored on the v6 path too — the
+      // seal wraps the signed payload instead of a bare literal.
+      let inner = match signer {
+        Some(sk) => signed_inner_stream(data, sk, file_name~, compress?)
+        None => literal_inner_stream(data, file_name~, compress?)
+      }
+      return seal_skesks_v6_inner(inner.exact_view(), passwords_v6)
     }
     if !passwords.is_empty() {
       // Every supplied passphrase gets its own SKESK over one shared
       // session key (N4) instead of silently dropping all but the first.
-      return seal_skesks_with_passwords(data, passwords, file_name~, compress?)
+      // audit api2: the inline signer is honored here as well.
+      let inner = match signer {
+        Some(sk) => signed_inner_stream(data, sk, file_name~, compress?)
+        None => literal_inner_stream(data, file_name~, compress?)
+      }
+      return seal_esks_and_seipd(inner.exact_view(), [], passwords)
     }
     @error.fail("api: encryption requires a password or a recipient")
   }
@@ -269,13 +284,16 @@ pub fn DecryptionBuilder::finish(
     if !passwords.is_empty() {
       // Try each passphrase in turn (N4): the message may have been
       // sealed to several and the matching SKESK need not be first.
-      let mut last_error : String? = None
+      // The caught error VALUE, not its string (audit api1, the j13
+      // pattern): re-raising preserves the variant — WrongPassphrase
+      // flattened into a generic Fail broke every caller matching on it.
+      let mut last_error : Error? = None
       for pass in passwords {
         let data : Bytes? = Some(
           decrypt_with_password(message, pass, max_decompressed~),
         ) catch {
           e => {
-            last_error = Some(e.to_string())
+            last_error = Some(e)
             None
           }
         }
@@ -284,7 +302,7 @@ pub fn DecryptionBuilder::finish(
         }
       }
       match last_error {
-        Some(msg) => @error.fail(msg)
+        Some(e) => raise e
         None => @error.fail("api: decryption failed")
       }
     }
@@ -304,14 +322,16 @@ fn decrypt_and_verify_list(
   verifiers : Array[PublicKey],
   max_decompressed : Int32,
 ) -> (Bytes, VerifyStatus) raise {
-  let mut last_error : String? = None
+  // The caught error VALUE, not its string (audit api1, the j13
+  // pattern): re-raising preserves the error variant.
+  let mut last_error : Error? = None
   for key in keys {
     if verifiers.is_empty() {
       let pair : (Bytes, VerifyStatus)? = Some(
         decrypt_and_verify(message, [key], None, max_decompressed~),
       ) catch {
         e => {
-          last_error = Some(e.to_string())
+          last_error = Some(e)
           None
         }
       }
@@ -325,7 +345,7 @@ fn decrypt_and_verify_list(
           decrypt_and_verify(message, [key], Some(v), max_decompressed~),
         ) catch {
           e => {
-            last_error = Some(e.to_string())
+            last_error = Some(e)
             None
           }
         }
@@ -345,7 +365,7 @@ fn decrypt_and_verify_list(
     }
   }
   match last_error {
-    Some(msg) => @error.fail(msg)
+    Some(e) => raise e
     None => @error.fail("api: decryption failed")
   }
 }

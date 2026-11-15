@@ -511,6 +511,15 @@ pub fn SignaturePacket::to_body(self : SignaturePacket) -> Bytes raise {
   w.bytes(unhashed.exact_view())
   w.u16(self.fast_hash)
   if v6 {
+    // Write-side parity with parse (audit pk4): the parser enforces
+    // salt_len == salt_size_of_hash(hash_algo), so a direct-constructed
+    // packet with a mismatched salt serialized fine but never parsed
+    // back — written bytes the library itself rejects.
+    guard self.salt.length() == salt_size_of_hash(self.hash_algo) else {
+      @error.malformed(
+        "packet: v6 signature salt of \{self.salt.length()} octets does not match hash algorithm \{self.hash_algo}",
+      )
+    }
     w.u8(self.salt.length())
     w.bytes(self.salt.exact_view())
   }
@@ -844,13 +853,27 @@ pub fn OnePassSigPacket::parse(body : BytesView) -> OnePassSigPacket raise {
 }
 
 ///|
-pub fn OnePassSigPacket::to_body(self : OnePassSigPacket) -> Bytes {
+pub fn OnePassSigPacket::to_body(self : OnePassSigPacket) -> Bytes raise {
   let w = Writer::new()
   w.u8(self.version)
   w.u8(self.sig_type.number())
   w.u8(self.hash_algo)
   w.u8(self.pub_algo.number())
   if self.version == 6 {
+    // Write-side parity with parse (audit pk4): the parser enforces the
+    // salt size per hash algorithm and hard-reads a 32-octet issuer
+    // fingerprint — a direct-constructed packet outside those shapes
+    // serialized fine but never parsed back.
+    guard self.salt.length() == salt_size_of_hash(self.hash_algo) else {
+      @error.malformed(
+        "packet: v6 one-pass signature salt of \{self.salt.length()} octets does not match hash algorithm \{self.hash_algo}",
+      )
+    }
+    guard self.fingerprint.length() == 32 else {
+      @error.malformed(
+        "packet: v6 one-pass signature fingerprint must be 32 octets, got \{self.fingerprint.length()}",
+      )
+    }
     w.u8(self.salt.length())
     w.bytes(self.salt.exact_view())
     w.bytes(self.fingerprint.exact_view())

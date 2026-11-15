@@ -10,7 +10,7 @@ import {
 // Values
 pub fn curve25519_oid() -> Bytes
 
-pub fn ecdh_anonymous_sender() -> Bytes
+pub fn ecdh_anonymous_sender() -> Bytes raise
 
 pub fn ecdh_kdf_sha256(BytesView, BytesView, Int32) -> Bytes raise
 

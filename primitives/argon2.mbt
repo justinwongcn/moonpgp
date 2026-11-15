@@ -614,8 +614,20 @@ pub fn argon2id_with_secret_ad(
   max_memory_kib~ : Int32 = ARGON2_MAX_MEMORY_KIB,
 ) -> Bytes raise {
   guard passes >= 1 else { @error.fail("argon2: passes must be non-zero") }
+  // Wire-parity caps (audit A1/A2, the F3 pattern: the wire never
+  // encodes these fields beyond one octet). Parallelism above 255 is a
+  // direct-construction value only — and 8*parallelism overflows Int32
+  // at 2^28, turning the minimum-memory guard below into a pass-through
+  // for a zero-length allocation (SIGABRT). Unbounded passes hung the
+  // processing loop indefinitely on the same direct-construction face.
+  guard passes <= 255 else {
+    @error.fail("argon2: passes exceeds the one-octet wire cap 255")
+  }
   guard parallelism >= 1 else {
     @error.fail("argon2: parallelism must be non-zero")
+  }
+  guard parallelism <= 255 else {
+    @error.fail("argon2: parallelism exceeds the one-octet wire cap 255")
   }
   guard tag_len >= 1 else { @error.fail("argon2: tag length must be non-zero") }
   guard m_kib >= 8 * parallelism else {

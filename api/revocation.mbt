@@ -41,7 +41,7 @@ pub fn RevocationReason::number(self : RevocationReason) -> Int32 {
 fn revocation_reason_subpacket(
   reason : RevocationReason,
   message : String?,
-) -> @packet.SigSubpacket {
+) -> @packet.SigSubpacket raise {
   let body = Bytes::from_array([reason.number().to_byte()]).add(
     @primitives.utf8_bytes(message.unwrap_or("")),
   )

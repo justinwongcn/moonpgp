@@ -162,3 +162,27 @@ test "an empty payload with its CRC line parses (F7)" {
   )
   assert_eq(block.data().length(), 0)
 }
+
+///|
+test "armor header values reject CR/LF (R1)" {
+  // A header value carrying CR/LF would forge armor lines in the header
+  // section (decode stops the header scan at any '-----' line) — same
+  // fail-fast injection guard the mail side enforces via require_ascii.
+  let raised = try {
+    ignore(
+      @armor.Message.encode(b"x".exact_view(), headers=[("Comment", "a\nb")]),
+    )
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+}
+
+///|
+test "armor encode keeps printable-ASCII headers working (R1)" {
+  let s = @armor.Message.encode(b"payload".exact_view(), headers=[
+    ("Comment", "round trip test"),
+  ])
+  assert_true(s.contains("Comment: round trip test\n"))
+}

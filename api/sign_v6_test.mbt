@@ -142,7 +142,21 @@ test "v6 signature with a mismatched salt length is rejected" {
     salt: Bytes::make(32, b'\x01'),
     sig_params: [Bytes::make(64, b'\x02')],
   }
-  let body = sig.to_body()
+  // Hand-build the wire bytes: to_body now refuses the mismatched salt
+  // itself (pk4 write-side parity), so the parse-side rejection is
+  // exercised on the raw shape.
+  let w = @packet.Writer::new()
+  w.u8(6)
+  w.u8(sig.sig_type.number())
+  w.u8(sig.pub_algo.number())
+  w.u8(8)
+  w.u32(0) // no hashed area
+  w.u32(0) // no unhashed area
+  w.u16(0) // fast hash
+  w.u8(32)
+  w.bytes(sig.salt.exact_view())
+  w.bytes(sig.sig_params[0].exact_view())
+  let body = w.to_bytes()
   let raised = try {
     let _ = @packet.SignaturePacket::parse(body.exact_view())
     false

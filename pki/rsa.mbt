@@ -208,6 +208,14 @@ pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise {
       "rsa: refusing to generate keys under 3072 bits (RFC 9580 §12.4); verification of smaller keys stays available",
     )
   }
+  // Upper cap (audit M3): primality cost grows with the bit count and
+  // nothing stopped bits=999998 from running for hours. 16384 is
+  // OpenSSH's RSA cap — comfortably above any mail-use key.
+  guard bits <= 16384 else {
+    @error.fail(
+      "rsa: refusing to generate keys over 16384 bits (OpenSSH's cap); larger moduli take hours of pure-bigint primality work",
+    )
+  }
   guard bits % 2 == 0 else { @error.fail("rsa: bit count must be even") }
   let e = BigInt::from_int(65537)
   // Resample BOTH primes each round: with a fixed p near the top of the

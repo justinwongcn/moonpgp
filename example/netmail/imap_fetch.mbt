@@ -7,6 +7,12 @@ pub fn ImapClient::imap_fetch_recent(
   self : ImapClient,
   last_n : Int32,
 ) -> Array[MailSummary] raise {
+  // audit NET-1: last_n <= 0 used to slip past every clamp — last=0,
+  // first=exists+1, and the wire command became "FETCH 6:0", an illegal
+  // reversed sequence set. The docstring's "clamp to >= 1" is now real.
+  guard last_n >= 1 else {
+    @error.fail("mailnet: FETCH window must be at least 1, got \{last_n}")
+  }
   let exists = self.state.exists
   guard exists > 0 else { return [] }
   let last = if last_n > exists { exists } else { last_n }

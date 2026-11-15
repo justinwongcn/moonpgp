@@ -148,7 +148,12 @@ fn parse_args(argv : Array[String]) -> Config raise {
   let mut i = 0
   while i < argv.length() {
     let flag = argv[i]
-    let val = if flag == "--allow-insecure" {
+    // Boolean flags consume no value (audit M1): --resync used to fall
+    // through the value-taking path, swallowing the NEXT argument as its
+    // unused value and skipping it — the documented "--resync --fetch 42"
+    // then failed on "unknown flag '42'" and "--resync --out DIR" lost
+    // --out silently.
+    let val = if flag == "--allow-insecure" || flag == "--resync" {
       ""
     } else {
       guard i + 1 < argv.length() else {
@@ -187,7 +192,8 @@ fn parse_args(argv : Array[String]) -> Config raise {
       "--allow-insecure" => cfg.allow_insecure = true
       _ => @error.fail("mailreader: unknown flag '\{flag}'")
     }
-    i = i + (if flag == "--allow-insecure" { 1 } else { 2 })
+    i = i +
+      (if flag == "--allow-insecure" || flag == "--resync" { 1 } else { 2 })
   }
   cfg
 }

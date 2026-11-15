@@ -58,7 +58,7 @@ pub fn to_hex(BytesView) -> String
 
 pub fn unix_now() -> Int64
 
-pub fn utf8_bytes(String) -> Bytes
+pub fn utf8_bytes(String) -> Bytes raise
 
 pub fn xor_bytes(BytesView, BytesView) -> Bytes raise
 

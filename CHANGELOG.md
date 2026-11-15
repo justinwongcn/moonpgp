@@ -144,9 +144,50 @@ a released version when that version is published to mooncakes.io.
 - mailreader's delivery gate now matches its own comment: NotSigned and
   NoVerifier with verifiers requested exit non-zero instead of
   archiving silently.
+- JEV audit round 2026-11-15 (17 findings, all fixed; full table in
+  `plan-jev-round-2026-11-15.md`). Highlights:
+  - Cleartext signatures over text ending in a whitespace-only line now
+    verify — including gpg-produced messages (fixtures pinned against
+    gpg 2.4.5): the canonical form excludes exactly one final line
+    ending, and the display is built from the raw text.
+  - The encryption builder honors its documented combinations:
+    `.password()` + `.recipient()` seal one shared session key under
+    both a PKESK and a v4 SKESK, and `.sign_with()` applies on the
+    password paths too (it used to be dropped silently).
+  - `recover_session_key_with_key` no longer returns the RSA
+    Bleichenbacher-mask random session key as a bogus success — a
+    corrupted RSA PKESK now raises.
+  - `verify_detached` tries every Signature packet in the armor block
+    (gpg multi-`-u` detached signatures no longer report NoVerifier for
+    the second key).
+  - Old-format packet serialization refuses tags above 15 (tags 16–20
+    came out as a different new-format tag), public-key packets reject
+    trailing octets (v4 fingerprints no longer drift from gpg), v6
+    signatures/one-pass signatures enforce salt and fingerprint shapes
+    on the write side, and literal `'l'` (RFC 9580 LF-text) round-trips
+    its wire octet.
+  - Argon2 caps `passes`/`parallelism` at 255 (the one-octet wire size):
+    `8 * parallelism` overflowed Int32 at 2^28, defeating the
+    minimum-memory guard into a zero-length allocation and SIGABRT.
+  - `decrypt_with_password` also reads the legacy RFC 4880 checksummed
+    SKESK shape; the RFC 9580 §5.3.1 checksum-free shape stays the wire
+    format (gpg 2.4.5 rejects the checksummed variant).
+  - `from_armored` refuses armor text carrying several key blocks
+    instead of silently importing the first one.
+  - mail: 7-bit text also requires lines ≤ 998 chars (RFC 2045 §2.10);
+    mailreader's `--resync` no longer swallows the following CLI
+    argument; `lock`/`unlock` replace the key file atomically
+    (temp file + rename(2) on native); IMAP FETCH refuses a
+    non-positive window instead of sending `FETCH n:0`.
 
 ### Changed
 
+- **Breaking:** `ArmorType::encode`/`encode` and
+  `OnePassSigPacket::to_body` raise now, and `utf8_bytes` validates its
+  input: a lone surrogate used to abort the whole process inside core's
+  encoder — uncatchable for embedders — and armor header values could
+  carry CR/LF to forge armor lines. Both now fail with a catchable
+  error (`armor/armor.mbt`, `primitives/util.mbt`).
 - **Breaking:** `KeyRing::find_encryption_key`/`find_verification_key`
   take `now` as a required argument — the old `0` default silently
   skipped the expiry half of the lifecycle gate, and the omission was

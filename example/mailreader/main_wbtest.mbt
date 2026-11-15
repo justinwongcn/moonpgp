@@ -24,6 +24,25 @@ test "cli: header_value unfolds folded headers keeping one space" {
 }
 
 ///|
+test "cli: boolean flag --resync must not swallow the next argument (M1)" {
+  // Documented shape: --resync combines with --fetch. The parse loop
+  // treated the boolean flag as value-taking, so --resync consumed the
+  // next token as its value and skipped it — this raised
+  // "unknown flag '42'" on the documented combination, and
+  // "--resync --out DIR" silently dropped --out.
+  let cfg = parse_args([
+    "--resync", "--fetch", "42", "--user", "u", "--pass-env", "P",
+  ])
+  assert_true(cfg.resync)
+  assert_eq(cfg.fetch_uid, Some(42))
+  let cfg2 = parse_args([
+    "--resync", "--out", "/tmp/x", "--user", "u", "--pass-env", "P",
+  ])
+  assert_eq(cfg2.out_dir, "/tmp/x")
+  assert_true(cfg2.resync)
+}
+
+///|
 test "cli: CLI --fetch with a non-numeric UID fails loudly" {
   let raised = try {
     ignore(

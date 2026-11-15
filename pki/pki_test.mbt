@@ -154,3 +154,17 @@ test "S12: RSA generation refuses sizes below 3072 bits" {
   }
   assert_true(raised)
 }
+
+///|
+test "generate_rsa_key refuses an absurd bit count (M3)" {
+  // The red state of this guard is a multi-hour primality run, not a
+  // raise, so there is no runnable pre-fix probe — the bound is asserted
+  // post-fix only (16384 = OpenSSH's RSA cap).
+  let raised = try {
+    ignore(@pki.generate_rsa_key(bits=16386))
+    false
+  } catch {
+    e => e.to_string().contains("16384")
+  }
+  assert_true(raised)
+}

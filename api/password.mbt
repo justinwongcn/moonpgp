@@ -130,6 +130,28 @@ fn seal_skesks_v6_with_passwords(
   guard !entries.is_empty() else {
     @error.fail("api: encryption requires at least one passphrase")
   }
+  let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
+  let literal_wire = @packet.serialize_packet(
+    @packet.Literal,
+    literal.to_body().exact_view(),
+  )
+  seal_skesks_v6_inner(
+    maybe_compress_inner(literal_wire, compress?).exact_view(),
+    entries,
+  )
+}
+
+///|
+/// The v6-shape seal over a pre-built inner stream (audit api2): the
+/// builder's v6 password branch wraps the signed/compressed payload
+/// instead of a bare literal, so an inline signer is honored there too.
+fn seal_skesks_v6_inner(
+  inner : BytesView,
+  entries : Array[V6Password],
+) -> String raise {
+  guard !entries.is_empty() else {
+    @error.fail("api: encryption requires at least one passphrase")
+  }
   // The payload's AEAD mode is one per message (v2 SEIPD); every SKESK's
   // associated data must name the same pair.
   for e in entries {
@@ -139,17 +161,12 @@ fn seal_skesks_v6_with_passwords(
   }
   let algo = @primitives.Aes256
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
-  let literal_wire = @packet.serialize_packet(
-    @packet.Literal,
-    literal.to_body().exact_view(),
-  )
   let seipd = seal_seipd_v2(
     algo,
     entries[0].aead,
     SEIPD_V2_CHUNK_OCTET,
     session_key,
-    maybe_compress_inner(literal_wire, compress?).exact_view(),
+    inner,
   )
   let w = @packet.Writer::new()
   for e in entries {
@@ -238,51 +255,6 @@ fn seal_skesk_with_password(
   write_packet_length(w, seipd_ciphertext.length() + 1)
   w.u8(1)
   w.bytes(seipd_ciphertext.exact_view())
-  @armor.Message.encode(w.to_bytes().exact_view())
-}
-
-///|
-/// Encrypt to SEVERAL passphrases (N4): one fresh session key sealed by
-/// one SKESK per passphrase (each with its own salt), then a single v1
-/// SEIPD over the literal data — the multi-recipient passphrase shape
-/// `unwrap_skesk` expects when it walks the SKESKs in turn.
-fn seal_skesks_with_passwords(
-  plaintext : BytesView,
-  passphrases : Array[String],
-  file_name? : String,
-  compress? : @compress.CompressedAlgo,
-) -> String raise {
-  guard !passphrases.is_empty() else {
-    @error.fail("api: encryption requires at least one passphrase")
-  }
-  let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
-  let literal_wire = @packet.serialize_packet(
-    @packet.Literal,
-    literal.to_body().exact_view(),
-  )
-  let seipd_ciphertext = seal_seipd(
-    session_key.exact_view(),
-    maybe_compress_inner(literal_wire, compress?).exact_view(),
-  )
-  let w = @packet.Writer::new()
-  for passphrase in passphrases {
-    let s2k : @s2k.S2k = @s2k.Iterated(
-      @primitives.Sha256,
-      @primitives.random_bytes(@s2k.SALT_SIZE),
-      @s2k.encode_count(S2K_COUNT_TARGET),
-    )
-    let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
-    w.bytes(
-      @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
-    )
-  }
-  w.bytes(
-    @packet.serialize_packet(
-      @packet.Seipd,
-      Bytes::from_array([1]).add(seipd_ciphertext).exact_view(),
-    ).exact_view(),
-  )
   @armor.Message.encode(w.to_bytes().exact_view())
 }
 
@@ -426,17 +398,19 @@ pub fn decrypt_binary_with_password(
           "api: message asks for more session-key derivations than the per-message budget (S3)",
         )
       }
-      // v5/v6 and the AEAD-protected v4 shape prove the passphrase at
-      // unwrap time; only the checksum-free v4 CFB shape leaves the
-      // payload failure as the wrong-passphrase signal.
-      let unwrap_definitive = skesk.version() >= 5 || skesk.aead_algo() != 0
+      // The unwrap itself reports whether it PROVED the passphrase (an
+      // AEAD tag, or the RFC §5.3.2 key checksum — audit api5); only the
+      // checksum-free v4 CFB shape leaves the payload failure as the
+      // wrong-passphrase signal.
+      let mut unwrap_definitive = skesk.version() >= 5 || skesk.aead_algo() != 0
       let opened : Bytes? = try {
-        let (msg_algo, session_key, skesk_version) = unwrap_one_skesk(
+        let (msg_algo, session_key, skesk_version, proved) = unwrap_one_skesk(
           skesk,
           passphrase,
           argon2_max_memory_kib,
           budget~,
         )
+        unwrap_definitive = unwrap_definitive || proved
         Some(
           open_password_payload(
             packets, msg_algo, session_key, skesk_version, max_decompressed,
@@ -600,7 +574,13 @@ fn build_skesk(
   passphrase : String,
   s2k : @s2k.S2k,
 ) -> @packet.SkeskPacket raise {
-  // The S2K key wraps [algo byte || session key] with CFB, zero IV.
+  // The S2K key wraps [algo byte || session key] with CFB, zero IV —
+  // exactly the RFC 9580 §5.3.1 shape. The 2-octet checksum RFC 4880
+  // carried was DROPPED from the standard, and gpg 2.4.5 rejects the
+  // checksummed shape outright ("weird size for an encrypted session
+  // key", probed during audit api5 and reverted before commit). The
+  // READER below stays tolerant of the legacy RFC 4880 checksummed shape
+  // for old input.
   let wrapping_key = s2k.derive_key(
     @primitives.utf8_bytes(passphrase).exact_view(),
     SESSION_KEY_SIZE,
@@ -639,7 +619,7 @@ fn unwrap_skesk(
   packets : Array[@packet.RawPacket],
   passphrase : String,
   argon2_max_memory_kib : Int32,
-) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
+) -> (@primitives.CipherAlgo, Bytes, Int32, Bool) raise {
   let mut passphrase_error : String? = None
   let mut last_error : Error? = None
   let budget = S2KBudget::new()
@@ -656,7 +636,7 @@ fn unwrap_skesk(
           "api: message asks for more session-key derivations than the per-message budget (S3)",
         )
       }
-      let unwrapped : (@primitives.CipherAlgo, Bytes, Int32)? = Some(
+      let unwrapped : (@primitives.CipherAlgo, Bytes, Int32, Bool)? = Some(
         unwrap_one_skesk(skesk, passphrase, argon2_max_memory_kib, budget~),
       ) catch {
         @error.WrongPassphrase(msg~) => {
@@ -696,7 +676,11 @@ fn unwrap_one_skesk(
   // unlimited derivations to any future call site that forgot to pass
   // one — exactly the shape S3 exists to prevent.
   budget~ : S2KBudget,
-) -> (@primitives.CipherAlgo, Bytes, Int32) raise {
+) -> (@primitives.CipherAlgo, Bytes, Int32, Bool) raise {
+  // The Bool: true when this unwrap PROVED the passphrase at unwrap time
+  // (an AEAD tag for v5/v6, the RFC §5.3.2 key checksum for a v4 SKESK
+  // carrying one — audit api5). The legacy checksum-free v4 shape returns
+  // false: its wrongness only surfaces at the payload integrity check.
   // S3: book the derivation cost up front. The memory actually processed
   // is the specifier's demand clamped by the caller's cap, matching what
   // derive_key_capped will run.
@@ -757,7 +741,7 @@ fn unwrap_one_skesk(
     guard key.length() == algo.key_size() else {
       @error.fail("api: AEAD-wrapped session key has the wrong length")
     }
-    return (algo, key, skesk.version())
+    return (algo, key, skesk.version(), true)
   }
   if skesk.version() == 5 {
     // v5: the S2K-derived key is the AEAD key directly (no HKDF — the
@@ -793,9 +777,12 @@ fn unwrap_one_skesk(
     guard key.length() == algo.key_size() else {
       @error.fail("api: AEAD-wrapped session key has the wrong length")
     }
-    return (algo, key, skesk.version())
+    return (algo, key, skesk.version(), true)
   }
   if skesk.encrypted_session_key().length() == 0 {
+    // The S2K-derived key IS the session key: a wrong passphrase yields a
+    // wrong key with no structural check until the payload's integrity
+    // check — not proven at unwrap time.
     return (
       algo,
       skesk
@@ -806,6 +793,7 @@ fn unwrap_one_skesk(
         argon2_max_memory_kib,
       ),
       skesk.version(),
+      false,
     )
   }
   let bc = @primitives.new_block_cipher(
@@ -837,10 +825,36 @@ fn unwrap_one_skesk(
     Some(a) => a
     None => @error.wrong_passphrase("api: unsupported inner cipher algorithm")
   }
-  guard wrapped.length() - 1 == inner_algo.key_size() else {
+  // Two wire shapes (audit api5): RFC 9580 §5.3.1 defines the decrypted
+  // value as [algo || key] — the shape every current writer emits — and
+  // gpg 2.4.5 rejects anything longer ("weird size for an encrypted
+  // session key"). The RFC 4880 era also carried a 2-octet session key
+  // checksum ([algo || key || sum]); reading it stays tolerated for old
+  // input, with the checksum proving the passphrase at unwrap time.
+  let key : Bytes = if wrapped.length() == inner_algo.key_size() + 3 {
+    let key = wrapped[1:1 + inner_algo.key_size()].to_owned()
+    let want = (wrapped[wrapped.length() - 2].to_int() << 8) |
+      wrapped[wrapped.length() - 1].to_int()
+    guard @packet.session_key_checksum(key.exact_view()) == want else {
+      @error.wrong_passphrase("api: session key checksum mismatch")
+    }
+    key
+  } else if wrapped.length() == inner_algo.key_size() + 1 {
+    wrapped[1:wrapped.length()].to_owned()
+  } else {
     @error.wrong_passphrase("api: session key length mismatch")
   }
-  return (inner_algo, wrapped[1:wrapped.length()].to_owned(), skesk.version())
+  // The legacy checksummed shape proves the passphrase right here; the
+  // standard shape only surfaces its wrongness at the payload's
+  // integrity check (E7 classification stays — the 1/256 wrong-passphrase
+  // false success of the recover path is format-inherent to the
+  // checksum-free shape, which the standard mandates).
+  return (
+    inner_algo,
+    key,
+    skesk.version(),
+    wrapped.length() > inner_algo.key_size() + 1,
+  )
 }
 
 ///|
@@ -957,12 +971,11 @@ fn seal_aead_with_password(
 /// layers. Decompressed output draws from a cumulative budget (S03): the
 /// iteration cap bounds nesting depth, the budget bounds total expansion.
 fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
-  let mut stream = inner
   let mut budget = max_decompressed
+  let mut ps = @packet.parse_packets(inner)
   // At most two nesting levels: SEIPD -> compressed -> literal. A
   // one-pass signature packet may precede the data.
   for _ in 0..<3 {
-    let ps = @packet.parse_packets(stream)
     if ps.is_empty() {
       @error.fail("api: empty inner packet stream")
     }
@@ -970,16 +983,22 @@ fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
     if tag == @packet.Literal {
       return @packet.LiteralPacket::parse(ps[0].body().exact_view()).data()
     }
+    if tag is @packet.PacketTag::Unknown(_) {
+      // RFC 9580 §4.2 / gpg behavior: an unassigned packet tag is skipped,
+      // not fatal (audit pk2). The stream is only inspected here — no
+      // re-serialization touches it.
+      ps = ps[1:ps.length()].to_owned()
+      continue
+    }
     if tag == @packet.OnePassSig {
-      // Re-parse the rest after the OPS packet.
+      // Drop the OPS packet and keep working on the rest. The packet
+      // bodies flow through unchanged (audit pk2): the old path
+      // re-serialized every remaining packet, and the F8 write-side guard
+      // refused Unknown (reserved-number) tags that parse had accepted —
+      // a message another implementation may legally emit became a hard
+      // decrypt failure.
       if ps.length() > 1 {
-        let w = @packet.Writer::new()
-        for p in ps[1:ps.length()] {
-          w.bytes(
-            @packet.serialize_packet(p.tag(), p.body().exact_view()).exact_view(),
-          )
-        }
-        stream = w.to_bytes().exact_view()
+        ps = ps[1:ps.length()].to_owned()
         continue
       }
       @error.fail("api: one-pass signature with no data")
@@ -987,7 +1006,7 @@ fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
     if tag == @packet.Compressed {
       let comp = @packet.CompressedPacket::parse(ps[0].body().exact_view())
       match comp.algo {
-        0 => stream = comp.data.exact_view()
+        0 => ps = @packet.parse_packets(comp.data.exact_view())
         _ => {
           let cap = if budget < max_decompressed {
             budget
@@ -996,7 +1015,7 @@ fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
           }
           let out = decompress_payload(comp, cap)
           budget = budget - out.length()
-          stream = out.exact_view()
+          ps = @packet.parse_packets(out.exact_view())
         }
       }
       continue

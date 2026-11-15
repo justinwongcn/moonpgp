@@ -292,3 +292,150 @@ test "S16: an MPI beyond the implementation ceiling is rejected" {
   }
   assert_true(err.contains("16384"))
 }
+
+///|
+test "old-format header refuses tags above 15 (pk1)" {
+  // The old-format tag field is 4 bits: 0x80 | (17 << 2) sets bit6 and
+  // every parser (this library's included) reads the result back as a
+  // NEW-format packet with a different tag — UserAttribute came back as
+  // tag 4 (Signature). Written bytes must parse back as what was written.
+  let raised = try {
+    ignore(
+      @packet.serialize_packet_old(@packet.UserAttribute, b"x".exact_view()),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("old-format")
+  }
+  assert_true(raised)
+}
+
+///|
+test "public key packet rejects trailing octets (pk3)" {
+  // v4 RSA public key body: version | ctime | algo | n MPI | e MPI.
+  // Trailing junk used to parse fine and vanish in to_body — the
+  // certificate bytes changed across a round trip and the v4 fingerprint
+  // drifted from what gpg computes over the original body.
+  let key_body : Array[Byte] = [4, 0, 0, 0, 0, 1]
+  // n MPI: 16 bits = 0xFF 0x01
+  key_body.push(0)
+  key_body.push(16)
+  key_body.push(0xFF)
+  key_body.push(0x01)
+  // e MPI: 17 bits = 0x01 0x00 0x01
+  key_body.push(0)
+  key_body.push(17)
+  key_body.push(0x01)
+  key_body.push(0x00)
+  key_body.push(0x01)
+  let clean = Bytes::from_array(key_body)
+  let pk = @packet.PublicKeyPacket::parse(clean.exact_view())
+  assert_eq(pk.to_body(), clean)
+  // Two trailing octets: parse must refuse, not silently truncate.
+  let dirty = clean.add(Bytes::from_array([0xAA, 0xBB]))
+  let raised = try {
+    ignore(@packet.PublicKeyPacket::parse(dirty.exact_view()))
+    false
+  } catch {
+    e => e.to_string().contains("trailing")
+  }
+  assert_true(raised)
+}
+
+///|
+test "literal 'l' format round-trips its wire octet (pk5)" {
+  // RFC 9580 §5.9 adds 'l' (0x6C, LF-only text). Folding it into 'b'
+  // rewrote the format octet across a wire→wire round trip.
+  let body = Bytes::from_array([0x6C, 0, 0, 0, 0, 0]).add(b"hello")
+  let lp = @packet.LiteralPacket::parse(body.exact_view())
+  assert_eq(lp.format(), 'l')
+  let round = lp.to_body()
+  assert_eq(round[0], 0x6C)
+  // The registered legacy mapping stays as it was.
+  let tb = Bytes::from_array([0x74, 0, 0, 0, 0, 0]).add(b"hi")
+  assert_eq(@packet.LiteralPacket::parse(tb.exact_view()).format(), 'u')
+}
+
+///|
+test "v6 signature to_body enforces salt and fingerprint shapes (pk4)" {
+  // parse enforces salt_len == salt_size_of_hash(hash) and a 32-octet v6
+  // OPS fingerprint; the write side used to emit anything a
+  // direct-construction could invent — bytes the library's own parse
+  // rejects (written, never read back).
+  let bad_salt : Array[Byte] = [0, 0, 0, 0]
+  let raised = try {
+    ignore(
+      @packet.SignaturePacket::{
+        version: 6,
+        sig_type: @packet.BinaryDocument,
+        pub_algo: @packet.Ed25519,
+        hash_algo: 8,
+        hashed_subpackets: [ // SHA-256 wants a 16-octet salt
+        ],
+        unhashed_subpackets: [],
+        raw_hashed_area: Bytes::new(0),
+        fast_hash: 0,
+        salt: Bytes::from_array(bad_salt),
+        sig_params: [],
+      }.to_body(),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("salt")
+  }
+  assert_true(raised)
+  // A correct salt serializes and reparses.
+  let good = @packet.SignaturePacket::{
+    version: 6,
+    sig_type: @packet.BinaryDocument,
+    pub_algo: @packet.Ed25519,
+    hash_algo: 8,
+    hashed_subpackets: [],
+    unhashed_subpackets: [],
+    raw_hashed_area: Bytes::new(0),
+    fast_hash: 0,
+    salt: Bytes::make(16, b'\x01'),
+    sig_params: [Bytes::make(64, b'\x04')],
+  }.to_body()
+  ignore(@packet.SignaturePacket::parse(good.exact_view()))
+}
+
+///|
+test "v6 one-pass signature to_body enforces salt and fingerprint shapes (pk4)" {
+  let raised = try {
+    ignore(
+      @packet.OnePassSigPacket::{
+        version: 6,
+        sig_type: @packet.BinaryDocument,
+        pub_algo: @packet.Ed25519,
+        hash_algo: 8,
+        key_id: Bytes::new(0),
+        salt: Bytes::make(8, b'\x02'), // wrong for SHA-256
+        fingerprint: Bytes::make(32, b'\x03'),
+        nested: false,
+      }.to_body(),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("salt")
+  }
+  assert_true(raised)
+  let bad_fp = try {
+    ignore(
+      @packet.OnePassSigPacket::{
+        version: 6,
+        sig_type: @packet.BinaryDocument,
+        pub_algo: @packet.Ed25519,
+        hash_algo: 8,
+        key_id: Bytes::new(0),
+        salt: Bytes::make(16, b'\x02'),
+        fingerprint: Bytes::make(20, b'\x03'), // v6 wants 32
+        nested: false,
+      }.to_body(),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("fingerprint")
+  }
+  assert_true(bad_fp)
+}

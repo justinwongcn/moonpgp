@@ -501,8 +501,10 @@ pub fn LiteralPacket::parse(body : BytesView) -> LiteralPacket raise {
   let format : Char = match fmt {
     0x62 => 'b'
     0x75 => 'u'
-    0x74 => 'u'
-    0x6c => 'b'
+    0x74 => 'u' // legacy 't', mapped to the 9580 'u' shape (registered)
+    // RFC 9580 §5.9 LF-only text — kept distinct so the format octet
+    // survives a wire→wire round trip (audit pk5).
+    0x6c => 'l'
     _ => 'b'
   }
   // Lossy on purpose (S10): the file name is attacker-controlled wire
@@ -518,6 +520,7 @@ pub fn LiteralPacket::to_body(self : LiteralPacket) -> Bytes raise {
   w.u8(
     match self.format {
       'u' => 0x75
+      'l' => 0x6C
       _ => 0x62
     },
   )

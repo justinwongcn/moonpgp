@@ -90,3 +90,45 @@ test "parse gopenpgp key_dummy (GnuPG smartcard dummy)" {
   }
   assert_true(raised)
 }
+
+///|
+/// gpg 2.4.5 clearsign over three trailing shapes (audit ct1, fixtures
+/// generated with the temp key in gpg-cleartext-signer.asc): gpg hashes
+/// the canonical form with trailing whitespace-only lines stripped
+/// entirely and keeps them verbatim in the display. The previous
+/// canonicalization kept a whitespace-only last line as a dangling CRLF
+/// the display could not express, so our own sign→verify round trip
+/// failed — and these gpg messages could not have been verified either.
+fn ct1_verifier() -> @api.PublicKey raise {
+  @api.PublicKey::from_armored(read_testdata("gpg-cleartext-signer.asc"))
+}
+
+///|
+test "gpg clearsign trailing whitespace-only line verifies (ct1)" {
+  let verifier = ct1_verifier()
+  let (_, status) = @api.verify_cleartext(
+    read_testdata("gpg-cleartext-ws-last.asc"),
+    verifier,
+  )
+  assert_eq(status, @api.Ok)
+}
+
+///|
+test "gpg clearsign trailing bare empty line verifies (ct1)" {
+  let verifier = ct1_verifier()
+  let (_, status) = @api.verify_cleartext(
+    read_testdata("gpg-cleartext-empty-last.asc"),
+    verifier,
+  )
+  assert_eq(status, @api.Ok)
+}
+
+///|
+test "gpg clearsign no final newline verifies (ct1)" {
+  let verifier = ct1_verifier()
+  let (_, status) = @api.verify_cleartext(
+    read_testdata("gpg-cleartext-no-final-newline.asc"),
+    verifier,
+  )
+  assert_eq(status, @api.Ok)
+}

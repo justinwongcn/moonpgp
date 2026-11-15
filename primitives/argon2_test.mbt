@@ -197,3 +197,53 @@ test "argon2id x/crypto vectors: m' rounding, odd p, long tags" {
     )
   }
 }
+
+///|
+test "argon2id parallelism overflow aborts (A1)" {
+  // parallelism = 2^28 wraps 8*p negative in Int32: any m_kib passed the
+  // minimum-memory guard, m_prime computed to 0, mem was zero-length and
+  // the first block store went out of bounds — pre-fix probe confirmed
+  // SIGABRT on the native runner. The wire-parity cap (255 = the one-octet
+  // OpenPGP field) turns the same call into a raise.
+  let raised = try {
+    ignore(
+      @primitives.argon2id_with_secret_ad(
+        Bytes::make(32, b'\x01'),
+        Bytes::make(16, b'\x02'),
+        Bytes::make(8, b'\x03'),
+        Bytes::make(12, b'\x04'),
+        3,
+        65536,
+        268435456,
+        32,
+      ),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("255")
+  }
+  assert_true(raised)
+}
+
+///|
+test "argon2id passes beyond the wire cap raises (A2)" {
+  // passes had no upper bound: a direct-constructed 2^30 ran the
+  // processing loop indefinitely (red state is a multi-hour hang, so the
+  // bound is asserted post-fix; the wire encodes passes in one octet).
+  let raised = try {
+    ignore(
+      @primitives.argon2id(
+        Bytes::make(32, b'\x01'),
+        Bytes::make(16, b'\x02'),
+        300,
+        32,
+        4,
+        32,
+      ),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("255")
+  }
+  assert_true(raised)
+}

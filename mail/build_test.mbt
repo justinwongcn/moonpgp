@@ -164,3 +164,18 @@ test "encrypted mail: non-ascii subject is RFC 2047 encoded" {
   }
   assert_true(raised)
 }
+
+///|
+test "7bit eligibility respects the RFC 2045 line-length cap (Q1)" {
+  // A 2000-char single-line ASCII body is legal 7bit charset-wise but
+  // violates the 998-char line cap (RFC 2045 §2.10); it must ride the
+  // quoted-printable path, which wraps long lines — strict SMTP servers
+  // reject over-long 7bit lines with 500/552 (RFC 5321 §4.5.3.1.4).
+  let long_line = "A".repeat(2000)
+  let msg = @mail.build_multipart_mixed(long_line, [])
+  assert_true(msg.contains("Content-Transfer-Encoding: quoted-printable"))
+  // Lines within the cap keep the 7bit path.
+  let short = "B".repeat(998)
+  let msg2 = @mail.build_multipart_mixed(short, [])
+  assert_true(msg2.contains("Content-Transfer-Encoding: 7bit"))
+}

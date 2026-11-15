@@ -17,15 +17,26 @@ fn hash_name(id : @primitives.HashId) -> String {
 /// Canonical form used by cleartext signatures and text signatures:
 /// CRLF line endings with trailing spaces/tabs removed per line
 /// (RFC 9580 §7.1).
+///
+/// Exactly ONE trailing line ending — the separator before the armor —
+/// stays out of the digest (audit ct1, gpg-anchored: fixtures
+/// testdata/gpg-cleartext-*.asc). The rule the gpg experiments pinned
+/// down: "text\n \n" and "text\n\n" hash to the SAME canonical
+/// ("text\r\n\r\n" with the trailing empty line as content), while
+/// "text" hashes without any trailing CRLF. The previous rules —
+/// strip-all-trailing-bare-empties, and keeping a whitespace-only last
+/// line as a dangling CRLF — both diverged from gpg and from the
+/// display, so a signature over a trailing-blank text failed its own
+/// verify.
 fn canonicalize_cleartext(text : String) -> Bytes {
   let normalized = text.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = normalized.split("\n").collect()
   let out : Array[Byte] = []
-  // Drop ALL trailing empty elements: the final line ending of the wire
-  // body is the separator before the armor (RFC 9580 §7.1) and is not
-  // part of the digest. Interior blank lines are preserved.
+  // Drop the separator artifact: split() yields a final "" exactly when
+  // the text ends with a newline, and that element is the separator, not
+  // a content line.
   let mut end = lines.length()
-  while end > 0 && lines[end - 1].is_empty() {
+  if end > 1 && lines[end - 1].is_empty() {
     end = end - 1
   }
   for i in 0..<end {
@@ -58,10 +69,13 @@ fn trim_trailing_ws(line : StringView) -> StringView {
 
 ///|
 /// Dash-escape for display: lines starting with "-" (and, per RFC 9580
-/// §7.2 SHOULD, "From ") get a "- " prefix.
-fn dash_escape_display(canonical : Bytes) -> String {
-  let text = @utf8.decode_lossy(canonical.exact_view())
-  let normalized = text.replace_all(old="\r\n", new="\n")
+/// §7.2 SHOULD, "From ") get a "- " prefix. Built from the RAW text, not
+/// from the canonical bytes (audit ct1, gpg behavior): gpg's display keeps
+/// trailing whitespace and whitespace-only lines verbatim — only the
+/// hashed canonical trims them — so the receiver's re-canonicalization
+/// sees exactly what the signer hashed.
+fn dash_escape_display(raw : String) -> String {
+  let normalized = raw.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = normalized.split("\n").collect()
   let buf = StringBuilder()
   let n = lines.length()
@@ -106,7 +120,12 @@ pub fn sign_cleartext_with(
   let sig_armor = @armor.Signature.encode(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
-  let displayed = dash_escape_display(canonical)
+  // Display from the raw text (audit ct1): the canonical form cannot be
+  // round-tripped back into a display — trailing whitespace lines are
+  // hashed out of it, and rendering the canonical silently deleted them,
+  // so the receiver's re-canonicalization saw different bytes than the
+  // signer hashed. gpg's display keeps the raw text verbatim.
+  let displayed = dash_escape_display(text)
   let buf = StringBuilder()
   buf.write_string("-----BEGIN PGP SIGNED MESSAGE-----\n")
   buf.write_string("Hash: \{hash_name(hash)}\n\n")

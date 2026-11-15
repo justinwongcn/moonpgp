@@ -134,6 +134,16 @@ pub fn serialize_packet_old(tag : PacketTag, body : BytesView) -> Bytes raise {
       @error.malformed("packet: refusing to serialize an unknown packet tag")
     _ => ()
   }
+  // The old-format tag field is 4 bits (audit pk1, the F8 sibling):
+  // tags 16-20 are only expressible in new-format headers. Writing them
+  // here sets bit6 and every parser reads the result back as a
+  // NEW-format packet with a different tag (17→4, 20→16) — written
+  // bytes never parse back as what was written. Refuse like Unknown.
+  guard tag.number() < 16 else {
+    @error.malformed(
+      "packet: old-format header cannot encode tag \{tag.number()} (new-format only)",
+    )
+  }
   let w = Writer::new()
   let len = body.length()
   let mode : Int32 = if len < 256 { 0 } else if len < 65536 { 1 } else { 2 }

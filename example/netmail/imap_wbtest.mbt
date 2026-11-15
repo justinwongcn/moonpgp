@@ -643,3 +643,28 @@ test "imap: a reply with too many untagged lines raises (F25)" {
   }
   assert_true(raised)
 }
+
+///|
+test "imap: FETCH window refuses last_n < 1 (NET-1)" {
+  let f = imap_fake([
+    b"* OK ready\r\n",
+    b"a1 OK LOGIN completed\r\n",
+    b"* ID (\"name\" \"Coremail Imap\")\r\na2 OK ID completed\r\n",
+    select_response(),
+    b"a4 OK Fetch completed\r\n",
+  ])
+  let c = new_client(f)
+  c.read_greeting()
+  c.imap_login("u@163.com", "secret1")
+  c.imap_id()
+  c.imap_select("INBOX")
+  // last_n = 0 used to reach the wire as "FETCH 5:0" (exists=4):
+  // a reversed, illegal sequence set.
+  let raised = try {
+    ignore(c.imap_fetch_recent(0))
+    false
+  } catch {
+    e => e.to_string().contains("at least 1")
+  }
+  assert_true(raised)
+}

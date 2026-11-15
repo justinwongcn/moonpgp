@@ -145,7 +145,7 @@ pub fn OnePassSigPacket::fingerprint(Self) -> Bytes
 pub fn OnePassSigPacket::key_id(Self) -> Bytes
 pub fn OnePassSigPacket::parse(BytesView) -> Self raise
 pub fn OnePassSigPacket::salt(Self) -> Bytes
-pub fn OnePassSigPacket::to_body(Self) -> Bytes
+pub fn OnePassSigPacket::to_body(Self) -> Bytes raise
 pub fn OnePassSigPacket::to_repr(Self) -> @debug.Repr
 pub fn OnePassSigPacket::version(Self) -> Int32
 

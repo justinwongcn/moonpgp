@@ -150,7 +150,9 @@ pub fn recover_session_key_with_password(
   let packets = @packet.parse_packets(
     @armor.ArmorBlock::data(block).exact_view(),
   )
-  let (algo, key, _) = unwrap_skesk(packets, passphrase, argon2_max_memory_kib)
+  let (algo, key, _, _proved) = unwrap_skesk(
+    packets, passphrase, argon2_max_memory_kib,
+  )
   SessionKey::new(key, algo)
 }
 
@@ -171,7 +173,9 @@ pub fn recover_session_key_with_key(
   for c in key.subkeys {
     candidates.push(c.secret)
   }
-  let mut last_error : String? = None
+  // The caught error VALUE, not its string (audit api1, the j13
+  // pattern): re-raising preserves the variant.
+  let mut last_error : Error? = None
   for p in packets {
     if p.tag() == @packet.Pkesk {
       // RFC 9580 §10.3.2.1: an ESK that cannot be parsed is discarded,
@@ -205,7 +209,7 @@ pub fn recover_session_key_with_key(
             recover_pkesk_session(packets, pkesk, sk),
           ) catch {
             e => {
-              last_error = Some(e.to_string())
+              last_error = Some(e)
               None
             }
           }
@@ -217,8 +221,7 @@ pub fn recover_session_key_with_key(
     }
   }
   match last_error {
-    Some(msg) =>
-      @error.malformed("api: \{msg} (no other ESK yielded a session key)")
+    Some(e) => raise e
     None => @error.fail("api: message is not encrypted to this key")
   }
 }
@@ -231,7 +234,11 @@ fn recover_pkesk_session(
   pkesk : @packet.PkeskPacket,
   sk : @packet.SecretKeyPacket,
 ) -> SessionKey raise {
-  let (algo_id, session) = unwrap_pkesk(pkesk, sk)
+  // The CHECKED unwrap (audit api3): the S04 random-key mask protects
+  // the decryption path's timing, but this flow hands the unwrapped key
+  // to the caller directly — returning the masked key reported a
+  // corrupted RSA PKESK as success.
+  let (algo_id, session) = unwrap_pkesk_checked(pkesk, sk)
   if pkesk.version() == 6 {
     // A v6 PKESK carries no cipher octet; the v2 SEIPD names it.
     for q in packets {

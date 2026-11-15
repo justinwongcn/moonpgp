@@ -471,19 +471,29 @@ pub fn verify_detached(
   guard block.armor_type() == @armor.Signature else {
     @error.fail("api: not a signature armor block")
   }
-  // The armor payload is a packet sequence; find the signature packet.
+  // The armor payload is a packet sequence; try EVERY signature packet
+  // (audit api7): gpg --detach-sign -u A -u B emits two Signature packets,
+  // and stopping at the first reported NoVerifier for the second key —
+  // a valid signature indistinguishable from a stripped one. Rank with
+  // the same scale decrypt_and_verify_list uses.
   let packets = @packet.parse_packets(block.data().exact_view())
-  let mut sig : @packet.SignaturePacket? = None
+  let mut best : VerifyStatus = NotSigned
+  let mut seen = false
   for p in packets {
     if p.tag() == @packet.Signature {
-      sig = Some(@packet.SignaturePacket::parse(p.body().exact_view()))
-      break
+      seen = true
+      let s = @packet.SignaturePacket::parse(p.body().exact_view())
+      let outcome = verify_signature_packet(s, data, verifier)
+      if outcome is Ok {
+        return outcome
+      }
+      if status_rank(outcome) > status_rank(best) {
+        best = outcome
+      }
     }
   }
-  match sig {
-    Some(s) => verify_signature_packet(s, data, verifier)
-    None => @error.fail("api: no signature packet in armor block")
-  }
+  guard seen else { @error.fail("api: no signature packet in armor block") }
+  best
 }
 
 ///|
@@ -720,20 +730,19 @@ pub fn verify_inline(
 }
 
 ///|
-/// Sign and encrypt in one step (inline signature inside SEIPD).
-///
-/// `created` is the signature creation time in seconds since 1970; without it
-/// the current time is used (see `sign_detached`). `file_name` names the
-/// literal packet (N9; default "message.txt").
-pub fn sign_and_encrypt(
+/// The inner packet stream of a signed document: one-pass signature,
+/// literal data, signature — optionally compressed. Shared by
+/// `sign_and_encrypt` (public-key path) and the encryption builder's
+/// password branches (audit api2: `.password(...).sign_with(...)`
+/// used to drop the signer silently).
+fn signed_inner_stream(
   data : BytesView,
   signer : PrivateKey,
-  recipients : Array[PublicKey],
   text_mode? : Bool,
-  compress? : @compress.CompressedAlgo,
   created? : Int32,
   file_name? : String,
-) -> String raise {
+  compress? : @compress.CompressedAlgo,
+) -> Bytes raise {
   let sig_type = sig_type_of(text_mode)
   let signing_component = signing_packet(signer)
   let sig = make_document_signature(signing_component, data, sig_type, created?)
@@ -752,8 +761,33 @@ pub fn sign_and_encrypt(
   inner.bytes(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
   )
+  maybe_compress_inner(inner.to_bytes().exact_view(), compress?)
+}
+
+///|
+/// Sign and encrypt in one step (inline signature inside SEIPD).
+///
+/// `created` is the signature creation time in seconds since 1970; without it
+/// the current time is used (see `sign_detached`). `file_name` names the
+/// literal packet (N9; default "message.txt").
+pub fn sign_and_encrypt(
+  data : BytesView,
+  signer : PrivateKey,
+  recipients : Array[PublicKey],
+  text_mode? : Bool,
+  compress? : @compress.CompressedAlgo,
+  created? : Int32,
+  file_name? : String,
+) -> String raise {
   seal_to_recipients(
-    maybe_compress_inner(inner.to_bytes().exact_view(), compress?).exact_view(),
+    signed_inner_stream(
+      data,
+      signer,
+      text_mode?,
+      created?,
+      file_name?,
+      compress?,
+    ).exact_view(),
     recipients,
   )
 }

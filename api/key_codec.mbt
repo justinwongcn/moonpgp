@@ -538,6 +538,24 @@ pub fn PrivateKey::from_bytes(data : BytesView) -> PrivateKey raise {
 /// }
 /// ```
 pub fn PrivateKey::from_armored(text : String) -> PrivateKey raise {
+  // Refuse to silently drop keys (audit api4): @armor.decode returns the
+  // FIRST block, and a concatenated keyring — `cat a.asc b.asc > ring.asc`,
+  // the gpg --import everyday shape — used to import one key and bury the
+  // rest. decode_all scans the whole text; extra KEY blocks fail loudly
+  // (decoy Message/Signature blocks stay tolerated as garbage, matching
+  // decode's documented first-block scan).
+  let blocks = @armor.decode_all(text)
+  let mut extra = 0
+  for b in blocks {
+    if b.armor_type() is (@armor.PublicKey | @armor.PrivateKey) {
+      extra = extra + 1
+    }
+  }
+  guard extra <= 1 else {
+    @error.malformed(
+      "api: armored text contains \{extra} key blocks; import them one file per key",
+    )
+  }
   let block = @armor.decode(text)
   match block.armor_type() {
     @armor.PrivateKey => PrivateKey::from_bytes(block.data().exact_view())
@@ -549,6 +567,19 @@ pub fn PrivateKey::from_armored(text : String) -> PrivateKey raise {
 /// Parse an armored key block into a public key; a private-key block is
 /// accepted and stripped to its public half.
 pub fn PublicKey::from_armored(text : String) -> PublicKey raise {
+  // Same multi-key refusal as PrivateKey::from_armored (audit api4).
+  let blocks = @armor.decode_all(text)
+  let mut extra = 0
+  for b in blocks {
+    if b.armor_type() is (@armor.PublicKey | @armor.PrivateKey) {
+      extra = extra + 1
+    }
+  }
+  guard extra <= 1 else {
+    @error.malformed(
+      "api: armored text contains \{extra} key blocks; import them one file per key",
+    )
+  }
   let block = @armor.decode(text)
   match block.armor_type() {
     @armor.PublicKey => PublicKey::from_bytes(block.data().exact_view())

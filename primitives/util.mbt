@@ -97,6 +97,29 @@ pub fn from_hex(s : String) -> Bytes raise {
 /// UTF-8 encoding of a string for PGP wire use (User IDs, passphrases,
 /// literal file names). `String::to_bytes`/`Bytes::of_string` are UTF-16LE
 /// and must never be used on wire material.
-pub fn utf8_bytes(s : String) -> Bytes {
+///
+/// A lone surrogate — the one way a MoonBit String can be invalid — makes
+/// core's encoder ABORT the process, uncatchable for embedders (audit
+/// api6). The check lives at this shared chokepoint so every text entry
+/// fails with a catchable error instead. Valid surrogate pairs encode as
+/// before; the scan runs in code-unit space (`s[i]`, the F22 lesson).
+pub fn utf8_bytes(s : String) -> Bytes raise {
+  let mut expect_low = false
+  for i in 0..<s.length() {
+    let v = s[i]
+    if expect_low {
+      guard v >= 0xDC00 && v <= 0xDFFF else {
+        @error.malformed("utf8: lone high surrogate in text input")
+      }
+      expect_low = false
+    } else if v >= 0xD800 && v <= 0xDBFF {
+      expect_low = true
+    } else if v >= 0xDC00 && v <= 0xDFFF {
+      @error.malformed("utf8: lone low surrogate in text input")
+    }
+  }
+  guard !expect_low else {
+    @error.malformed("utf8: lone high surrogate in text input")
+  }
   @utf8.encode(s)
 }

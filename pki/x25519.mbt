@@ -132,8 +132,9 @@ pub fn ecdh_kdf_sha256(
 
 ///|
 /// The 20-octet "Anonymous Sender    " KDF parameter string
-/// (RFC 9580 §11.5).
-pub fn ecdh_anonymous_sender() -> Bytes {
+/// (RFC 9580 §11.5). Raising signature: utf8_bytes validates surrogate
+/// safety (audit api6) — the constant itself is pure ASCII.
+pub fn ecdh_anonymous_sender() -> Bytes raise {
   @primitives.utf8_bytes("Anonymous Sender    ")
 }
 

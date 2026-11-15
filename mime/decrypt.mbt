@@ -391,10 +391,7 @@ pub fn decrypt_mime(
   // tree always advertises Content-Type, so a header block without one
   // means raw content: wrap it as text/plain before parsing.
   let data = if !has_content_type_header(outcome.data.exact_view()) {
-    @primitives.concat2(
-      @primitives.utf8_bytes("Content-Type: text/plain\r\n\r\n"),
-      outcome.data,
-    )
+    @primitives.concat2(b"Content-Type: text/plain\r\n\r\n", outcome.data)
   } else {
     outcome.data
   }

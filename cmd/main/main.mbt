@@ -39,7 +39,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
   match command {
     "keygen" => {
       check_args(rest.length(), 3)
-      let key = @api.generate_key(rest[0], bits=parse_bits(rest, 3072))
+      let key = @api.generate_key(rest[0], bits=parse_bits(rest))
       // Key generation writes the fresh unlocked key by definition (F17):
       // the export gate stays, and the intent is explicit here.
       @fs.write_string_to_file(rest[1], key.to_armored(allow_unlocked=true))
@@ -161,7 +161,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       check_args(pos.length(), 1)
       let key = @api.PrivateKey::from_armored(@fs.read_file_to_string(pos[0]))
       let locked = key.lock(pass)
-      @fs.write_string_to_file(pos[0], locked.to_armored())
+      replace_file_atomic(pos[0], locked.to_armored())
       println(
         "locked \{pos[0]} (decryption and signing now require the passphrase)",
       )
@@ -173,7 +173,7 @@ fn run(command : String, rest : Array[String]) -> Unit raise {
       let open = key.unlock(pass)
       // `unlock` exists to store the key without passphrase protection
       // (F17): the explicit opt-in is the command's own intent.
-      @fs.write_string_to_file(pos[0], open.to_armored(allow_unlocked=true))
+      replace_file_atomic(pos[0], open.to_armored(allow_unlocked=true))
       println(
         "unlocked \{pos[0]} (the secret key is now stored without passphrase protection)",
       )
@@ -239,10 +239,14 @@ fn check_args(got : Int32, want : Int32) -> Unit {
 
 ///|
 /// The final path component, stamped into encrypted literal packets.
+/// Scan in UTF-16 code-unit space (audit M2, the cmd twin of F22): the
+/// character-count loop vs the code-unit slice drift let a separator
+/// survive into the basename whenever a supplementary-plane character
+/// preceded the last '/'.
 fn basename(path : String) -> String {
   let mut last = -1
-  for i, ch in path {
-    if ch == '/' {
+  for i in 0..<path.length() {
+    if path[i] == 0x2F {
       last = i
     }
   }
@@ -254,11 +258,60 @@ fn basename(path : String) -> String {
 }
 
 ///|
-fn parse_bits(rest : Array[String], default : Int32) -> Int32 {
+/// Explicit bit count for keygen (the RFC 9580 floor applies when the
+/// argument is absent). Garbage fails loudly (review finding m5: an
+/// unparseable parameter never degrades quietly to the default).
+fn parse_bits(rest : Array[String]) -> Int32 raise {
   match rest[3:rest.length()].to_owned() {
-    [b, ..] => @string.parse_int(b) catch { _ => default }
-    _ => default
+    [b, ..] =>
+      @string.parse_int(b) catch {
+        _ =>
+          @error.fail(
+            "cli: unparseable key bit count '\{b}' (floor 3072, e.g. 3072 or 4096)",
+          )
+      }
+    _ => 3072
   }
+}
+
+///|
+/// NUL-terminated UTF-8 copy of a path for the C bridge.
+fn cstring(s : String) -> Bytes raise {
+  let out : Array[Byte] = []
+  for b in @primitives.utf8_bytes(s) {
+    out.push(b)
+  }
+  out.push(b'\x00')
+  Bytes::from_array(out)
+}
+
+///|
+/// POSIX rename(2) — atomic within one filesystem.
+#cfg(target="native")
+#borrow(src, dst)
+extern "c" fn c_rename(src : Bytes, dst : Bytes) -> Int32 = "rename"
+
+///|
+/// In-place replace via temp file + rename(2) (audit CMD-1): the old
+/// truncate-then-write destroyed the only copy of a secret key when the
+/// write failed midway (ENOSPC, crash, kill). Native targets — where the
+/// CLI ships — write the new content to a sibling temp file and rename it
+/// over the target, so the original survives every mid-write failure.
+/// Non-native targets keep the plain write.
+#cfg(target="native")
+fn replace_file_atomic(path : String, content : String) -> Unit raise {
+  let tmp = "\{path}.moonpgp-tmp"
+  @fs.write_string_to_file(tmp, content)
+  guard c_rename(cstring(tmp), cstring(path)) == 0 else {
+    let _ = @fs.remove_file(tmp) catch { _ => () }
+    @error.fail("cli: could not replace \{path}; the new copy is at \{tmp}")
+  }
+}
+
+///|
+#cfg(not(target="native"))
+fn replace_file_atomic(path : String, content : String) -> Unit raise {
+  @fs.write_string_to_file(path, content)
 }
 
 ///|

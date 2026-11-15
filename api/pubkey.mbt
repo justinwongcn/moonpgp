@@ -80,6 +80,48 @@ fn unwrap_pkesk(
 }
 
 ///|
+/// Like `unwrap_pkesk`, but honest about RSA masking (audit api3): the
+/// S04 random-key fallback keeps the decryption path's timing uniform,
+/// yet the session-key recovery flow consumes the unwrapped key
+/// directly, so the masked key would surface as a bogus success. The
+/// checked path raises on a masked unwrap instead.
+fn unwrap_pkesk_checked(
+  pkesk : @packet.PkeskPacket,
+  sk : @packet.SecretKeyPacket,
+) -> (Int32, Bytes) raise {
+  match pkesk.pub_algo() {
+    @packet.X25519 => x25519_unwrap_session_key(pkesk, sk)
+    @packet.Ecdh => ecdh_unwrap_session_key(pkesk, sk)
+    a if a.is_rsa() =>
+      match rsa_unwrap_checked(pkesk, sk) {
+        Some(pair) => pair
+        None =>
+          @error.fail("api: RSA session key unwrap failed (corrupted PKESK)")
+      }
+    _ =>
+      @error.unsupported(
+        "api: unsupported PKESK algorithm \{pkesk.pub_algo().number()}",
+      )
+  }
+}
+
+///|
+/// The unsigned inner stream: literal data, optionally compressed — the
+/// counterpart of sign.mbt's `signed_inner_stream`.
+fn literal_inner_stream(
+  data : BytesView,
+  file_name? : String,
+  compress? : @compress.CompressedAlgo,
+) -> Bytes raise {
+  let literal = @packet.LiteralPacket::binary(data, file_name?)
+  let literal_wire = @packet.serialize_packet(
+    @packet.Literal,
+    literal.to_body().exact_view(),
+  )
+  maybe_compress_inner(literal_wire, compress?)
+}
+
+///|
 /// Encrypt plaintext to one or more recipients' public keys. Each
 /// recipient gets its own fresh PKESK encoding of the session key
 /// (RFC 9580 §5.1.3 requires re-encoding per key). Result: armored PGP
@@ -90,13 +132,8 @@ pub fn encrypt_to_recipients(
   file_name? : String,
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
-  let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
-  let literal_wire = @packet.serialize_packet(
-    @packet.Literal,
-    literal.to_body().exact_view(),
-  )
   seal_to_recipients(
-    maybe_compress_inner(literal_wire, compress?).exact_view(),
+    literal_inner_stream(plaintext, file_name?, compress?).exact_view(),
     recipients,
   )
 }
@@ -115,13 +152,40 @@ fn seal_to_recipients(
   inner : BytesView,
   recipients : Array[PublicKey],
 ) -> String raise {
-  guard !recipients.is_empty() else { @error.fail("api: no recipients") }
+  seal_esks_and_seipd(inner, recipients, [])
+}
+
+///|
+/// Seal a pre-serialized inner packet stream into ESK packet(s) — one
+/// PKESK per recipient AND one v4 SKESK per passphrase, all wrapping ONE
+/// shared session key — plus the matching SEIPD container, armored
+/// (audit api2: the builder's public-key branch used to drop supplied
+/// passphrases silently). The generation must not mix: v6 PKESKs ride a
+/// v2 SEIPD and cannot coexist with v4 SKESKs.
+fn seal_esks_and_seipd(
+  inner : BytesView,
+  recipients : Array[PublicKey],
+  passwords : Array[String],
+) -> String raise {
+  guard !recipients.is_empty() || !passwords.is_empty() else {
+    @error.fail("api: no recipient or passphrase to seal to")
+  }
   // A message cannot mix key generations: v6 PKESKs must precede a v2
   // SEIPD packet and v3 PKESKs a v1 one (RFC 9580 §5.1.1/§5.1.2).
-  let v6 = recipients[0].primary.version() >= 6
+  let v6 = match recipients.get(0) {
+    Some(first) => first.primary.version() >= 6
+    None => false
+  }
   for recipient in recipients {
     guard (recipient.primary.version() >= 6) == v6 else {
       @error.fail("api: cannot mix v4 and v6 recipients in one message")
+    }
+  }
+  if !passwords.is_empty() {
+    guard !v6 else {
+      @error.fail(
+        "api: cannot mix v6 recipients with v4 passphrases in one message",
+      )
     }
   }
   // RFC 9580 §5.2.3.15/§13.2: every recipient must accept the chosen pair,
@@ -154,6 +218,19 @@ fn seal_to_recipients(
     let body = pkesk.to_body()
     w.bytes(
       @packet.serialize_packet(@packet.Pkesk, body.exact_view()).exact_view(),
+    )
+  }
+  // One v4 SKESK per passphrase, all wrapping the same session key
+  // (audit api2; the N4 multi-passphrase rule).
+  for passphrase in passwords {
+    let s2k : @s2k.S2k = @s2k.Iterated(
+      @primitives.Sha256,
+      @primitives.random_bytes(@s2k.SALT_SIZE),
+      @s2k.encode_count(S2K_COUNT_TARGET),
+    )
+    let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
+    w.bytes(
+      @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
     )
   }
   let seipd : @packet.SeipdPacket = if v6 {
@@ -322,7 +399,7 @@ fn decrypt_inner_with_key(
   for c in key.subkeys {
     candidates.push(c.secret)
   }
-  let mut last_error : String? = None
+  let mut last_error : Error? = None
   for p in packets {
     if p.tag() == @packet.Pkesk {
       // RFC 9580 §10.3.2.1: an ESK that cannot be parsed (a future
@@ -363,7 +440,7 @@ fn decrypt_inner_with_key(
           // the password path already discarded per ESK).
           let inner : Bytes? = Some(decrypt_with_pkesk(packets, pkesk, sk)) catch {
             e => {
-              last_error = Some(e.to_string())
+              last_error = Some(e)
               None
             }
           }
@@ -375,8 +452,11 @@ fn decrypt_inner_with_key(
     }
   }
   match last_error {
-    Some(msg) =>
-      @error.malformed("api: \{msg} (no other ESK opened the message)")
+    // The caught error VALUE, not its string (audit api1, the j13
+    // pattern): re-raising preserves the variant instead of flattening
+    // every failure into a Malformed whose text the last poisoned PKESK
+    // influenced.
+    Some(e) => raise e
     None => None
   }
 }

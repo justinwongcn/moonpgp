@@ -28,14 +28,27 @@ fn normalize_crlf(s : String) -> String {
 /// 7bit-eligible per RFC 3156 §3: printable ASCII plus TAB and CRLF
 /// pairs only — a bare CR or LF would violate the SMTP wire format
 /// (RFC 5321 §2.3.8), so such text must go through the QP path.
+/// Lines longer than 998 chars are equally disqualifying (audit Q1,
+/// RFC 2045 §2.10): the 7bit path cannot wrap them, and strict MTAs
+/// reject over-long DATA lines with 500/552 (RFC 5321 §4.5.3.1.4).
+const MAX_7BIT_LINE : Int32 = 998
+
+///|
 fn is_ascii_text(s : String) -> Bool {
   let mut prev_cr = false
+  let mut col = 0
   for c in s {
     let v = c.to_int()
     if prev_cr && v != 10 {
       return false
     }
     prev_cr = v == 13
+    if v == 10 || v == 13 {
+      col = 0
+    } else {
+      col = col + 1
+      guard col <= MAX_7BIT_LINE else { return false }
+    }
     if !(v == 9 || v == 10 || v == 13 || (v >= 32 && v <= 126)) {
       return false
     }

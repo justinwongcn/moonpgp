@@ -475,6 +475,24 @@ fn open_password_payload(
   skesk_version : Int32,
   max_decompressed : Int32,
 ) -> Bytes raise {
+  extract_literal(
+    open_password_container(packets, msg_algo, session_key, skesk_version),
+    max_decompressed,
+  )
+}
+
+///|
+/// Decrypt the encrypted container (tag-20 AEAD, or SEIPD v1/v2) and
+/// return the RAW inner packet stream — compressed packets still wrapped,
+/// literal not extracted. The verification flow (audit pw-verify) walks
+/// this stream for OPS/literal/signature; the payload flow pipes it
+/// through `extract_literal`.
+fn open_password_container(
+  packets : Array[@packet.RawPacket],
+  msg_algo : @primitives.CipherAlgo,
+  session_key : Bytes,
+  skesk_version : Int32,
+) -> Bytes raise {
   for p in packets {
     if p.tag() == @packet.AeadEncData {
       let aead = @packet.AeadPacket::parse(p.body().exact_view())
@@ -510,7 +528,7 @@ fn open_password_payload(
         aead.chunk_octet(),
         aead.ciphertext().exact_view(),
       )
-      return extract_literal(inner, max_decompressed)
+      return inner
     }
     if p.tag() == @packet.Seipd {
       let seipd = @packet.SeipdPacket::parse(p.body().exact_view())
@@ -524,7 +542,7 @@ fn open_password_payload(
         )
       }
       if seipd.version == 2 {
-        return decrypt_seipd_v2(seipd, session_key, max_decompressed)
+        return open_seipd_v2(seipd, session_key)
       }
       guard seipd.version == 1 else {
         @error.unsupported("api: unsupported SEIPD version \{seipd.version}")
@@ -536,7 +554,7 @@ fn open_password_payload(
       }
       let bc = @primitives.new_block_cipher(msg_algo, session_key.exact_view())
       let inner = @cipher.seipd_v1_decrypt(bc, seipd.ciphertext.exact_view())
-      return extract_literal(inner, max_decompressed)
+      return inner
     }
   }
   @error.fail("api: no encrypted data packet found")
@@ -1120,10 +1138,3 @@ fn open_seipd_v2(
 
 ///|
 /// Open a v2 SEIPD packet and extract its literal payload.
-fn decrypt_seipd_v2(
-  seipd : @packet.SeipdPacket,
-  session_key : BytesView,
-  max_decompressed : Int32,
-) -> Bytes raise {
-  extract_literal(open_seipd_v2(seipd, session_key), max_decompressed)
-}

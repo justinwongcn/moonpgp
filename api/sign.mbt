@@ -482,8 +482,16 @@ pub fn verify_detached(
   for p in packets {
     if p.tag() == @packet.Signature {
       seen = true
-      let s = @packet.SignaturePacket::parse(p.body().exact_view())
-      let outcome = verify_signature_packet(s, data, verifier)
+      // A structurally corrupt packet ranks as a failure (audit f5): the
+      // strict parse used to raise Malformed past the loop, overriding a
+      // deterministic failure from an earlier packet — callers lost the
+      // VerifyStatus classification. Both shapes stay fail-closed.
+      let outcome : VerifyStatus = try {
+        let s = @packet.SignaturePacket::parse(p.body().exact_view())
+        verify_signature_packet(s, data, verifier)
+      } catch {
+        _ => Failed
+      }
       if outcome is Ok {
         return outcome
       }
@@ -727,6 +735,62 @@ pub fn verify_inline(
     0,
   )
   finish_inline_verify(data, sig, Some(verifier))
+}
+
+///|
+/// Decrypt a password-encrypted armored message and verify its embedded
+/// inline signature against every verifier, keeping the best-ranked
+/// status (audit pw-verify: the builder's password branch used to ignore
+/// configured verifiers entirely — a signed message surfaced as
+/// "no signature" while the same message decrypted with a key reported
+/// the signature status; gopenpgp's Decrypt verifies on the password
+/// path too).
+pub fn decrypt_password_and_verify(
+  message : String,
+  passphrase : String,
+  verifiers : Array[PublicKey],
+  argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
+  max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
+) -> (Bytes, VerifyStatus) raise {
+  let block = @armor.decode(message)
+  let packets = @packet.parse_packets(
+    @armor.ArmorBlock::data(block).exact_view(),
+  )
+  let (algo, key, version, _proved) = unwrap_skesk(
+    packets, passphrase, argon2_max_memory_kib,
+  )
+  let inner = open_password_container(packets, algo, key, version)
+  let (data_opt, sig_opt, _budget) = collect_data_sig(
+    @packet.parse_packets(inner.exact_view()),
+    None,
+    None,
+    max_decompressed,
+    max_decompressed,
+    0,
+  )
+  let d = match data_opt {
+    Some(d) => d
+    None => @error.malformed("api: password message carries no literal data")
+  }
+  match sig_opt {
+    None => (d, NotSigned)
+    Some(s) => {
+      if verifiers.is_empty() {
+        return (d, NotSigned)
+      }
+      let mut best : VerifyStatus = NotSigned
+      for v in verifiers {
+        let outcome = verify_signature_packet(s, d.exact_view(), v)
+        if outcome is Ok {
+          return (d, Ok)
+        }
+        if status_rank(outcome) > status_rank(best) {
+          best = outcome
+        }
+      }
+      (d, best)
+    }
+  }
 }
 
 ///|

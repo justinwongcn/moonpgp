@@ -402,7 +402,14 @@ test "cleartext sign→verify round trip over trailing blank shapes (ct1)" {
     let msg = sign_cleartext(text, key)
     let (returned, status) = verify_cleartext(msg, verifier)
     assert_eq(status, Ok)
-    // The returned text re-canonicalizes to the same bytes.
-    let _ = returned
+    // verify returns exactly the canonical bytes that were signed. (The
+    // canonical itself is not idempotent under re-canonicalization when
+    // it ends with a CRLF — that ending reads as the armor separator —
+    // so the invariant is equality with the signed form, not a second
+    // canonicalization.)
+    assert_eq(
+      returned,
+      @utf8.decode_lossy(canonicalize_cleartext(text).exact_view()),
+    )
   }
 }

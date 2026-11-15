@@ -22,12 +22,12 @@ fn hash_name(id : @primitives.HashId) -> String {
 /// stays out of the digest (audit ct1, gpg-anchored: fixtures
 /// testdata/gpg-cleartext-*.asc). The rule the gpg experiments pinned
 /// down: "text\n \n" and "text\n\n" hash to the SAME canonical
-/// ("text\r\n\r\n" with the trailing empty line as content), while
-/// "text" hashes without any trailing CRLF. The previous rules —
-/// strip-all-trailing-bare-empties, and keeping a whitespace-only last
-/// line as a dangling CRLF — both diverged from gpg and from the
-/// display, so a signature over a trailing-blank text failed its own
-/// verify.
+/// ("text\r\n" — the trailing empty line is content and contributes only
+/// the line ending after it), while "text" hashes without any trailing
+/// CRLF. The previous rules — strip-all-trailing-bare-empties, and
+/// keeping a whitespace-only last line as a dangling CRLF — both
+/// diverged from gpg and from the display, so a signature over a
+/// trailing-blank text failed its own verify.
 fn canonicalize_cleartext(text : String) -> Bytes {
   let normalized = text.replace_all(old="\r\n", new="\n")
   let lines : Array[StringView] = normalized.split("\n").collect()

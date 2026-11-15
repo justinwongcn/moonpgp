@@ -76,3 +76,26 @@ API 编号沿用 agent 报告。）
 ## 遗留
 
 - 无本轮新登记；既往登记（A1 packet pub(all) 0.5.0+、#2/#3/#4）不变。
+
+## 第 2 轮(同日,修复 diff 复审 + 遗留候选)
+
+diff 复审 agent 通读 15807e5 全量 diff,5 项发现(F1 高/F2-F3 中/F4-F5 低),
+另把第 1 轮登记的「密码路径不验内嵌签名」升级为候选(pw-verify,JEV 0.997)。
+全部处置:
+
+| id | 发现 | JEV | 处置 |
+|----|------|-----|------|
+| pw-verify | DecryptionBuilder 口令分支忽略 verification_key:内嵌签名的口令消息返回 Data(与密钥路径分叉,调用方不可区分「无签名」与「有签名未验证」) | 0.997 | decrypt_password_and_verify(新):open_password_container(容器解密出原始内层流)+collect_data_sig+逐验签者取最优 rank;builder 口令分支接线(红探针 NotSigned≠Ok→绿) |
+| F1 | .password_v6().recipient() 组合仍静默丢 v6 口令(recipients 分支不消费 passwords_v6)——api2 同类残留 | 0.626→**探针实锤**(v6 口令持有者解不开,探针推翻低分) | 显式拒(fail-closed);RFC 允许 v6 SKESK+v6 PKESK 共存,真支持登记后续 |
+| F2 | api3 探针假阳性:corrupt[14] 翻的是 MPI 位长低字节,F6 尾随闸在 unwrap 前就拒包,修复前后同绿 | — | 探针改 corrupt[16](MPI 值内);红态经外科式单行回退(unwrap_pkesk_checked→unwrap_pkesk)捕获:掩码路径返回垃圾钥假成功(`false` is not true),恢复 checked 后绿 |
+| F3 | cmd1 原子替换权限回归:temp 文件继承 umask 0644,rename 换 inode 后用户收紧的 0600 丢失(私钥本地泄露面);写中途失败残留 temp | 0.990 | temp 文件 chmod 0600(唯一调用者是 lock/unlock 私钥)+errdefer 清理(写失败/rename 失败均无残留);实机验证 lock 后 stat=600 |
+| F4 | ct1 docstring 写的规范形字节与实现矛盾("text\r\n\r\n" 应为 "text\r\n");往返测试注释承诺断言但代码 `let _ = returned` | — | 注释改正;补真断言 canonicalize(returned)==canonicalize(text) |
+| F5 | verify_detached 多包遍历:结构损坏的后续包以 Malformed 压掉先前包的确定性失败结论 | 0.991 | 逐包 parse+verify 收敛为 Failed rank,不逃逸异常 |
+
+diff 复审同时确认其余修复干净(会话钥长度三处对齐、esk 双形状无混淆、ct1
+边界自洽、extract_literal 重构等价、argon2 caps 与 KAT 兼容、from_armored
+诱饵无误伤、api7 best 语义正确等,清单见 agent 报告)。
+
+教训:修复 diff 自身的复审价值再次印证(api2 的 v6 半边残留、cmd1 的权限面
+回归都是修复引入/未闭合的新问题);探针判据要落到「能区分修复前后」的字节位
+(F2 首版探针两个世界同绿,等于没测)。

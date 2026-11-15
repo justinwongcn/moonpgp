@@ -179,6 +179,17 @@ a released version when that version is published to mooncakes.io.
     argument; `lock`/`unlock` replace the key file atomically
     (temp file + rename(2) on native); IMAP FETCH refuses a
     non-positive window instead of sending `FETCH n:0`.
+  - Same-day diff review of the round (round 2): the decryption
+    builder's password branch verifies the embedded inline signature
+    when verifiers are configured (`decrypt_password_and_verify`) — a
+    signed password-encrypted message used to surface as plain `Data`,
+    indistinguishable from a stripped signature;
+    `.password_v6(...).recipient(...)` fails loudly instead of silently
+    dropping the v6 SKESK (real support for the RFC 9580 v6 SKESK +
+    v6 PKESK combination is a registered follow-up); `verify_detached`
+    keeps its `VerifyStatus` classification when a later signature
+    packet is structurally corrupt; `lock`/`unlock` chmod the temp file
+    to 0600 before the atomic swap and clean it up on failure.
 
 ### Changed
 

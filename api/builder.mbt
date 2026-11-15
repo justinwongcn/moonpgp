@@ -153,6 +153,16 @@ pub fn EncryptionBuilder::finish(
           )
         }
       }
+      // audit f1 (round-2 diff review, probe-confirmed): passwords_v6 used
+      // to be consumed NOWHERE in this branch — `.password_v6().recipient()`
+      // sealed successfully while the v6 passphrase holder could not
+      // decrypt (the v6 SKESK never hit the wire). Fail loudly until the
+      // RFC 9580-legal v6 SKESK + v6 PKESK combo is implemented.
+      guard passwords_v6.is_empty() else {
+        @error.fail(
+          "api: v6 passphrases combined with recipients are not supported yet; use password (v4) recipients or drop the recipient",
+        )
+      }
       let inner = match signer {
         Some(sk) => signed_inner_stream(data, sk, file_name~, compress?)
         None => literal_inner_stream(data, file_name~, compress?)
@@ -287,18 +297,36 @@ pub fn DecryptionBuilder::finish(
       // The caught error VALUE, not its string (audit api1, the j13
       // pattern): re-raising preserves the variant — WrongPassphrase
       // flattened into a generic Fail broke every caller matching on it.
+      // With verifiers configured, the embedded inline signature is
+      // verified on the password path too (audit pw-verify): the branch
+      // used to return Data regardless, indistinguishable from a
+      // stripped signature.
       let mut last_error : Error? = None
       for pass in passwords {
-        let data : Bytes? = Some(
-          decrypt_with_password(message, pass, max_decompressed~),
+        let data : (Bytes, VerifyStatus)? = Some(
+          if verifiers.is_empty() {
+            let d = decrypt_with_password(message, pass, max_decompressed~)
+            (d, NotSigned)
+          } else {
+            decrypt_password_and_verify(
+              message,
+              pass,
+              verifiers,
+              max_decompressed~,
+            )
+          },
         ) catch {
           e => {
             last_error = Some(e)
             None
           }
         }
-        if data is Some(d) {
-          return Data(d)
+        if data is Some((d, status)) {
+          return match status {
+            Ok => Verified(d)
+            Failed | KeyRevoked | Expired => SignatureError(d)
+            NoVerifier | NotSigned => Data(d)
+          }
         }
       }
       match last_error {

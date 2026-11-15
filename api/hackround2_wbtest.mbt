@@ -130,9 +130,15 @@ test "api3: corrupted RSA PKESK fails the recovery honestly" {
   for i in 0..<data.length() {
     corrupt.push(data[i])
   }
-  // The PKESK leads the stream: old-format header(1) len(1), body =
-  // version(1) keyid(8) algo(1) MPI(...). Flip a byte inside the MPI.
-  corrupt[14] = (corrupt[14].to_int() ^ 0x40).to_byte()
+  // The PKESK leads the stream with a NEW-format header: [0]=0xC2 tag,
+  // [1..3]=two length octets, body = version(1) keyid(8) algo(1)
+  // MPI-bits(2) MPI-value(...). Byte 16 sits INSIDE the MPI value — the
+  // S04 mask turns the failed RSA unwrap into a random session key
+  // (old code: bogus success), and unwrap_pkesk_checked raises (new).
+  // The first probe draft flipped byte 14, the MPI BIT-LENGTH low octet:
+  // the F6 trailing-octet gate rejected that packet before the unwrap
+  // ever ran, so the red evidence never discriminated old from new.
+  corrupt[16] = (corrupt[16].to_int() ^ 0x40).to_byte()
   let corrupted = @armor.Message.encode(Bytes::from_array(corrupt).exact_view())
   let failed = try {
     ignore(recover_session_key_with_key(corrupted, key))
@@ -351,4 +357,58 @@ test "api6: astral-plane text still encodes at the chokepoint" {
   // process (audit api6; uncatchable for embedders). The chokepoint check
   // turns that into a catchable Malformed.
   assert_true(@primitives.utf8_bytes("a\u{1F600}b").length() == 6)
+}
+
+///|
+test "pw-verify: the password branch consults configured verifiers" {
+  let key = generate_ed25519_key("pwv <t@e>")
+  // api2 made .password().sign_with() seal an inline signature; the
+  // decryption builder's password branch used to ignore the verification
+  // key entirely — a signed message surfaced as Data (no-signature
+  // semantics), indistinguishable from a stripped signature.
+  let seal = pgp().encryption().password("pw").sign_with(key).finish()
+  let armored = seal(b"payload")
+  let open = pgp()
+    .decryption()
+    .password("pw")
+    .verification_key(key.to_public())
+    .finish()
+  let result = open(armored)
+  let status = match result {
+    Verified(_) => Ok
+    SignatureError(_) => Failed
+    Data(_) => NotSigned
+  }
+  assert_eq(status, Ok)
+  // An unsigned password message still lands in Data (no verifier match).
+  let plain = encrypt_with_password(b"payload", "pw")
+  let open2 = pgp()
+    .decryption()
+    .password("pw")
+    .verification_key(key.to_public())
+    .finish()
+  let result2 = open2(plain)
+  assert_true(result2 is Data(_))
+}
+
+///|
+test "f1: password_v6 + recipient fails loudly, never silently" {
+  let key = generate_ed25519_key("f1 <t@e>")
+  // Probe-confirmed (2026-11-15): the recipients branch never consumed
+  // passwords_v6 — the seal SUCCEEDED and the v6 passphrase holder could
+  // not decrypt (decrypt_with_password raised "no SKESK packet found").
+  // The combination now fails at finish() time; RFC 9580 permits
+  // v6 SKESK + v6 PKESK in one message, so real support is a registered
+  // follow-up — the failure is the fail-closed interim.
+  let raised = try {
+    ignore(
+      pgp().encryption().password_v6("pw6").recipient(key.to_public()).finish()(
+        b"x",
+      ),
+    )
+    false
+  } catch {
+    e => e.to_string().contains("v6 passphrase")
+  }
+  assert_true(raised)
 }

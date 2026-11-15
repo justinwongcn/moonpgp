@@ -297,14 +297,33 @@ extern "c" fn c_rename(src : Bytes, dst : Bytes) -> Int32 = "rename"
 /// write failed midway (ENOSPC, crash, kill). Native targets — where the
 /// CLI ships — write the new content to a sibling temp file and rename it
 /// over the target, so the original survives every mid-write failure.
-/// Non-native targets keep the plain write.
+/// The temp file is chmod 0600 before the swap (audit f3): a fresh file
+/// inherits the umask default (0644) and the rename would swap the inode
+/// out from under a hand-tightened private-key mode. Write and chmod
+/// failures clean the temp file up. Non-native targets keep the plain
+/// write.
+#cfg(target="native")
+#borrow(path)
+extern "c" fn c_chmod(path : Bytes, mode : Int32) -> Int32 = "chmod"
+
+///|
 #cfg(target="native")
 fn replace_file_atomic(path : String, content : String) -> Unit raise {
   let tmp = "\{path}.moonpgp-tmp"
-  @fs.write_string_to_file(tmp, content)
-  guard c_rename(cstring(tmp), cstring(path)) == 0 else {
+  // Any failure after the temp write (mid-write ENOSPC, chmod, rename)
+  // leaves no half-written residue behind.
+  errdefer {
     let _ = @fs.remove_file(tmp) catch { _ => () }
-    @error.fail("cli: could not replace \{path}; the new copy is at \{tmp}")
+  }
+  @fs.write_string_to_file(tmp, content)
+  guard c_chmod(cstring(tmp), 0o600) == 0 else {
+    @error.fail("cli: could not set 0600 on \{tmp}")
+  }
+  guard c_rename(cstring(tmp), cstring(path)) == 0 else {
+    // The errdefer above removes the temp file on this exit path.
+    @error.fail(
+      "cli: could not replace \{path} (rename failed); rerun the command",
+    )
   }
 }
 

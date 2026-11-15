@@ -34,9 +34,34 @@ impl @mime.MimeCallbacks for RoundtripRecorder with fn on_attachment(
 ) {
   let mut name = "?"
   for pair in headers {
-    if pair.0.to_lower() == "content-disposition" &&
-      pair.1.contains("filename=") {
-      name = pair.1
+    if pair.0.to_lower() == "content-disposition" {
+      // Extract the filename token (audit pv5): the whole header value
+      // ("attachment; filename=report.pdf") used to be used as the name.
+      let lower = pair.1.to_lower()
+      match lower.find("filename=") {
+        Some(k) => {
+          let rest = pair.1[k + 9:pair.1.length()].to_owned()
+          let rest = if rest.has_prefix("\"") {
+            rest[1:rest.length()].to_owned()
+          } else {
+            rest
+          }
+          let end = rest.find(";")
+          let token = match end {
+            Some(e) => rest[0:e].to_owned()
+            None => rest
+          }
+          let token = if token.has_suffix("\"") && token.length() > 0 {
+            token[0:token.length() - 1].to_owned()
+          } else {
+            token
+          }
+          if token != "" {
+            name = token
+          }
+        }
+        None => ()
+      }
     }
   }
   self.attachments.push((name, data))
@@ -139,11 +164,21 @@ fn parse_args(argv : Array[String]) -> Config raise {
   let mut i = 0
   while i < argv.length() {
     let flag = argv[i]
+    // Boolean flags consume no value (audit pv2, the M1 class); a
+    // value-flag's value may not start with "--" — "--subject
+    // --roundtrip" used to disable the offline round-trip check and send
+    // for real, and "--smtp-user --smtp-pass-env N" dropped both
+    // credentials.
     let val = if flag == "--roundtrip" {
       ""
     } else {
       guard i + 1 < argv.length() else {
         @error.fail("mailer: \{flag} needs a value")
+      }
+      guard !argv[i + 1].has_prefix("--") else {
+        @error.fail(
+          "mailer: \{flag} needs a value, got the flag '\{argv[i + 1]}'",
+        )
       }
       argv[i + 1]
     }
@@ -185,14 +220,17 @@ fn parse_args(argv : Array[String]) -> Config raise {
       }
       "--smtp-host" => cfg.smtp_host = val
       "--smtp-port" => {
-        let p = val
-        let mut v = 0
-        for c in p {
-          let d = c.to_int() - 48
-          guard d >= 0 && d <= 9 else {
-            @error.fail("mailer: bad --smtp-port '\{p}'")
-          }
-          v = v * 10 + d
+        // audit pv3: the hand-rolled accumulator returned 0 for "" and
+        // wrapped Int32 on 10-digit input; parse_int + a strict range
+        // fail loudly instead.
+        let v = match @netmail.parse_int(val) {
+          Some(v) => v
+          None => @error.fail("mailer: bad --smtp-port '\{val}'")
+        }
+        guard v > 0 && v <= 65535 else {
+          @error.fail(
+            "mailer: --smtp-port out of range (1..65535), got '\{val}'",
+          )
         }
         cfg.smtp_port = v
       }
@@ -347,9 +385,22 @@ async fn run(cfg : Config) -> Unit {
   }
   let status : String = match cfg.mode {
     "file" => {
+      // audit pv4: the 2026-10-06 review closed HALF of this class —
+      // --smtp-host/port/user/pass-env kept being silently ignored in
+      // file mode. Fail loudly for all of them.
       guard cfg.smtp_tls == "auto" && cfg.smtp_trust == "system" else {
         @error.fail(
           "mailer: --smtp-tls/--smtp-trust apply only to --mode smtp (silently ignored before; review 2026-10-06 P3)",
+        )
+      }
+      guard cfg.smtp_user is None && cfg.smtp_pass_env is None else {
+        @error.fail(
+          "mailer: --smtp-user/--smtp-pass-env apply only to --mode smtp (silently ignored before; same review class)",
+        )
+      }
+      guard cfg.smtp_host == "localhost" && cfg.smtp_port == 2525 else {
+        @error.fail(
+          "mailer: --smtp-host/--smtp-port apply only to --mode smtp (silently ignored before; same review class)",
         )
       }
       let t = @netmail.FileTransport::{ out_path: cfg.out, }

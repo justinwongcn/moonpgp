@@ -17,7 +17,7 @@ pub fn build_pgp_mime_signed(String, @api.PrivateKey) -> String raise
 
 pub fn decrypt_and_verify(String, Array[@api.PrivateKey], @api.PublicKey?, max_decompressed? : Int32) -> (Bytes, @api.VerifyStatus) raise
 
-pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int32, max_decompressed? : Int32) -> Bytes raise
+pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int32, max_decompressed? : Int32, verifiers? : Array[@api.PublicKey]) -> (Bytes, @api.VerifyStatus) raise
 
 pub fn decrypt_binary_with_private_key(BytesView, @api.PrivateKey, max_decompressed? : Int32) -> Bytes raise
 

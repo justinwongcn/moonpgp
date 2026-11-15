@@ -190,6 +190,16 @@ a released version when that version is published to mooncakes.io.
     keeps its `VerifyStatus` classification when a later signature
     packet is structurally corrupt; `lock`/`unlock` chmod the temp file
     to 0600 before the atomic swap and clean it up on failure.
+  - Same-day round 3: the password verification rides inside the shared
+    SKESK retry loop (the standalone round-2 entry lost the multi-SKESK
+    retry, the shared S2K budget and the wrong-passphrase error class);
+    `.password_v6(...).recipient(...)` rejects loudly; mailer value flags
+    reject `--`-prefixed values and `--smtp-port` validates strictly;
+    mailer file mode fails loudly on the four smtp flags it used to
+    ignore; mailer attachment names extract the filename token instead
+    of the whole Content-Disposition value; `scripts/interop_check.sh`
+    uses `--pass-env` (the positional-passphrase calls predated the D1
+    change and failed the symmetric direction falsely).
 
 ### Changed
 

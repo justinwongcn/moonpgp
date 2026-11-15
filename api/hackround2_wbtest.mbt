@@ -412,3 +412,51 @@ test "f1: password_v6 + recipient fails loudly, never silently" {
   }
   assert_true(raised)
 }
+
+///|
+test "pv1: a failing first SKESK does not kill the retry" {
+  // SKESK#1 wraps a session key that does NOT open the payload; SKESK#2
+  // carries the real one. Both unwrap honestly under the same passphrase
+  // (no checksum on the v4 shape), so the first container open fails at
+  // the MDC — the retry loop must move on to SKESK#2. The round-2
+  // standalone verify entry unwrapped the FIRST SKESK outside the loop:
+  // the MDC failure escaped as Malformed and SKESK#2 was never tried.
+  let wrong_key = @primitives.random_bytes(32)
+  let real_key = @primitives.random_bytes(32)
+  let s2k1 : @s2k.S2k = @s2k.Iterated(
+    @primitives.Sha256,
+    @primitives.random_bytes(@s2k.SALT_SIZE),
+    @s2k.encode_count(96),
+  )
+  let s2k2 : @s2k.S2k = @s2k.Iterated(
+    @primitives.Sha256,
+    @primitives.random_bytes(@s2k.SALT_SIZE),
+    @s2k.encode_count(96),
+  )
+  let skesk1 = build_skesk(wrong_key.exact_view(), "p", s2k1)
+  let skesk2 = build_skesk(real_key.exact_view(), "p", s2k2)
+  let seipd_ciphertext = @cipher.seipd_v1_encrypt(
+    @primitives.new_block_cipher(@primitives.Aes256, real_key.exact_view()),
+    @packet.serialize_packet(
+      @packet.Literal,
+      @packet.LiteralPacket::binary(b"payload").to_body().exact_view(),
+    ).exact_view(),
+  )
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk1.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk2.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(
+      @packet.Seipd,
+      Bytes::from_array([1]).add(seipd_ciphertext).exact_view(),
+    ).exact_view(),
+  )
+  let msg = @armor.Message.encode(w.to_bytes().exact_view())
+  let (d, status) = decrypt_password_and_verify(msg, "p", [])
+  assert_eq(d, b"payload")
+  assert_eq(status, NotSigned)
+}

@@ -14,7 +14,7 @@ pub const DEFAULT_MAX_DECOMPRESSED_BYTES : Int32 = 536870912
 
 pub fn decrypt_and_verify(String, Array[PrivateKey], PublicKey?, max_decompressed? : Int32) -> (Bytes, VerifyStatus) raise
 
-pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int32, max_decompressed? : Int32) -> Bytes raise
+pub fn decrypt_binary_with_password(BytesView, String, argon2_max_memory_kib? : Int32, max_decompressed? : Int32, verifiers? : Array[PublicKey]) -> (Bytes, VerifyStatus) raise
 
 pub fn decrypt_binary_with_private_key(BytesView, PrivateKey, max_decompressed? : Int32) -> Bytes raise
 

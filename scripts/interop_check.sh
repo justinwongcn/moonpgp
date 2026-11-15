@@ -22,6 +22,7 @@ OPENPGP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BIN="$OPENPGP_DIR/_build/native/release/build/cmd/main/main.exe"
 USERID="Interop Check <interop@test.local>"
 PASSPHRASE="interop-pass-1234"
+export MOONPGP_INTEROP_PASS="$PASSPHRASE"
 
 WORK="$(mktemp -d /tmp/moonpgp_interop.XXXXXX)"
 GNUPGHOME="$WORK/gnupg"
@@ -109,7 +110,8 @@ else
 fi
 
 step "6. moonpgp encpass -> gpg decrypt with passphrase"
-if "$BIN" encpass "$PASSPHRASE" "$WORK/msg.txt" "$WORK/pw.enc.asc" >/dev/null 2>&1; then
+# D1: passphrases travel via --pass-env (an env var), never on argv.
+if "$BIN" encpass --pass-env MOONPGP_INTEROP_PASS "$WORK/msg.txt" "$WORK/pw.enc.asc" >/dev/null 2>&1; then
   if gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" \
       --output "$WORK/pw.dec.txt" --decrypt "$WORK/pw.enc.asc" >/dev/null 2>&1; then
     if cmp -s "$WORK/msg.txt" "$WORK/pw.dec.txt"; then
@@ -127,7 +129,7 @@ fi
 step "7. gpg --symmetric -> moonpgp decpass"
 if gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" \
     --symmetric --armor --output "$WORK/gpg.sym.asc" "$WORK/msg.txt" 2>/dev/null; then
-  if "$BIN" decpass "$PASSPHRASE" "$WORK/gpg.sym.asc" "$WORK/gpg.sym.txt" >/dev/null 2>&1; then
+  if "$BIN" decpass --pass-env MOONPGP_INTEROP_PASS "$WORK/gpg.sym.asc" "$WORK/gpg.sym.txt" >/dev/null 2>&1; then
     if cmp -s "$WORK/msg.txt" "$WORK/gpg.sym.txt"; then
       pass "moonpgp decrypts gpg symmetric ciphertext byte-identically"
     else

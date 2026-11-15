@@ -168,7 +168,7 @@ test "slow: RFC 9580 A.12 SKESK Argon2 messages decrypt to Hello, world!" {
         message.exact_view(),
         "password",
         argon2_max_memory_kib=@primitives.ARGON2_MAX_MEMORY_KIB,
-      ),
+      ).0,
       @primitives.utf8_bytes("Hello, world!"),
       msg="A.12.\{i + 1}",
     )

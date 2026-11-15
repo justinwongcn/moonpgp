@@ -99,3 +99,25 @@ diff 复审同时确认其余修复干净(会话钥长度三处对齐、esk 双�
 教训:修复 diff 自身的复审价值再次印证(api2 的 v6 半边残留、cmd1 的权限面
 回归都是修复引入/未闭合的新问题);探针判据要落到「能区分修复前后」的字节位
 (F2 首版探针两个世界同绿,等于没测)。
+
+## 第 3 轮(同日晚)
+
+两部分扫描:复审 3166fc7 diff + 首次覆盖 example/mailer(本周期全部轮次未扫的
+示例);另发现 interop_check.sh 的 CLI 调用仍是 D1 改造前的位置口令签名
+(方向 5/7 假失败)。JEV 6/6 确认(0.92-0.996),全部处置:
+
+| id | 发现 | JEV | 处置 |
+|----|------|-----|------|
+| PV-1 | **第 2 轮 pw-verify 引入回归**:decrypt_password_and_verify 把 unwrap_skesk 放在重试循环外——v4 免校验形状 1/256 错口令假 unwrap 后,容器失败炸掉整个调用,正确的 SKESK #2 永不尝试,错误类从 WrongPassphrase 漂移为 Malformed;S2KBudget 作用域也被稀释 | 0.959 | 验证并入 decrypt_binary_with_password 的 SKESK 循环(verify~ 参数):N4 重试/共享预算/E7 分类全恢复;decrypt_password_and_verify 变薄封装;确定性回归测试(SKESK#1 包错钥+#2 包真钥,旧路径必炸) |
+| PV-2 | mailer parse_args:-- 前缀值可作前一旗标的值(--subject --roundtrip 静默禁用离线回环走真实发送;--smtp-user --smtp-pass-env 两组凭据同丢);布尔旗标 --roundtrip 在无特判取值路径 | 0.924 | 布尔旗标特判 + 值拒 -- 前缀(M1 类) |
+| PV-3 | mailer --smtp-port 手写累加器:空串→端口 0,10 位数字 Int32 回绕 | 0.985 | parse_int + 1..65535 严格界 |
+| PV-4 | mailer file 模式只拒 --smtp-tls/--smtp-trust(2026-10-06 review 关了一半),其余四个 smtp 旗标仍静默忽略 | 0.995 | guard 扩展到全部四个 |
+| PV-5 | mailer on_attachment 把整个 Content-Disposition 头值当附件名(filename= 提取是空操作) | 0.996 | 解析 filename token(含引号/分号处理);实机 roundtrip 验证 attachment: report.pdf |
+| PV-6 | cmd1 原子替换残留:create(umask 0644)→写私钥→chmod 0600 之间存在可读窗口 | 0.996 | 先建空文件→chmod 0600→再写内容(截断自有 0600 文件保 mode) |
+| 脚本 | interop_check.sh 方向 5/7 的 CLI 调用仍是位置口令(D1 前签名) | — | 改 --pass-env NAME;七方向全 PASS |
+
+diff 复审同时确认 R2 六项修复本体大多成立(builder 状态映射与密钥路径一致、
+verify_detached 逐包 catch 两形态 fail-closed、chmod 类型正确等)。
+教训:新写路径(第 2 轮 pw-verify)必须对照既有循环的语义清单(重试/预算/
+错误分类)逐项核对——PV-1 三项全丢正是漏了这张清单;修脚本陈旧调用属于
+「门禁自身也是被审计对象」的范畴。

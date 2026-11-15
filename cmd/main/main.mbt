@@ -315,10 +315,16 @@ fn replace_file_atomic(path : String, content : String) -> Unit raise {
   errdefer {
     let _ = @fs.remove_file(tmp) catch { _ => () }
   }
-  @fs.write_string_to_file(tmp, content)
+  // Close the mode window (audit pv6): create the temp file EMPTY, chmod
+  // it 0600, and only then write the key material — writing first left
+  // the private-key bytes world-readable between the create and the
+  // chmod (a fresh file inherits the umask default, and the temp name is
+  // predictable). Truncating our own 0600 file keeps the mode.
+  @fs.write_string_to_file(tmp, "")
   guard c_chmod(cstring(tmp), 0o600) == 0 else {
     @error.fail("cli: could not set 0600 on \{tmp}")
   }
+  @fs.write_string_to_file(tmp, content)
   guard c_rename(cstring(tmp), cstring(path)) == 0 else {
     // The errdefer above removes the temp file on this exit path.
     @error.fail(

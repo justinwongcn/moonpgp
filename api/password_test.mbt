@@ -86,7 +86,7 @@ test "rfc4880bis A.4 aead message decrypts end to end" {
     "623d93cc708a43211bb6eaf2b27f7c18" +
     "d571bcd83b20add3a08b73af15b9a098",
   )
-  let data = @api.decrypt_binary_with_password(msg.exact_view(), "password")
+  let data = @api.decrypt_binary_with_password(msg.exact_view(), "password").0
   assert_eq(@utf8.decode_lossy(data.exact_view()), "Hello, world!\n")
 }
 

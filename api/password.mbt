@@ -275,7 +275,7 @@ pub fn decrypt_with_password(
     passphrase,
     argon2_max_memory_kib~,
     max_decompressed~,
-  )
+  ).0
 }
 
 ///|
@@ -369,7 +369,8 @@ pub fn decrypt_binary_with_password(
   passphrase : String,
   argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
   max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
-) -> Bytes raise {
+  verifiers~ : Array[PublicKey] = [],
+) -> (Bytes, VerifyStatus) raise {
   // Fail fast on a nonsensical cap (JEV j4/j13): zero or negative only
   // ever served to poison the S2K budget (or fail Argon2 derivation
   // obscurely); there is no legitimate 0-KiB memory cap.
@@ -403,7 +404,7 @@ pub fn decrypt_binary_with_password(
       // checksum-free v4 CFB shape leaves the payload failure as the
       // wrong-passphrase signal.
       let mut unwrap_definitive = skesk.version() >= 5 || skesk.aead_algo() != 0
-      let opened : Bytes? = try {
+      let opened : (Bytes, VerifyStatus)? = try {
         let (msg_algo, session_key, skesk_version, proved) = unwrap_one_skesk(
           skesk,
           passphrase,
@@ -411,11 +412,56 @@ pub fn decrypt_binary_with_password(
           budget~,
         )
         unwrap_definitive = unwrap_definitive || proved
-        Some(
-          open_password_payload(
-            packets, msg_algo, session_key, skesk_version, max_decompressed,
-          ),
-        )
+        if verifiers.is_empty() {
+          Some(
+            (
+              open_password_payload(
+                packets, msg_algo, session_key, skesk_version, max_decompressed,
+              ),
+              NotSigned,
+            ),
+          )
+        } else {
+          // pw-verify: walk the raw container for OPS/literal/signature and
+          // verify against the configured verifiers, keeping the best rank
+          // (the same loop semantics as the key path — audit pv1: this
+          // verification used to live OUTSIDE the retry loop, so a
+          // 1/256 false unwrap on the checksum-free v4 shape blew the whole
+          // call up instead of trying the next SKESK, and the E7 class
+          // drifted from WrongPassphrase to bare Malformed).
+          let inner = open_password_container(
+            packets, msg_algo, session_key, skesk_version,
+          )
+          let (data_opt, sig_opt, _b) = collect_data_sig(
+            @packet.parse_packets(inner.exact_view()),
+            None,
+            None,
+            max_decompressed,
+            max_decompressed,
+            0,
+          )
+          let d = match data_opt {
+            Some(d) => d
+            None =>
+              @error.malformed("api: password message carries no literal data")
+          }
+          match sig_opt {
+            None => Some((d, NotSigned))
+            Some(s) => {
+              let mut best : VerifyStatus = NotSigned
+              for v in verifiers {
+                let outcome = verify_signature_packet(s, d.exact_view(), v)
+                if outcome is Ok {
+                  return (d, Ok)
+                }
+                if status_rank(outcome) > status_rank(best) {
+                  best = outcome
+                }
+              }
+              Some((d, best))
+            }
+          }
+        }
       } catch {
         @error.WrongPassphrase(msg~) => {
           passphrase_error = Some(msg)
@@ -449,8 +495,8 @@ pub fn decrypt_binary_with_password(
           None
         }
       }
-      if opened is Some(plain) {
-        return plain
+      if opened is Some(result) {
+        return result
       }
     }
   }

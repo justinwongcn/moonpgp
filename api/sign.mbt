@@ -752,45 +752,20 @@ pub fn decrypt_password_and_verify(
   argon2_max_memory_kib~ : Int32 = @primitives.DEFAULT_ARGON2_MAX_MEMORY_KIB,
   max_decompressed~ : Int32 = DEFAULT_MAX_DECOMPRESSED_BYTES,
 ) -> (Bytes, VerifyStatus) raise {
+  // Thin wrapper over the shared retry loop (audit pv1): verification
+  // rides INSIDE decrypt_binary_with_password's SKESK walk, so the N4
+  // multi-SKESK retry, the shared S2KBudget and the E7 error
+  // classification all keep their semantics — the first standalone
+  // version unwrapped the first SKESK outside the loop and lost all
+  // three.
   let block = @armor.decode(message)
-  let packets = @packet.parse_packets(
+  decrypt_binary_with_password(
     @armor.ArmorBlock::data(block).exact_view(),
+    passphrase,
+    argon2_max_memory_kib~,
+    max_decompressed~,
+    verifiers~,
   )
-  let (algo, key, version, _proved) = unwrap_skesk(
-    packets, passphrase, argon2_max_memory_kib,
-  )
-  let inner = open_password_container(packets, algo, key, version)
-  let (data_opt, sig_opt, _budget) = collect_data_sig(
-    @packet.parse_packets(inner.exact_view()),
-    None,
-    None,
-    max_decompressed,
-    max_decompressed,
-    0,
-  )
-  let d = match data_opt {
-    Some(d) => d
-    None => @error.malformed("api: password message carries no literal data")
-  }
-  match sig_opt {
-    None => (d, NotSigned)
-    Some(s) => {
-      if verifiers.is_empty() {
-        return (d, NotSigned)
-      }
-      let mut best : VerifyStatus = NotSigned
-      for v in verifiers {
-        let outcome = verify_signature_packet(s, d.exact_view(), v)
-        if outcome is Ok {
-          return (d, Ok)
-        }
-        if status_rank(outcome) > status_rank(best) {
-          best = outcome
-        }
-      }
-      (d, best)
-    }
-  }
 }
 
 ///|

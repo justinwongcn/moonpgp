@@ -334,6 +334,16 @@ fn decrypt_inner_with_key(
         _ => continue
       }
       if pkesk_is_anonymous(pkesk) {
+        // Anonymous ESKs swallow EVERY failure silently (composition
+        // report C5(b)), while the addressed branch below records the
+        // last error and surfaces Malformed when nothing opens. The
+        // class drift is deliberate: an anonymous ESK carries no key id
+        // to attribute a failure to, so reporting a reason would
+        // fabricate one — a message whose only ESK is an anonymous
+        // poison therefore surfaces as "not encrypted to this key"
+        // upstream. Both outcomes are fail-closed; only the reason
+        // differs, and the attacker controls the key-id shape that
+        // picks the branch.
         for sk in candidates {
           let inner : Bytes? = Some(decrypt_with_pkesk(packets, pkesk, sk)) catch {
             _ => None

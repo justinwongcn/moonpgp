@@ -243,7 +243,13 @@ pub fn ImapClient::imap_select(
   // Same argument discipline as LOGIN (audit F30): a CRLF or quote in
   // `folder` reshapes the command stream.
   validate_login_arg(folder, "folder")
-  let tag = self.send_command("SELECT \{folder}")
+  // A mailbox name containing a space is ONE quoted-string argument on
+  // the wire (agent report B#12): unquoted, `SELECT My Mail` splits
+  // into two arguments and silently addresses the wrong mailbox.
+  // Quoting is injection-safe here — the whitelist above forbids `"`
+  // and `\` in the folder, so the quoted form cannot escape itself.
+  let wire = if folder.contains(" ") { "\"\{folder}\"" } else { folder }
+  let tag = self.send_command("SELECT \{wire}")
   let reply = self.expect_ok(tag, "SELECT")
   for line in reply.untagged {
     match line.length() {

@@ -27,6 +27,11 @@ priv enum Node {
 const MAX_LOGICAL_LINE_BYTES : Int32 = 67_108_864
 
 ///|
+/// Parse-tree node cap (agent report B#13): bounds the decomposition
+/// the byte budget cannot see.
+const MAX_PARSE_NODES : Int32 = 1_000_000
+
+///|
 /// Per-session byte budget (audit F27): every raw line and literal a
 /// server makes us read is charged here; exhaustion raises. 512 MiB is
 /// far above any real mailbox session and bounds the OOM an
@@ -147,6 +152,15 @@ fn parse_nodes(segs : Array[Seg]) -> Array[Node] raise {
   let mut si = 0
   let mut bi = 0
   while si < segs.length() {
+    // The 64 MiB byte budget bounds the input, not the tree (agent
+    // report B#13): a line of single-atom tokens decomposes into one
+    // node + String each, ~20-30x the wire bytes. 1M nodes is ~1000x
+    // any legitimate FETCH/BODYSTRUCTURE response.
+    guard out.length() < MAX_PARSE_NODES else {
+      @error.malformed(
+        "mailnet: response exceeds \{MAX_PARSE_NODES} parse nodes",
+      )
+    }
     match segs[si] {
       Lit(data) => {
         out.push(Node::Raw(data))

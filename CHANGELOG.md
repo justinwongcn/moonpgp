@@ -200,6 +200,10 @@ a released version when that version is published to mooncakes.io.
     of the whole Content-Disposition value; `scripts/interop_check.sh`
     uses `--pass-env` (the positional-passphrase calls predated the D1
     change and failed the symmetric direction falsely).
+  - Same-day round 4 (diff review): mailer attachment names scan quoted
+    values to the closing quote — `filename="a;b.pdf"` was truncated at
+    the semicolon to "a"; a regression test pins the multi-SKESK retry ×
+    verifiers combination that the verification rewire moved.
 
 ### Changed
 

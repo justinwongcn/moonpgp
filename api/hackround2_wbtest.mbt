@@ -460,3 +460,51 @@ test "pv1: a failing first SKESK does not kill the retry" {
   assert_eq(d, b"payload")
   assert_eq(status, NotSigned)
 }
+
+///|
+test "pv1b: multi-SKESK retry with verifiers configured (moved-code combo)" {
+  // The round-3 rewire moved verification INSIDE the shared retry loop;
+  // this pins the moved-code combination the pv1 test does not cover:
+  // multiple SKESKs AND verifiers non-empty. SKESK#1 wraps a wrong key
+  // (MDC failure, E7-classified, retry), SKESK#2 opens; the payload is
+  // unsigned, so the verify branch reports NotSigned.
+  let verifier = generate_ed25519_key("pv1b <t@e>")
+  let wrong_key = @primitives.random_bytes(32)
+  let real_key = @primitives.random_bytes(32)
+  let s2k1 : @s2k.S2k = @s2k.Iterated(
+    @primitives.Sha256,
+    @primitives.random_bytes(@s2k.SALT_SIZE),
+    @s2k.encode_count(96),
+  )
+  let s2k2 : @s2k.S2k = @s2k.Iterated(
+    @primitives.Sha256,
+    @primitives.random_bytes(@s2k.SALT_SIZE),
+    @s2k.encode_count(96),
+  )
+  let skesk1 = build_skesk(wrong_key.exact_view(), "p", s2k1)
+  let skesk2 = build_skesk(real_key.exact_view(), "p", s2k2)
+  let seipd_ciphertext = @cipher.seipd_v1_encrypt(
+    @primitives.new_block_cipher(@primitives.Aes256, real_key.exact_view()),
+    @packet.serialize_packet(
+      @packet.Literal,
+      @packet.LiteralPacket::binary(b"payload").to_body().exact_view(),
+    ).exact_view(),
+  )
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk1.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk2.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(
+      @packet.Seipd,
+      Bytes::from_array([1]).add(seipd_ciphertext).exact_view(),
+    ).exact_view(),
+  )
+  let msg = @armor.Message.encode(w.to_bytes().exact_view())
+  let (d, status) = decrypt_password_and_verify(msg, "p", [verifier.to_public()])
+  assert_eq(d, b"payload")
+  assert_eq(status, NotSigned)
+}

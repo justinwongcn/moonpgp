@@ -121,3 +121,17 @@ verify_detached 逐包 catch 两形态 fail-closed、chmod 类型正确等)。
 教训:新写路径(第 2 轮 pw-verify)必须对照既有循环的语义清单(重试/预算/
 错误分类)逐项核对——PV-1 三项全丢正是漏了这张清单;修脚本陈旧调用属于
 「门禁自身也是被审计对象」的范畴。
+
+## 第 4 轮(同日,复审 65ba0c6)
+
+复审 agent 核验 R3 六项修复本体全部成立(verify~ 重构与空分支等价、解压预算与
+S2KBudget 不相交无重复记账、to_lower 索引对齐、PV-6 两阶段写 POSIX mode 语义、
+F1 guard 覆盖完整、pv1 测试具回归检出力)。发现 1 低危缺陷+2 备注:
+
+| id | 发现 | 处置 |
+|----|------|------|
+| r4f1 | mailer on_attachment 引号内分号截断文件名(filename="a;b.pdf"→"a"):引号值应扫描至闭引号 | 已修(引号值扫描闭引号,裸值扫描分号);探针形状 agent 已预跑 |
+| 备注1 | PV-2 的 -- 前缀拒绝使 -- 开头值不可表达(纯可用性收窄,fail-loud 无静默危害;无 --flag=value 与裸 -- 终止符) | 登记,不改 |
+| 备注2 | 「多 SKESK 重试 × verifiers 非空」组合无测试 | 补 pv1b 测试(错误钥 SKESK#1+真钥 #2+验签者非空→NotSigned,旧 standalone 路径必炸) |
+
+门禁:native 639/wasm 630/js 630(数字随测试增长)、smoke PASS。

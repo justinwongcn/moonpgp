@@ -40,21 +40,21 @@ impl @mime.MimeCallbacks for RoundtripRecorder with fn on_attachment(
       let lower = pair.1.to_lower()
       match lower.find("filename=") {
         Some(k) => {
-          let rest = pair.1[k + 9:pair.1.length()].to_owned()
-          let rest = if rest.has_prefix("\"") {
-            rest[1:rest.length()].to_owned()
+          // Quoted values scan to the CLOSING quote (audit r4f1): the
+          // ';'-scan ran inside the quotes and truncated
+          // filename="a;b.pdf" to "a". Bare values scan to the first ';'.
+          let raw = pair.1[k + 9:pair.1.length()].to_owned()
+          let token = if raw.has_prefix("\"") {
+            let inner = raw[1:raw.length()].to_owned()
+            match inner.find("\"") {
+              Some(e) => inner[0:e].to_owned()
+              None => inner
+            }
           } else {
-            rest
-          }
-          let end = rest.find(";")
-          let token = match end {
-            Some(e) => rest[0:e].to_owned()
-            None => rest
-          }
-          let token = if token.has_suffix("\"") && token.length() > 0 {
-            token[0:token.length() - 1].to_owned()
-          } else {
-            token
+            match raw.find(";") {
+              Some(e) => raw[0:e].to_owned()
+              None => raw
+            }
           }
           if token != "" {
             name = token

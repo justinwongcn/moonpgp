@@ -196,5 +196,5 @@ E7/N4 错误、best-rank 与 verify_detached 逐句同构、文档三类与代�
 
 | id | 发现 | 处置 |
 |----|------|------|
-| r11-1 | 「对齐」表述过强:未知 hash_algo 的 verifier 在 password 路径现为 (d, Failed)(数据保留),密钥路径仍 last_error+re-raise(数据丢失)——两条解密路径新不对称,未登记 | plan/CHANGELOG 登记该已知不对称;密钥路径归一化为后续轮候选 |
+| r11-1 | 「对齐」表述过强:未知 hash_algo 的 verifier 在 password 路径现为 (d, Failed)(数据保留),密钥路径仍 raise(数据丢失)——两条解密路径新不对称,未登记 | plan/CHANGELOG 登记该已知不对称;**归一化落点=finish_inline_verify(sign.mbt:394,无 catch)与 cleartext.mbt 裸调用,非 builder 的 last_error 环节**(r13 勘误) |
 | r11-2 | r9-1 零回归覆盖:全仓无未知 hash_algo 签名构造,若 catch 被「简化」掉门禁仍全绿 | 补 r9-1 回归测试(手工构造 hash_algo=0x63 的签名+verifier→(payload, Failed),数据保留) |

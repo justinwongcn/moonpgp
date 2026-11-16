@@ -517,15 +517,18 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
   // verify_signature_packet raises Unsupported at document_hash). The
   // per-verifier catch maps that to Failed and the decrypted data
   // survives — before the fix the raise voided the data and killed the
-  // whole call.
+  // whole call. (The hand-built OPS bytes are inert: collect_data_sig
+  // skips OnePassSig without parsing them — the Signature packet is the
+  // semantic trigger.)
   let verifier = generate_ed25519_key("r91 <t@e>")
   let session_key = @primitives.random_bytes(32)
   let sig : @packet.SignaturePacket = {
     version: 4,
     sig_type: @packet.BinaryDocument,
     pub_algo: @packet.Ed25519,
-    hash_algo: 0x63, // unassigned hash algorithm id
-    hashed_subpackets: [],
+    hash_algo: 0x63,
+    hashed_subpackets: [ // unassigned hash algorithm id
+    ],
     unhashed_subpackets: [],
     raw_hashed_area: Bytes::new(0),
     fast_hash: 0,
@@ -534,12 +537,16 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
   }
   let inner = @packet.Writer::new()
   inner.bytes(
-    @packet.serialize_packet(@packet.OnePassSig,
-      Bytes::from_array([4, 0, 0x63, 1, 1]).exact_view()).exact_view(),
+    @packet.serialize_packet(
+      @packet.OnePassSig,
+      Bytes::from_array([4, 0, 0x63, 1, 1]).exact_view(),
+    ).exact_view(),
   )
   inner.bytes(
-    @packet.serialize_packet(@packet.Literal,
-      @packet.LiteralPacket::binary(b"payload").to_body().exact_view()).exact_view(),
+    @packet.serialize_packet(
+      @packet.Literal,
+      @packet.LiteralPacket::binary(b"payload").to_body().exact_view(),
+    ).exact_view(),
   )
   inner.bytes(
     @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),

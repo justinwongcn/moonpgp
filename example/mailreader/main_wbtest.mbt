@@ -106,3 +106,35 @@ test "uidvalidity mismatch refuses the fetch (F26)" {
   }
   assert_true(raised)
 }
+
+///|
+test "r5 probe: quoted semicolon truncates the attachment name" {
+  // mailreader's filename extraction splits on ';' without quote
+  // awareness (the mailer twin was fixed in round 4, r4f1): a quoted
+  // semicolon truncates the name. sanitize_filename still holds against
+  // traversal, so the impact is attacker-controlled truncation only.
+  let r = FetchRecorder::new()
+  @mime.MimeCallbacks::on_attachment(
+    r,
+    [("Content-Disposition", "attachment; filename=\"a;b.pdf\"")],
+    b"data",
+  )
+  // Quoted values scan to the closing quote: the full name survives.
+  assert_eq(r.attachments[0].0, "a;b.pdf")
+  // Bare values keep the parameter-separator behavior.
+  let r2 = FetchRecorder::new()
+  @mime.MimeCallbacks::on_attachment(
+    r2,
+    [("Content-Disposition", "attachment; filename=plain.txt; size=1")],
+    b"data",
+  )
+  assert_eq(r2.attachments[0].0, "plain.txt")
+  // The traversal gate stays behind the extraction.
+  let r3 = FetchRecorder::new()
+  @mime.MimeCallbacks::on_attachment(
+    r3,
+    [("Content-Disposition", "attachment; filename=\"../../evil\"")],
+    b"data",
+  )
+  assert_eq(r3.attachments[0].0, "evil")
+}

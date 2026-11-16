@@ -38,9 +38,23 @@ impl @mime.MimeCallbacks for FetchRecorder with fn on_attachment(
       let v = pair.1
       let cut = v.split("filename=").collect()
       if cut.length() == 2 {
-        // stop at the next parameter separator, then strip quotes
-        let seg = cut[1].split(";").collect()
-        let candidate = seg[0].trim().trim(chars="\"").to_owned()
+        // Quote-aware scan (audit r5-mr, the mailer r4f1 twin): the
+        // ';'-split ran inside the quotes and truncated
+        // filename="a;b.pdf" to "a". Quoted values scan to the closing
+        // quote; bare values stop at the next parameter separator.
+        let raw = cut[1].trim().to_owned()
+        let candidate = if raw.has_prefix("\"") {
+          let inner = raw[1:raw.length()].to_owned()
+          match inner.find("\"") {
+            Some(e) => inner[0:e].to_owned()
+            None => inner
+          }
+        } else {
+          match raw.find(";") {
+            Some(e) => raw[0:e].to_owned()
+            None => raw
+          }
+        }
         // C1 (review): attachments are delivered regardless of the
         // signature outcome, and filenames come from the wire — a
         // "../" name would escape --out. Basename-only whitelist.

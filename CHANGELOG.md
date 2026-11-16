@@ -204,6 +204,10 @@ a released version when that version is published to mooncakes.io.
     values to the closing quote — `filename="a;b.pdf"` was truncated at
     the semicolon to "a"; a regression test pins the multi-SKESK retry ×
     verifiers combination that the verification rewire moved.
+  - Round 5: the mailreader attachment-name extraction gets the same
+    quote-aware scan (the twin of the mailer fix) — a quoted semicolon
+    in an attacker-supplied Content-Disposition truncated the saved
+    filename; the traversal whitelist is unaffected.
 
 ### Changed
 

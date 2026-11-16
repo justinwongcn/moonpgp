@@ -217,6 +217,14 @@ a released version when that version is published to mooncakes.io.
 
 ### Changed
 
+- **Breaking:** RSA key generation caps at 16384 bits (OpenSSH's limit;
+  audit M3) on top of the 3072-bit floor — `generate_rsa_key` and the
+  `keygen [bits]` CLI argument reject anything above.
+- **Breaking:** `decrypt_binary_with_password` returns
+  `(Bytes, VerifyStatus)` and takes an optional `verifiers` list (the
+  password-path signature verification), and
+  `pki.ecdh_anonymous_sender` raises with the other signature changes
+  below — call sites either want the status or can `.0` it.
 - **Breaking:** `ArmorType::encode`/`encode` and
   `OnePassSigPacket::to_body` raise now, and `utf8_bytes` validates its
   input: a lone surrogate used to abort the whole process inside core's

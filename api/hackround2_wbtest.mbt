@@ -42,9 +42,10 @@ test "api2: password + signer produces a signed message" {
   let armored = seal(b"payload")
   // The signer must be HONORED in the sealed payload (api2): opening the
   // SEIPD with the unwrapped session key reveals the packet stream
-  // one-pass-signature + literal + signature. (The password decryption
-  // path does not yet verify embedded signatures — that lives on the key
-  // path — a registered leftover.)
+  // one-pass-signature + literal + signature. (Since round 3 the
+  // password decryption path ALSO verifies embedded signatures via
+  // decrypt_password_and_verify — the earlier "registered leftover" note
+  // is closed.)
   let block = @armor.decode(armored)
   let ps = @packet.parse_packets(block.data().exact_view())
   let mut skesk : @packet.SkeskPacket? = None

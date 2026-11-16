@@ -450,7 +450,20 @@ pub fn decrypt_binary_with_password(
             Some(s) => {
               let mut best : VerifyStatus = NotSigned
               for v in verifiers {
-                let outcome = verify_signature_packet(s, d.exact_view(), v)
+                // Per-verifier failure tolerance (audit r9, the api7
+                // convention): a verifier whose signature carries an
+                // unknown hash algorithm raises Unsupported — without
+                // the catch that raise voided the already-decrypted data
+                // and prevented the remaining verifiers from being
+                // consulted, diverging from the key path and
+                // verify_detached.
+                let outcome : VerifyStatus = verify_signature_packet(
+                  s,
+                  d.exact_view(),
+                  v,
+                ) catch {
+                  _ => Failed
+                }
                 if outcome is Ok {
                   return (d, Ok)
                 }

@@ -154,8 +154,11 @@ R5 其余复审范围:pv1b 已在第 4 轮门禁实跑通过(639/639 含该测�
 tokenrhythm-cn 组仅服务 chat,/v1/decisions 与 /v1/systemone 被拒
 ("only an OpenAI API key, Azure OpenAI and another magpie serve it"——重启后
 的 magpie 未接决策模型上游),直连 tokenrhythm.studio 仍 401。第 5 轮候选
-(r5-mr)按探针收据裁决(既有纪律:探针优先);后续轮次若无新候选则无需 JEV,
-若有候选同样以探针裁决并记录。
+(r5-mr)先按探针收据裁决;用户重启 MAGPIE 并给出模型 id(jev/NeoHorse-Jev-4B)
+后,经 MAGPIE 补跑正式验证 **p=0.996**(与探针一致)。MAGPIE 形态与直连不同:
+POST localhost:11434/v1/decisions,体={model:"jev/NeoHorse-Jev-4B", input:<state>,
+questions:[{type:"predicate|choice|score", instructions}]},响应 answers 为数组
+(与 questions 顺序对应,probability 字段);noul 在此路由叫 predicate。
 
 ## 第 7 轮(2026-11-17 凌晨,脚本扫+acceptance 深验证)
 
@@ -171,3 +174,16 @@ tokenrhythm-cn 组仅服务 chat,/v1/decisions 与 /v1/systemone 被拒
 
 R7 扫描其余部分干净:e2e*/acceptance 脚本无陈旧调用残留(R3 同类问题的
 残余面核查),acceptance 的 1-3/5 步全绿(640/631)。
+
+## 第 9-10 轮(2026-11-17 清晨)
+
+第 8 轮复审 0028f84 判定干净(unlock 全分支 raise 面闭合、消息文本匹配、
+无断言交互——干净轮);第 9 轮终局扫描(净 diff 交互+文档一致性+测试同步)
+抓到 4 项(1 行为级+3 文档级),全部处置:
+
+| id | 发现 | JEV/裁决 | 处置 |
+|----|------|-----|------|
+| r9-1 | password+verifiers 内联验签块无 per-verifier catch:未知 hash_algo 的签名抛 Unsupported 会作废已解密数据、阻止其余验签者(与 verify_detached 的 api7 约定、密钥路径逐对 catch 均分叉;wire 可达:parse 不校验 hash_algo 字节) | R9 agent 代码链路核实(sign.mbt:30 经 finish_signed_digest 先于优雅 Failed 分支) | per-verifier try/catch→Failed(api7 约定对齐),数据保留、其余验签者继续 |
+| r9-2 | RSA 16384 上限(M3)零文档声明:CHANGELOG 无 Breaking 条目、README 中英只有 3072 下限 | — | CHANGELOG Breaking 条目+README 中英补上限 |
+| r9-3 | decrypt_binary_with_password 签名破坏性变更(Bytes→(Bytes, VerifyStatus)+verifiers?)与 ecdh_anonymous_sender→raise 未入 CHANGELOG | — | 补 Breaking 条目 |
+| r9-4 | hackround2 api2 测试注释仍是「password 路径不验内嵌签名——登记遗留」,与 round-3 修复矛盾,会误导后续轮次 | — | 注释更新为已闭合 |

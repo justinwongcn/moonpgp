@@ -187,3 +187,14 @@ R7 扫描其余部分干净:e2e*/acceptance 脚本无陈旧调用残留(R3 同�
 | r9-2 | RSA 16384 上限(M3)零文档声明:CHANGELOG 无 Breaking 条目、README 中英只有 3072 下限 | — | CHANGELOG Breaking 条目+README 中英补上限 |
 | r9-3 | decrypt_binary_with_password 签名破坏性变更(Bytes→(Bytes, VerifyStatus)+verifiers?)与 ecdh_anonymous_sender→raise 未入 CHANGELOG | — | 补 Breaking 条目 |
 | r9-4 | hackround2 api2 测试注释仍是「password 路径不验内嵌签名——登记遗留」,与 round-3 修复矛盾,会误导后续轮次 | — | 注释更新为已闭合 |
+
+## 第 11-12 轮(2026-11-17 清晨,复审 c718981)
+
+第 11 轮复审判定 r9-1 核心语义正确(Unsupported raise 面核实、catch-all 不吞
+E7/N4 错误、best-rank 与 verify_detached 逐句同构、文档三类与代码一致),
+2 条低危,第 12 轮处置:
+
+| id | 发现 | 处置 |
+|----|------|------|
+| r11-1 | 「对齐」表述过强:未知 hash_algo 的 verifier 在 password 路径现为 (d, Failed)(数据保留),密钥路径仍 last_error+re-raise(数据丢失)——两条解密路径新不对称,未登记 | plan/CHANGELOG 登记该已知不对称;密钥路径归一化为后续轮候选 |
+| r11-2 | r9-1 零回归覆盖:全仓无未知 hash_algo 签名构造,若 catch 被「简化」掉门禁仍全绿 | 补 r9-1 回归测试(手工构造 hash_algo=0x63 的签名+verifier→(payload, Failed),数据保留) |

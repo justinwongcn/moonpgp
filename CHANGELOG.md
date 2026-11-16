@@ -208,6 +208,11 @@ a released version when that version is published to mooncakes.io.
     quote-aware scan (the twin of the mailer fix) — a quoted semicolon
     in an attacker-supplied Content-Disposition truncated the saved
     filename; the traversal whitelist is unaffected.
+  - Known asymmetry registered in round 11: a verifier whose signature
+    carries an unknown hash algorithm now yields `(data, Failed)` on the
+    password path (data preserved), while the key path still re-raises
+    with the data lost — normalizing the key path is a registered
+    follow-up.
   - Round 7 (acceptance deep verification): the slow RFC 9580 A.5
     unlock test still expected the pre-typed-variant generic PgpError —
     its expectation drifted when the Oct-27 typed-variant round

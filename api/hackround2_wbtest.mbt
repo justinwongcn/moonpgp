@@ -509,3 +509,63 @@ test "pv1b: multi-SKESK retry with verifiers configured (moved-code combo)" {
   assert_eq(d, b"payload")
   assert_eq(status, NotSigned)
 }
+
+///|
+test "r9-1: a verifier-raising signature keeps data on the password path" {
+  // Wire-reachable shape the round-9 fix pins: a Signature packet whose
+  // hash_algo byte is unassigned (parse does not check it;
+  // verify_signature_packet raises Unsupported at document_hash). The
+  // per-verifier catch maps that to Failed and the decrypted data
+  // survives — before the fix the raise voided the data and killed the
+  // whole call.
+  let verifier = generate_ed25519_key("r91 <t@e>")
+  let session_key = @primitives.random_bytes(32)
+  let sig : @packet.SignaturePacket = {
+    version: 4,
+    sig_type: @packet.BinaryDocument,
+    pub_algo: @packet.Ed25519,
+    hash_algo: 0x63, // unassigned hash algorithm id
+    hashed_subpackets: [],
+    unhashed_subpackets: [],
+    raw_hashed_area: Bytes::new(0),
+    fast_hash: 0,
+    salt: Bytes::new(0),
+    sig_params: [Bytes::make(64, b'\x04')],
+  }
+  let inner = @packet.Writer::new()
+  inner.bytes(
+    @packet.serialize_packet(@packet.OnePassSig,
+      Bytes::from_array([4, 0, 0x63, 1, 1]).exact_view()).exact_view(),
+  )
+  inner.bytes(
+    @packet.serialize_packet(@packet.Literal,
+      @packet.LiteralPacket::binary(b"payload").to_body().exact_view()).exact_view(),
+  )
+  inner.bytes(
+    @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
+  )
+  let s2k : @s2k.S2k = @s2k.Iterated(
+    @primitives.Sha256,
+    @primitives.random_bytes(@s2k.SALT_SIZE),
+    @s2k.encode_count(96),
+  )
+  let skesk = build_skesk(session_key.exact_view(), "p", s2k)
+  let seipd_ciphertext = @cipher.seipd_v1_encrypt(
+    @primitives.new_block_cipher(@primitives.Aes256, session_key.exact_view()),
+    inner.to_bytes().exact_view(),
+  )
+  let w = @packet.Writer::new()
+  w.bytes(
+    @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
+  )
+  w.bytes(
+    @packet.serialize_packet(
+      @packet.Seipd,
+      Bytes::from_array([1]).add(seipd_ciphertext).exact_view(),
+    ).exact_view(),
+  )
+  let msg = @armor.Message.encode(w.to_bytes().exact_view())
+  let (d, status) = decrypt_password_and_verify(msg, "p", [verifier.to_public()])
+  assert_eq(d, b"payload")
+  assert_eq(status, Failed)
+}

@@ -147,3 +147,27 @@ R5 复审 agent 因配额中断,遗留线索已核实:mailreader on_attachment �
 
 R5 其余复审范围:pv1b 已在第 4 轮门禁实跑通过(639/639 含该测试);mailer
 引号扫描边界已由第 4 轮 agent 预验证;F2 备注决定(不改)复核维持。
+
+## JEV 通道状态(2026-11-17)
+
+第 5 轮起 MAGPIE 关停导致直连 401;用户重启 MAGPIE(localhost:11434)后,其
+tokenrhythm-cn 组仅服务 chat,/v1/decisions 与 /v1/systemone 被拒
+("only an OpenAI API key, Azure OpenAI and another magpie serve it"——重启后
+的 magpie 未接决策模型上游),直连 tokenrhythm.studio 仍 401。第 5 轮候选
+(r5-mr)按探针收据裁决(既有纪律:探针优先);后续轮次若无新候选则无需 JEV,
+若有候选同样以探针裁决并记录。
+
+## 第 7 轮(2026-11-17 凌晨,脚本扫+acceptance 深验证)
+
+脚本面扫干净(e2e* 全部 --pass-env 或未锁钥,ci_smoke 的 decpriv 走未锁钥无需
+口令);acceptance.sh 深验证(含本周期从未实跑的 #skip 慢向量)抓到 1 项:
+
+| id | 发现 | 处置 |
+|----|------|------|
+| r7-slow | 慢向量测试「A.5 v6 unlock 错口令」的 catch 仍期望泛型 PgpError 变体——10-27 类型化轮(ed68c4c)把 lock.mbt AEAD 路径改为 WrongPassphrase 后慢套件无人跑,期望漂移 | pre-cycle HEAD(1172424)worktree 实证同位同失败=既有问题非本轮回归;catch 改接受类型化 WrongPassphrase,慢向量 2/2 绿 |
+
+教训:#skip 的慢测试不在常规门禁里,期望漂移可潜伏数周——acceptance 深验证
+应周期性实跑(本轮 R7 即靠它抓到)。
+
+R7 扫描其余部分干净:e2e*/acceptance 脚本无陈旧调用残留(R3 同类问题的
+残余面核查),acceptance 的 1-3/5 步全绿(640/631)。

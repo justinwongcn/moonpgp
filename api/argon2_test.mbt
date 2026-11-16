@@ -205,7 +205,11 @@ test "slow: RFC 9580 A.5 v6 secret key unlocks (Argon2 + OCB + HKDF)" {
     @api.verify_detached(data, sig, unlocked.to_public()),
     @api.VerifyStatus::Ok,
   )
-  // The wrong passphrase must not authenticate.
+  // The wrong passphrase must not authenticate. The AEAD tag failure is
+  // classified as the typed WrongPassphrase variant (audit r7: this
+  // catch still expected the pre-typed-variant generic PgpError — the
+  // slow suite had not been run since the Oct-27 typed-variant round,
+  // and the expectation drifted).
   let raised = try {
     ignore(
       key.unlock(
@@ -215,11 +219,11 @@ test "slow: RFC 9580 A.5 v6 secret key unlocks (Argon2 + OCB + HKDF)" {
     )
     false
   } catch {
-    @error.PgpError(msg~) => {
+    @error.WrongPassphrase(msg~) => {
       assert_true(msg.contains("wrong passphrase"))
       true
     }
-    _ => fail("expected a PgpError from the AEAD tag check")
+    _ => fail("expected a WrongPassphrase from the AEAD tag check")
   }
   assert_true(raised, msg="AEAD tag must reject a wrong passphrase")
 }

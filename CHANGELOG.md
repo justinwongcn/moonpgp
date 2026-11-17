@@ -213,6 +213,11 @@ a released version when that version is published to mooncakes.io.
     password path (data preserved), while the key path still re-raises
     with the data lost — normalizing the key path is a registered
     follow-up.
+  - Round 16 (final review): the mailer file-mode guard introduced in
+    round 3 compared against the wrong default host ("localhost" vs the
+    actual "127.0.0.1" default) and rejected the documented default
+    file-mode delivery outright; the guard now matches the real defaults
+    and still fails loudly on explicitly set smtp flags.
   - Round 7 (acceptance deep verification): the slow RFC 9580 A.5
     unlock test still expected the pre-typed-variant generic PgpError —
     its expectation drifted when the Oct-27 typed-variant round

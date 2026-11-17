@@ -198,3 +198,17 @@ E7/N4 错误、best-rank 与 verify_detached 逐句同构、文档三类与代�
 |----|------|------|
 | r11-1 | 「对齐」表述过强:未知 hash_algo 的 verifier 在 password 路径现为 (d, Failed)(数据保留),密钥路径仍 raise(数据丢失)——两条解密路径新不对称,未登记 | plan/CHANGELOG 登记该已知不对称;**归一化落点=finish_inline_verify(sign.mbt:394,无 catch)与 cleartext.mbt 裸调用,非 builder 的 last_error 环节**(r13 勘误) |
 | r11-2 | r9-1 零回归覆盖:全仓无未知 hash_algo 签名构造,若 catch 被「简化」掉门禁仍全绿 | 补 r9-1 回归测试(手工构造 hash_algo=0x63 的签名+verifier→(payload, Failed),数据保留) |
+
+## 第 16 轮与收尾(2026-11-17 早晨)
+
+第 16 轮终局复核抓到 **f16-1(低中危,R3 引入回归)**:PV-4 的 file-mode guard
+比较 `smtp_host == "localhost"`,而 Config 默认值是 "127.0.0.1"——默认 file
+投递(用户零旗标)必然误报失败,与 pv4 注释意图(对用户实际设置的旗标大声
+失败)相反。历轮漏网原因:mailer 是 example 包零测试覆盖,e2e 两用例恰好绕开
+guard(smtp 显式传参/roundtrip 提前返回)——即 r11-2 登记过的「零覆盖场景」
+同型。pre-probe 实锤(默认流程报 guard 错误)。
+
+处置:guard 对齐默认值(127.0.0.1:2525);实机双向验证——默认投递恢复
+(f16.eml 落盘)、显式非默认 smtp 旗标仍大声失败。第 16 轮其余三项交叉验证
+干净(提交间无「后轮撤销前轮」、工作区干净、CHANGELOG 对账完整、三处 usage
+与 README 一致、openwiki/api.md 与代码现状一致)。

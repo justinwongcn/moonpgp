@@ -398,7 +398,14 @@ async fn run(cfg : Config) -> Unit {
           "mailer: --smtp-user/--smtp-pass-env apply only to --mode smtp (silently ignored before; same review class)",
         )
       }
-      guard cfg.smtp_host == "localhost" && cfg.smtp_port == 2525 else {
+      // Compare against the Config DEFAULTS (audit f16-1): the first cut
+      // compared against "localhost", which is NOT the default host —
+      // the guard fired on untouched defaults and broke the documented
+      // default file-mode delivery. Explicit non-default host/port in
+      // file mode still fails loudly; a user who explicitly passes the
+      // default values gets them honored silently (harmless — they match
+      // what file mode would do anyway).
+      guard cfg.smtp_host == "127.0.0.1" && cfg.smtp_port == 2525 else {
         @error.fail(
           "mailer: --smtp-host/--smtp-port apply only to --mode smtp (silently ignored before; same review class)",
         )

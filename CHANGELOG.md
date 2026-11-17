@@ -208,11 +208,16 @@ a released version when that version is published to mooncakes.io.
     quote-aware scan (the twin of the mailer fix) — a quoted semicolon
     in an attacker-supplied Content-Disposition truncated the saved
     filename; the traversal whitelist is unaffected.
-  - Known asymmetry registered in round 11: a verifier whose signature
-    carries an unknown hash algorithm now yields `(data, Failed)` on the
-    password path (data preserved), while the key path still re-raises
-    with the data lost — normalizing the key path is a registered
-    follow-up.
+  - Key-path normalization (registered in round 11, resolved): a
+    verifier whose signature carries an unknown hash algorithm now
+    yields `(data, Failed)` on BOTH decryption paths (the key path used
+    to re-raise with the data lost); `verify_cleartext` gets the same
+    tolerance.
+  - **Added:** `.password_v6(...).recipient(...)` now seals for real —
+    v6 SKESKs ride alongside v6 PKESKs under one shared session key
+    (RFC 9580 §10.3.2.1; the round-2 interim explicit rejection is
+    replaced). The v4-recipient × v6-passphrase mix and an entry AEAD
+    that mismatches the recipient ciphersuite still fail loudly.
   - Round 16 (final review): the mailer file-mode guard introduced in
     round 3 compared against the wrong default host ("localhost" vs the
     actual "127.0.0.1" default) and rejected the documented default

@@ -152,7 +152,7 @@ fn seal_to_recipients(
   inner : BytesView,
   recipients : Array[PublicKey],
 ) -> String raise {
-  seal_esks_and_seipd(inner, recipients, [])
+  seal_esks_and_seipd(inner, recipients, [], [])
 }
 
 ///|
@@ -166,6 +166,7 @@ fn seal_esks_and_seipd(
   inner : BytesView,
   recipients : Array[PublicKey],
   passwords : Array[String],
+  passwords_v6 : Array[V6Password],
 ) -> String raise {
   guard !recipients.is_empty() || !passwords.is_empty() else {
     @error.fail("api: no recipient or passphrase to seal to")
@@ -188,6 +189,17 @@ fn seal_esks_and_seipd(
       )
     }
   }
+  // v6 SKESKs ride only with v6 recipients: they precede the same v2
+  // SEIPD, and a v4 PKESK requires a v1 SEIPD (RFC 9580 §10.3.2.1). The
+  // registered follow-up to audit f1 — the combination is now actually
+  // sealed instead of rejected.
+  if !passwords_v6.is_empty() {
+    guard v6 else {
+      @error.fail(
+        "api: cannot mix v4 recipients with v6 passphrases in one message",
+      )
+    }
+  }
   // RFC 9580 §5.2.3.15/§13.2: every recipient must accept the chosen pair,
   // so take the first recipient's preference order and intersect it with
   // every other recipient's candidate list.
@@ -195,6 +207,15 @@ fn seal_esks_and_seipd(
     pick_v6_ciphersuite(recipients)
   } else {
     (@primitives.Aes256, @cipher.Ocb)
+  }
+  // Every v6 passphrase's AEAD must name the payload's AEAD (the SKESK's
+  // HKDF AD carries the pair; audit f1 follow-up).
+  for e in passwords_v6 {
+    guard e.aead.number() == aead_mode.number() else {
+      @error.fail(
+        "api: v6 passphrase AEAD must match the recipient ciphersuite",
+      )
+    }
   }
   let session_key = @primitives.random_bytes(sym_algo.key_size())
   let w = @packet.Writer::new()
@@ -229,6 +250,14 @@ fn seal_esks_and_seipd(
       @s2k.encode_count(S2K_COUNT_TARGET),
     )
     let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
+    w.bytes(
+      @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
+    )
+  }
+  // One v6 SKESK per v6 passphrase recipient (registered follow-up):
+  // HKDF key separation names the payload's cipher/AEAD pair.
+  for e in passwords_v6 {
+    let skesk = build_v6_skesk(e, sym_algo, aead_mode, session_key.exact_view())
     w.bytes(
       @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
     )

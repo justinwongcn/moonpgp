@@ -390,8 +390,16 @@ fn finish_inline_verify(
 ) -> (Bytes, VerifyStatus) raise {
   match (data, sig) {
     (Some(d), Some(s)) => {
+      // Per-verifier failure tolerance (the key-path normalization, the
+      // password-path r9-1 twin): a verifier whose signature carries an
+      // unknown hash algorithm raises Unsupported at document_hash —
+      // without the catch that raise lost the decrypted data entirely,
+      // while the password path (and verify_detached) report Failed.
       let status : VerifyStatus = match verifier {
-        Some(v) => verify_signature_packet(s, d.exact_view(), v)
+        Some(v) =>
+          verify_signature_packet(s, d.exact_view(), v) catch {
+            _ => Failed
+          }
         None => NoVerifier
       }
       (d, status)

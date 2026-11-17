@@ -220,7 +220,14 @@ pub fn verify_cleartext(
   }
   match sig {
     Some(s) => {
-      let status = verify_signature_packet(s, canonical, verifier)
+      // Same per-verifier tolerance as the key path (r13 follow-up): a
+      // signature with an unsupported hash algorithm reports Failed with
+      // the cleartext returned, instead of raising past the caller.
+      let status : VerifyStatus = verify_signature_packet(
+        s, canonical, verifier,
+      ) catch {
+        _ => Failed
+      }
       // Lossy on purpose (S9): `canonical` is assembled from String
       // pieces via @utf8.encode, which never emits invalid UTF-8 — decode
       // cannot fail, and a silent "" fallback would desync the returned

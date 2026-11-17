@@ -156,18 +156,20 @@ pub fn EncryptionBuilder::finish(
       // audit f1 (round-2 diff review, probe-confirmed): passwords_v6 used
       // to be consumed NOWHERE in this branch — `.password_v6().recipient()`
       // sealed successfully while the v6 passphrase holder could not
-      // decrypt (the v6 SKESK never hit the wire). Fail loudly until the
-      // RFC 9580-legal v6 SKESK + v6 PKESK combo is implemented.
-      guard passwords_v6.is_empty() else {
-        @error.fail(
-          "api: v6 passphrases combined with recipients are not supported yet; use password (v4) recipients or drop the recipient",
-        )
-      }
+      // decrypt. The registered follow-up is now real (round: followup
+      // 2026-11-18): v6 SKESKs ride alongside v6 PKESKs under one shared
+      // session key (RFC 9580 §10.3.2.1); the seal rejects the
+      // v4-recipient × v6-passphrase mix and AEAD mismatches.
       let inner = match signer {
         Some(sk) => signed_inner_stream(data, sk, file_name~, compress?)
         None => literal_inner_stream(data, file_name~, compress?)
       }
-      return seal_esks_and_seipd(inner.exact_view(), recipients, passwords)
+      return seal_esks_and_seipd(
+        inner.exact_view(),
+        recipients,
+        passwords,
+        passwords_v6,
+      )
     }
     if !passwords_v6.is_empty() {
       guard passwords.is_empty() else {
@@ -191,7 +193,7 @@ pub fn EncryptionBuilder::finish(
         Some(sk) => signed_inner_stream(data, sk, file_name~, compress?)
         None => literal_inner_stream(data, file_name~, compress?)
       }
-      return seal_esks_and_seipd(inner.exact_view(), [], passwords)
+      return seal_esks_and_seipd(inner.exact_view(), [], passwords, [])
     }
     @error.fail("api: encryption requires a password or a recipient")
   }

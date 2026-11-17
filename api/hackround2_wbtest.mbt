@@ -393,23 +393,37 @@ test "pw-verify: the password branch consults configured verifiers" {
 }
 
 ///|
-test "f1: password_v6 + recipient fails loudly, never silently" {
-  let key = generate_ed25519_key("f1 <t@e>")
-  // Probe-confirmed (2026-11-15): the recipients branch never consumed
-  // passwords_v6 — the seal SUCCEEDED and the v6 passphrase holder could
-  // not decrypt (decrypt_with_password raised "no SKESK packet found").
-  // The combination now fails at finish() time; RFC 9580 permits
-  // v6 SKESK + v6 PKESK in one message, so real support is a registered
-  // follow-up — the failure is the fail-closed interim.
+test "v6 combo: password_v6 + v6 recipient seals both ESK kinds (f1 follow-up)" {
+  // The registered follow-up to f1 is now real: v6 SKESK + v6 PKESK in
+  // one message, one shared session key (RFC 9580 §10.3.2.1).
+  let key = generate_ed25519_v6_key("v6combo <t@e>")
+  let seal = pgp()
+    .encryption()
+    .password_v6("pw6")
+    .recipient(key.to_public())
+    .finish()
+  let armored = seal(b"payload")
+  // The recipient opens it (v6 PKESK + v2 SEIPD).
+  let (d, _s) = decrypt_and_verify(armored, [key], None)
+  assert_eq(d, b"payload")
+  // AND the v6 passphrase holder does too (v6 SKESK over the same
+  // session key).
+  let d2 = decrypt_with_password(armored, "pw6")
+  assert_eq(d2, b"payload")
+}
+
+///|
+test "v6 combo: v4 recipient x v6 passphrase fails loudly" {
+  let v4 = generate_ed25519_key("v4c <t@e>")
   let raised = try {
     ignore(
-      pgp().encryption().password_v6("pw6").recipient(key.to_public()).finish()(
+      pgp().encryption().password_v6("pw").recipient(v4.to_public()).finish()(
         b"x",
       ),
     )
     false
   } catch {
-    e => e.to_string().contains("v6 passphrase")
+    e => e.to_string().contains("cannot mix")
   }
   assert_true(raised)
 }
@@ -573,6 +587,52 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
   )
   let msg = @armor.Message.encode(w.to_bytes().exact_view())
   let (d, status) = decrypt_password_and_verify(msg, "p", [verifier.to_public()])
+  assert_eq(d, b"payload")
+  assert_eq(status, Failed)
+}
+
+///|
+test "key-path tolerance: unknown hash_algo verifier keeps data (r13 follow-up)" {
+  // The key-path normalization twin of r9-1: finish_inline_verify maps a
+  // verifier raise (unknown hash algorithm at document_hash) to Failed
+  // with the decrypted data intact — before, the Unsupported escaped and
+  // the caller lost the data. The hand-built OPS bytes are inert
+  // (collect_data_sig skips OnePassSig); the Signature packet is the
+  // semantic trigger.
+  let key = generate_ed25519_key("ktol <t@e>")
+  let sig : @packet.SignaturePacket = {
+    version: 4,
+    sig_type: @packet.BinaryDocument,
+    pub_algo: @packet.Ed25519,
+    hash_algo: 0x63,
+    hashed_subpackets: [ // unassigned hash algorithm id
+    ],
+    unhashed_subpackets: [],
+    raw_hashed_area: Bytes::new(0),
+    fast_hash: 0,
+    salt: Bytes::new(0),
+    sig_params: [Bytes::make(64, b'\x04')],
+  }
+  let inner = @packet.Writer::new()
+  inner.bytes(
+    @packet.serialize_packet(
+      @packet.OnePassSig,
+      Bytes::from_array([4, 0, 0x63, 1, 1]).exact_view(),
+    ).exact_view(),
+  )
+  inner.bytes(
+    @packet.serialize_packet(
+      @packet.Literal,
+      @packet.LiteralPacket::binary(b"payload").to_body().exact_view(),
+    ).exact_view(),
+  )
+  inner.bytes(
+    @packet.serialize_packet(@packet.Signature, sig.to_body().exact_view()).exact_view(),
+  )
+  let armored = seal_to_recipients(inner.to_bytes().exact_view(), [
+    key.to_public(),
+  ])
+  let (d, status) = decrypt_and_verify(armored, [key], Some(key.to_public()))
   assert_eq(d, b"payload")
   assert_eq(status, Failed)
 }

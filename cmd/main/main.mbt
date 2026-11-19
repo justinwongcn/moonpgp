@@ -275,11 +275,65 @@ fn parse_bits(rest : Array[String]) -> Int32 raise {
 }
 
 ///|
-/// NUL-terminated UTF-8 copy of a path for the C bridge.
+/// NUL-terminated UTF-8 copy of a path for the C bridge. Native-only:
+/// its only callers are the rename/chmod FFI gates, which are compiled
+/// out on js/wasm (the newer toolchain's unused-value gate runs under
+/// `--target all`, which is also why the primitives dependency moved
+/// out of this package's imports — the strict-UTF-8 scan is inlined
+/// with the same surrogate semantics as `@primitives.utf8_bytes`).
+#cfg(target="native")
+fn utf8_push_scalar(cp : Int32, out : Array[Byte]) -> Unit {
+  if cp < 0x80 {
+    out.push(cp.to_byte())
+  } else if cp < 0x800 {
+    out.push((0xC0 | (cp >> 6)).to_byte())
+    out.push((0x80 | (cp & 0x3F)).to_byte())
+  } else if cp < 0x10000 {
+    out.push((0xE0 | (cp >> 12)).to_byte())
+    out.push((0x80 | ((cp >> 6) & 0x3F)).to_byte())
+    out.push((0x80 | (cp & 0x3F)).to_byte())
+  } else {
+    out.push((0xF0 | (cp >> 18)).to_byte())
+    out.push((0x80 | ((cp >> 12) & 0x3F)).to_byte())
+    out.push((0x80 | ((cp >> 6) & 0x3F)).to_byte())
+    out.push((0x80 | (cp & 0x3F)).to_byte())
+  }
+}
+
+///|
+/// NUL-terminated UTF-8 copy of a path for the C bridge. Native-only:
+/// its only callers are the rename/chmod FFI gates, which are compiled
+/// out on js/wasm (the newer toolchain's unused-value gate runs under
+/// `--target all`, which is also why the encoding is hand-rolled here —
+/// an import would be unused on the non-native targets). The surrogate
+/// scan keeps the same catchable-malformed semantics as
+/// `@primitives.utf8_bytes`: a lone surrogate must not reach core's
+/// encoder, which ABORTS the process (audit api6).
+#cfg(target="native")
 fn cstring(s : String) -> Bytes raise {
   let out : Array[Byte] = []
-  for b in @primitives.utf8_bytes(s) {
-    out.push(b)
+  let mut expect_low = false
+  let mut pending_high : Int32 = 0
+  for i in 0..<s.length() {
+    let v = s[i].to_int()
+    if expect_low {
+      guard v >= 0xDC00 && v <= 0xDFFF else {
+        @error.malformed("utf8: lone high surrogate in text input")
+      }
+      expect_low = false
+      let cp = 0x10000 + ((pending_high - 0xD800) << 10) + (v - 0xDC00)
+      utf8_push_scalar(cp, out)
+    } else if v >= 0xD800 && v <= 0xDBFF {
+      expect_low = true
+      pending_high = v
+    } else if v >= 0xDC00 && v <= 0xDFFF {
+      @error.malformed("utf8: lone low surrogate in text input")
+    } else {
+      utf8_push_scalar(v, out)
+    }
+  }
+  guard !expect_low else {
+    @error.malformed("utf8: lone high surrogate in text input")
   }
   out.push(b'\x00')
   Bytes::from_array(out)

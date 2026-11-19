@@ -45,7 +45,7 @@ pub fn hkdf_sha256(
   }
   let prk = hkdf_sha256_extract(ikm, salt)
   let out : Array[Byte] = Array(capacity=out_len)
-  let mut block = Bytes::new(0)
+  let mut block = Bytes::make(0, b'\x00')
   let mut counter = 1
   while out.length() < out_len {
     let input = concat3(block, info, Bytes::from_array([counter.to_byte()]))

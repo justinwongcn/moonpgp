@@ -144,7 +144,7 @@ pub fn gcm_encrypt(
   }
   let h = bc.encrypt_block(Bytes::make(16, b'\x00').exact_view())
   let j0 = gcm_j0(iv)
-  let out = Buffer(size_hint=plain.length() + 16)
+  let out = Buffer(capacity=plain.length() + 16)
   let mut ctr = gcm_inc32(j0.exact_view())
   let mut off = 0
   while off < plain.length() {
@@ -191,7 +191,7 @@ pub fn gcm_decrypt(
   guard @primitives.ct_equal(tag.exact_view(), stored_tag) else {
     @error.malformed("gcm: authentication tag mismatch")
   }
-  let out = Buffer(size_hint=ct.length())
+  let out = Buffer(capacity=ct.length())
   let mut ctr = gcm_inc32(j0.exact_view())
   let mut off = 0
   while off < ct.length() {

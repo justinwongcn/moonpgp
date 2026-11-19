@@ -200,7 +200,7 @@ test "api5: legacy checksum-free SKESK still decrypts" {
     cipher_algo: @primitives.Aes256.number(),
     aead_algo: 0,
     s2k,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: esk,
   }
   let seipd_ciphertext = @cipher.seipd_v1_encrypt(
@@ -284,7 +284,7 @@ test "api5: legacy RFC 4880 checksummed SKESK is read with unwrap-time proof" {
     cipher_algo: @primitives.Aes256.number(),
     aead_algo: 0,
     s2k,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: esk,
   }
   let seipd_ciphertext = @cipher.seipd_v1_encrypt(
@@ -554,9 +554,9 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
     hashed_subpackets: [ // unassigned hash algorithm id
     ],
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [Bytes::make(64, b'\x04')],
   }
   // A well-formed v3 OPS whose hash octet matches the (unassigned)
@@ -632,9 +632,9 @@ test "key-path tolerance: unknown hash_algo verifier keeps data (r13 follow-up)"
     hashed_subpackets: [ // unassigned hash algorithm id
     ],
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [Bytes::make(64, b'\x04')],
   }
   // A well-formed v3 OPS whose hash octet matches the (unassigned)

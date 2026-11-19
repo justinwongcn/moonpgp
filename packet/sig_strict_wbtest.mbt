@@ -144,14 +144,14 @@ test "RSA PKESK MPI consumes exactly (F6)" {
 ///|
 test "unknown tags refuse serialization instead of wrapping (F8)" {
   let raised = try {
-    ignore(serialize_packet(Unknown(70), Bytes::new(0).exact_view()))
+    ignore(serialize_packet(Unknown(70), Bytes::make(0, b'\x00').exact_view()))
     false
   } catch {
     _ => true
   }
   assert_true(raised)
   // A known tag serializes fine (control).
-  ignore(serialize_packet(Literal, Bytes::new(0).exact_view()))
+  ignore(serialize_packet(Literal, Bytes::make(0, b'\x00').exact_view()))
 }
 
 ///|
@@ -176,9 +176,9 @@ test "a short-parameter legacy key body reports malformed, not abort (F9)" {
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
-    secret_material: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
+    secret_material: Bytes::make(0, b'\x00'),
     dummy: false,
   }
   let raised_secret = try {

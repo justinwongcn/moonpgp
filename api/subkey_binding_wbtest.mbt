@@ -73,9 +73,9 @@ fn subkey_document_sig(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [],
   }
   let digest = document_hash(sig, data, @packet.BinaryDocument)

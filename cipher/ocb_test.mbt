@@ -152,8 +152,8 @@ test "ocb rejects a bad nonce length" {
     let _ = @cipher.ocb_encrypt(
       bc,
       Bytes::make(16, b'\x00').exact_view(),
-      Bytes::new(0).exact_view(),
-      Bytes::new(0).exact_view(),
+      Bytes::make(0, b'\x00').exact_view(),
+      Bytes::make(0, b'\x00').exact_view(),
     )
     false
   } catch {

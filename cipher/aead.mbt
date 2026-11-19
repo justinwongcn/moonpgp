@@ -174,7 +174,7 @@ pub fn aead_seal(
     @error.fail("aead: bad IV length for the mode")
   }
   let chunk_size = aead_chunk_size(chunk_octet)
-  let out = Buffer(size_hint=plain.length() + 32)
+  let out = Buffer(capacity=plain.length() + 32)
   let mut index : Int64 = 0L
   let mut off = 0
   // At least one chunk is emitted, even for an empty payload.
@@ -185,7 +185,7 @@ pub fn aead_seal(
     } else {
       chunk_size.to_int()
     }
-    let ad = aead_ad(header5, index, Bytes::new(0).exact_view())
+    let ad = aead_ad(header5, index, Bytes::make(0, b'\x00').exact_view())
     out.write_bytes(
       aead_seal_chunk(
         bc,
@@ -215,7 +215,7 @@ pub fn aead_seal(
       iv,
       index,
       fad.exact_view(),
-      Bytes::new(0).exact_view(),
+      Bytes::make(0, b'\x00').exact_view(),
     ).exact_view(),
   )
   out.to_bytes()
@@ -240,7 +240,7 @@ pub fn aead_open(
     @error.fail("aead: payload shorter than the final tag")
   }
   let chunk_size = aead_chunk_size(chunk_octet)
-  let out = Buffer(size_hint=cipher.length())
+  let out = Buffer(capacity=cipher.length())
   let mut index : Int64 = 0L
   let mut pos = 0
   // Data chunks: while more than the final tag remains. Each chunk
@@ -257,7 +257,7 @@ pub fn aead_open(
     } else {
       chunk_size.to_int()
     }
-    let ad = aead_ad(header5, index, Bytes::new(0).exact_view())
+    let ad = aead_ad(header5, index, Bytes::make(0, b'\x00').exact_view())
     out.write_bytes(
       aead_open_chunk(
         bc,

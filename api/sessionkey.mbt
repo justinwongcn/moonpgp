@@ -96,7 +96,7 @@ pub fn encrypt_to_session_key(
     cipher_algo: 0,
     aead_algo: 0,
     chunk_octet: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     ciphertext: ct,
   }
   @armor.Message.encode(

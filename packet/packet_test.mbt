@@ -119,9 +119,9 @@ test "signature packet roundtrip (RSA-shaped)" {
     hash_algo: 8,
     hashed_subpackets: hashed,
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0x1234,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [@primitives.from_hex("deadbeefcafe")],
   }
   let body = sig.to_body()
@@ -143,10 +143,10 @@ test "pkesk and skesk roundtrip" {
     version: 3,
     key_id: @primitives.from_hex("0123456789abcdef"),
     key_version: 0,
-    fingerprint: Bytes::new(0),
+    fingerprint: Bytes::make(0, b'\x00'),
     pub_algo: @packet.RsaEncryptOrSign,
     encrypted: @primitives.from_hex("feedface01"),
-    ecdh_ephemeral: Bytes::new(0),
+    ecdh_ephemeral: Bytes::make(0, b'\x00'),
   }
   let body = pkesk.to_body()
   let parsed = @packet.PkeskPacket::parse(body.exact_view())
@@ -157,13 +157,13 @@ test "pkesk and skesk roundtrip" {
   let skesk : @packet.SkeskPacket = {
     version: 4,
     aead_algo: 0,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     cipher_algo: 9,
     s2k: @s2k.Salted(
       @primitives.Sha256,
       Bytes::from_array([1, 2, 3, 4, 5, 6, 7, 8]),
     ),
-    encrypted_session_key: Bytes::new(0),
+    encrypted_session_key: Bytes::make(0, b'\x00'),
   }
   let parsed2 = @packet.SkeskPacket::parse(skesk.to_body().exact_view())
   assert_eq(parsed2.cipher_algo(), 9)
@@ -373,7 +373,7 @@ test "v6 signature to_body enforces salt and fingerprint shapes (pk4)" {
         hashed_subpackets: [ // SHA-256 wants a 16-octet salt
         ],
         unhashed_subpackets: [],
-        raw_hashed_area: Bytes::new(0),
+        raw_hashed_area: Bytes::make(0, b'\x00'),
         fast_hash: 0,
         salt: Bytes::from_array(bad_salt),
         sig_params: [],
@@ -392,7 +392,7 @@ test "v6 signature to_body enforces salt and fingerprint shapes (pk4)" {
     hash_algo: 8,
     hashed_subpackets: [],
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: Bytes::make(16, b'\x01'),
     sig_params: [Bytes::make(64, b'\x04')],
@@ -409,7 +409,7 @@ test "v6 one-pass signature to_body enforces salt and fingerprint shapes (pk4)" 
         sig_type: @packet.BinaryDocument,
         pub_algo: @packet.Ed25519,
         hash_algo: 8,
-        key_id: Bytes::new(0),
+        key_id: Bytes::make(0, b'\x00'),
         salt: Bytes::make(8, b'\x02'), // wrong for SHA-256
         fingerprint: Bytes::make(32, b'\x03'),
         nested: false,
@@ -427,7 +427,7 @@ test "v6 one-pass signature to_body enforces salt and fingerprint shapes (pk4)" 
         sig_type: @packet.BinaryDocument,
         pub_algo: @packet.Ed25519,
         hash_algo: 8,
-        key_id: Bytes::new(0),
+        key_id: Bytes::make(0, b'\x00'),
         salt: Bytes::make(16, b'\x02'),
         fingerprint: Bytes::make(20, b'\x03'), // v6 wants 32
         nested: false,

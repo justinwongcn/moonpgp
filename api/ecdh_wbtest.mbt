@@ -8,8 +8,8 @@ test "ecdh kdf sym algo guards malformed key params" {
     creation_time: 0,
     algo: @packet.Ecdh,
     params: [
-      Bytes::new(0),
-      Bytes::new(0),
+      Bytes::make(0, b'\x00'),
+      Bytes::make(0, b'\x00'),
       Bytes::from_array([b'\x03', b'\x01', b'\x02']),
     ],
   }
@@ -25,7 +25,7 @@ test "ecdh kdf sym algo guards malformed key params" {
     version: 4,
     creation_time: 0,
     algo: @packet.Ecdh,
-    params: [Bytes::new(0), Bytes::new(0)],
+    params: [Bytes::make(0, b'\x00'), Bytes::make(0, b'\x00')],
   }
   let raised2 = try {
     let _ = ecdh_kdf_sym_algo(short)
@@ -40,8 +40,8 @@ test "ecdh kdf sym algo guards malformed key params" {
     creation_time: 0,
     algo: @packet.Ecdh,
     params: [
-      Bytes::new(0),
-      Bytes::new(0),
+      Bytes::make(0, b'\x00'),
+      Bytes::make(0, b'\x00'),
       Bytes::from_array([b'\x03', b'\x01', b'\x02', b'\x09']),
     ],
   }

@@ -118,7 +118,7 @@ pub struct Writer {
 
 ///|
 pub fn Writer::new() -> Writer {
-  Writer::{ out: Buffer(size_hint=256), }
+  Writer::{ out: Buffer(capacity=256), }
 }
 
 ///|

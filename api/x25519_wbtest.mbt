@@ -37,7 +37,7 @@ fn v3_x25519_pkesk(
     version: 3,
     key_id: enc_key.key_id(),
     key_version: 0,
-    fingerprint: Bytes::new(0),
+    fingerprint: Bytes::make(0, b'\x00'),
     pub_algo: @packet.X25519,
     encrypted,
     ecdh_ephemeral: eph.public,
@@ -88,7 +88,7 @@ test "a v6 PKESK before a v1 SEIPD is discarded, not mis-decrypted" {
   )
   let pkesk : @packet.PkeskPacket = {
     version: 6,
-    key_id: Bytes::new(0),
+    key_id: Bytes::make(0, b'\x00'),
     key_version: 6,
     fingerprint: enc_key.fingerprint(),
     pub_algo: @packet.X25519,

@@ -20,7 +20,7 @@ fn create_pkesk(
       let (eph, wrapped) = x25519_wrap_session_key(enc_key, session_key)
       {
         version: 6,
-        key_id: Bytes::new(0),
+        key_id: Bytes::make(0, b'\x00'),
         key_version: enc_key.version(),
         fingerprint: enc_key.fingerprint(),
         pub_algo: @packet.X25519,
@@ -34,7 +34,7 @@ fn create_pkesk(
         version: 3,
         key_id: enc_key.key_id(),
         key_version: 0,
-        fingerprint: Bytes::new(0),
+        fingerprint: Bytes::make(0, b'\x00'),
         pub_algo: @packet.Ecdh,
         encrypted: wrapped,
         ecdh_ephemeral: eph,
@@ -51,10 +51,10 @@ fn create_pkesk(
         version: 3,
         key_id: enc_key.key_id(),
         key_version: 0,
-        fingerprint: Bytes::new(0),
+        fingerprint: Bytes::make(0, b'\x00'),
         pub_algo: a,
         encrypted: mpi,
-        ecdh_ephemeral: Bytes::new(0),
+        ecdh_ephemeral: Bytes::make(0, b'\x00'),
       }
     }
     _ => @error.fail("api: recipient key algorithm cannot encrypt")
@@ -438,10 +438,10 @@ fn pkesk_addresses(
 ) -> Bool {
   if pkesk.version() == 6 {
     // §5.1.2: a v6 PKESK identifies the recipient by fingerprint.
-    let fp = sk.public.fingerprint() catch { _ => Bytes::new(0) }
+    let fp = sk.public.fingerprint() catch { _ => Bytes::make(0, b'\x00') }
     pkesk.fingerprint().length() > 0 && fp.equal(pkesk.fingerprint())
   } else {
-    let id = sk.public.key_id() catch { _ => Bytes::new(0) }
+    let id = sk.public.key_id() catch { _ => Bytes::make(0, b'\x00') }
     id.equal(pkesk.key_id())
   }
 }

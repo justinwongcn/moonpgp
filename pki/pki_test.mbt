@@ -27,11 +27,11 @@ const TEST_CT : String =
 
 ///|
 fn test_private_key() -> @pki.RsaPrivateKey raise {
-  let n = BigInt::from_string(TEST_N, radix=16)
-  let e = BigInt::from_string("10001", radix=16)
-  let d = BigInt::from_string(TEST_D, radix=16)
-  let p = BigInt::from_string(TEST_P, radix=16)
-  let q = BigInt::from_string(TEST_Q, radix=16)
+  let n = @string.parse_bigint(TEST_N, radix=16)
+  let e = @string.parse_bigint("10001", radix=16)
+  let d = @string.parse_bigint(TEST_D, radix=16)
+  let p = @string.parse_bigint(TEST_P, radix=16)
+  let q = @string.parse_bigint(TEST_Q, radix=16)
   let u = @pki.mod_inverse(p, q)
   @pki.RsaPrivateKey::{ public: { n, e, }, d, p, q, u, }
 }

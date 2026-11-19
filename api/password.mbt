@@ -218,7 +218,12 @@ fn build_v6_skesk(
     @primitives.utf8_bytes(entry.passphrase).exact_view(),
     algo.key_size(),
   )
-  let dek = @primitives.hkdf_sha256(kek, Bytes::new(0), ad, algo.key_size())
+  let dek = @primitives.hkdf_sha256(
+    kek,
+    Bytes::make(0, b'\x00'),
+    ad,
+    algo.key_size(),
+  )
   let bc = @primitives.new_block_cipher(algo, dek.exact_view())
   let nonce = @primitives.random_bytes(aead_mode.iv_length())
   let esk = aead_seal_session_key(
@@ -706,7 +711,7 @@ fn build_skesk(
     cipher_algo: @primitives.Aes256.number(),
     aead_algo: 0,
     s2k,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: esk,
   }
 }
@@ -839,7 +844,12 @@ fn unwrap_one_skesk(
       skesk.cipher_algo().to_byte(),
       skesk.aead_algo().to_byte(),
     ])
-    let dek = @primitives.hkdf_sha256(kek, Bytes::new(0), ad, algo.key_size())
+    let dek = @primitives.hkdf_sha256(
+      kek,
+      Bytes::make(0, b'\x00'),
+      ad,
+      algo.key_size(),
+    )
     let bc = @primitives.new_block_cipher(algo, dek.exact_view())
     let key = aead_open_session_key(
       bc,

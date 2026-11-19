@@ -128,7 +128,9 @@ test "x2 P3a: prefs intersection picks AES-128 and roundtrips" {
 /// RFC 9580 §5.2.3.7 defines an empty list; §12.2 then allows no cipher at
 /// all — the seal raises rather than violating the (empty) constraint.
 test "x2 P3b: empty prefs body makes the seal fail" {
-  let (_k, r) = x2_recipient_with_prefs("E <e@example.com>", [Bytes::new(0)])
+  let (_k, r) = x2_recipient_with_prefs("E <e@example.com>", [
+    Bytes::make(0, b'\x00'),
+  ])
   assert_true(
     x2_raises(() => {
       ignore(seal_esks_and_seipd(x2_literal_wire().exact_view(), [r], [], []))
@@ -269,7 +271,7 @@ test "x2 P4b: CAST5-wrapped v4 SKESK unwraps" {
     cipher_algo: 3,
     aead_algo: 0,
     s2k,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: esk,
   }
   let (algo, key, _v, proven) = unwrap_one_skesk(
@@ -313,7 +315,7 @@ test "x2 P4c: 3DES-wrapped v4 SKESK unwraps" {
     cipher_algo: 2,
     aead_algo: 0,
     s2k,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: esk,
   }
   let (algo, key, _v, _proven) = unwrap_one_skesk(
@@ -387,7 +389,7 @@ test "x2 P4e: v4 SKESK with SHA-1 S2K still unwraps (legacy)" {
     cipher_algo: 9,
     aead_algo: 0,
     s2k,
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: esk,
   }
   let (algo, key, _v, _proven) = unwrap_one_skesk(
@@ -475,8 +477,8 @@ test "x2 P5c: OPS v3 + v6 signature is NotSigned" {
     hash_algo: @primitives.Sha256.number(),
     pub_algo: signer.public.algo(),
     key_id: signer.public.key_id(),
-    salt: Bytes::new(0),
-    fingerprint: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
+    fingerprint: Bytes::make(0, b'\x00'),
     nested: true,
   }
   let (data, status) = verify_inline(
@@ -524,8 +526,8 @@ fn x2_ed25519_v4_sk(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: Bytes::from_array(mutate(mat)),
     dummy: false,
   }
@@ -553,8 +555,8 @@ fn x2_x25519_v4_sk(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: Bytes::from_array(mutate(mat)),
     dummy: false,
   }
@@ -609,8 +611,8 @@ test "x2 P6b: X25519 secret checksum gate" {
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: kp.scalar.add(Bytes::from_array([0x00])),
     dummy: false,
   }
@@ -644,10 +646,10 @@ test "x2 P6d: RSA v4 secret checksum gate" {
   assert_true(x2_raises(() => ignore(rsa_secret_parts(garbage))))
   let flip_last = {
     ..sk,
-    secret_material: sk.secret_material.add(Bytes::new(0)),
+    secret_material: sk.secret_material.add(Bytes::make(0, b'\x00')),
   }
   let n = flip_last.secret_material.length()
-  let mut corrupted = Bytes::new(0)
+  let mut corrupted = Bytes::make(0, b'\x00')
   for i in 0..<n {
     if i == n - 1 {
       corrupted = corrupted.add(
@@ -696,8 +698,8 @@ test "x2 P6e: EdDSA legacy secret checksum gate" {
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: w2.to_bytes(),
     dummy: false,
   }
@@ -715,7 +717,7 @@ test "x2 P6f: corrupted checksum key refuses to sign" {
     ..sk,
     secret_material: {
       let n = sk.secret_material.length()
-      let mut out = Bytes::new(0)
+      let mut out = Bytes::make(0, b'\x00')
       for i in 0..<n {
         if i == n - 1 {
           out = out.add(
@@ -754,9 +756,9 @@ fn x2_weak_sig_armored(
         body: signer.public.key_id(),
       },
     ],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [],
   }
   let digest = finish_signed_digest(sig, x2_payload.exact_view())

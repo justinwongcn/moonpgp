@@ -386,8 +386,8 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
       s2k_usage: 0,
       cipher_algo: 0,
       aead_algo: 0,
-      s2k_spec: Bytes::new(0),
-      iv: Bytes::new(0),
+      s2k_spec: Bytes::make(0, b'\x00'),
+      iv: Bytes::make(0, b'\x00'),
       secret_material: material,
       dummy: false,
     }
@@ -460,8 +460,8 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
         cipher_algo: 0,
         aead_algo: 0,
         s2k_spec: r.read_rest(),
-        iv: Bytes::new(0),
-        secret_material: Bytes::new(0),
+        iv: Bytes::make(0, b'\x00'),
+        secret_material: Bytes::make(0, b'\x00'),
         dummy: true,
       }
     } else {

@@ -76,7 +76,7 @@ fn unlock_secret_key(
     )
     let dek = @primitives.hkdf_sha256(
       s2k_key,
-      Bytes::new(0),
+      Bytes::make(0, b'\x00'),
       secret_key_hkdf_info(key, tag),
       algo.key_size(),
     )
@@ -117,8 +117,8 @@ fn unlock_secret_key(
       s2k_usage: 0,
       cipher_algo: 0,
       aead_algo: 0,
-      s2k_spec: Bytes::new(0),
-      iv: Bytes::new(0),
+      s2k_spec: Bytes::make(0, b'\x00'),
+      iv: Bytes::make(0, b'\x00'),
       secret_material: material,
       dummy: false,
     }
@@ -165,8 +165,8 @@ fn unlock_secret_key(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: material.to_owned(),
     dummy: false,
   }
@@ -247,7 +247,12 @@ fn lock_secret_key_argon2(
     cipher_algo.to_byte(),
     aead_algo.to_byte(),
   ])
-  let dek = @primitives.hkdf_sha256(kek, Bytes::new(0), info, algo.key_size())
+  let dek = @primitives.hkdf_sha256(
+    kek,
+    Bytes::make(0, b'\x00'),
+    info,
+    algo.key_size(),
+  )
   let bc = @primitives.new_block_cipher(algo, dek.exact_view())
   let ad = secret_key_associated_data(key, tag)
   let nonce = @primitives.random_bytes(nonce_len)

@@ -219,7 +219,7 @@ fn make_document_signature_with(
   let salt : Bytes = if v6 {
     @primitives.random_bytes(@packet.salt_size_of_hash(hash.number()))
   } else {
-    Bytes::new(0)
+    Bytes::make(0, b'\x00')
   }
   let sig : @packet.SignaturePacket = {
     version: if v6 {
@@ -232,7 +232,7 @@ fn make_document_signature_with(
     hash_algo: hash.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt,
     sig_params: [],
@@ -614,7 +614,7 @@ fn verify_signature_packet(
         // merely drops out of the candidate match.
         let mut hit : (@packet.PublicKeyPacket, SubkeyCert?)? = None
         for c in verifier.subkeys {
-          let sid = c.key.key_id() catch { _ => Bytes::new(0) }
+          let sid = c.key.key_id() catch { _ => Bytes::make(0, b'\x00') }
           if sid.length() > 0 && sid.equal(id) {
             hit = Some((c.key, Some(c)))
             break
@@ -765,19 +765,19 @@ fn one_pass_sig_for(
     hash_algo: hash.number(),
     pub_algo: signer.public.algo(),
     key_id: if v6 {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     } else {
       signer.public.key_id()
     },
     salt: if v6 {
       sig.salt()
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     fingerprint: if v6 {
       signer.public.fingerprint()
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     // RFC 9580 §5.4: nested=0 declares "the next packet is another
     // One-Pass Signature packet" — this library produces exactly one OPS

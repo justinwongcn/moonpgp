@@ -78,7 +78,9 @@ test "unhashed Issuer Key ID enforces the exact 8-octet shape (F5 residual)" {
 /// tag 6 (PublicKey) — silently mislabeling the packet.
 test "old-format serialization refuses unknown tags (F8 residual)" {
   let raised = try {
-    ignore(serialize_packet_old(Unknown(70), Bytes::new(0).exact_view()))
+    ignore(
+      serialize_packet_old(Unknown(70), Bytes::make(0, b'\x00').exact_view()),
+    )
     false
   } catch {
     _ => true
@@ -106,8 +108,8 @@ test "v6 secret key bodies refuse usage 255 and legacy usage (j15)" {
     s2k_usage: 255,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: b"seed",
     dummy: false,
   }

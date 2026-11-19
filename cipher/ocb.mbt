@@ -178,7 +178,7 @@ pub fn ocb_encrypt(
   let pm = plain.length() / 16
   let p_star = plain[pm * 16:plain.length()]
   let mut checksum = Bytes::make(16, b'\x00')
-  let out = Buffer(size_hint=plain.length() + 16)
+  let out = Buffer(capacity=plain.length() + 16)
   for i in 1..<=pm {
     offset = @primitives.xor_bytes(
       offset.exact_view(),
@@ -282,7 +282,7 @@ pub fn ocb_decrypt(
   let cm = ct.length() / 16
   let c_star = ct[cm * 16:ct.length()]
   let mut checksum = Bytes::make(16, b'\x00')
-  let out = Buffer(size_hint=ct.length())
+  let out = Buffer(capacity=ct.length())
   for i in 1..<=cm {
     offset = @primitives.xor_bytes(
       offset.exact_view(),

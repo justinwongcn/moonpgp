@@ -67,7 +67,7 @@ fn x25519_kek(
   let ikm = @primitives.concat3(eph_public, recipient_public, shared)
   @primitives.hkdf_sha256(
     ikm,
-    Bytes::new(0),
+    Bytes::make(0, b'\x00'),
     @primitives.utf8_bytes(X25519_KDF_INFO),
     16,
   )

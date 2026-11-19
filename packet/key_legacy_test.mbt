@@ -22,7 +22,7 @@ test "legacy secret key body carries a single usage octet" {
     s2k_usage: 7, // AES-128 as a legacy cipher-id usage octet
     cipher_algo: 7,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
     iv,
     secret_material: material,
     dummy: false,

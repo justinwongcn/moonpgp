@@ -104,14 +104,14 @@ fn make_key_revocation_signature(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: revocation_hashed_area(pub_packet, now, reason, message),
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: if v6 {
       @primitives.random_bytes(
         @packet.salt_size_of_hash(@primitives.Sha256.number()),
       )
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     sig_params: [],
   }
@@ -155,14 +155,14 @@ fn make_subkey_revocation_signature(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: revocation_hashed_area(primary_pub, now, reason, message),
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: if v6 {
       @primitives.random_bytes(
         @packet.salt_size_of_hash(@primitives.Sha256.number()),
       )
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     sig_params: [],
   }
@@ -259,7 +259,7 @@ pub fn revoke_subkey(
   let subkeys : Array[SecretSubkeyCert] = []
   let mut found = false
   for c in key.subkeys {
-    let id = c.secret.public.key_id() catch { _ => Bytes::new(0) }
+    let id = c.secret.public.key_id() catch { _ => Bytes::make(0, b'\x00') }
     if !found && id.length() > 0 && id.equal(subkey_id.to_owned()) {
       let sig = make_subkey_revocation_signature(
         key.primary,

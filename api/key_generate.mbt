@@ -25,8 +25,8 @@ fn build_eddsa_secret_key_packet(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: w2.to_bytes(),
     dummy: false,
   }
@@ -56,8 +56,8 @@ fn build_ed25519_v6_secret_key_packet(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: seed,
     dummy: false,
   }
@@ -94,8 +94,8 @@ fn build_rsa_secret_key_packet(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: w2.to_bytes(),
     dummy: false,
   }
@@ -204,8 +204,8 @@ fn build_v6_x25519_secret_key_packet(
     s2k_usage: 0,
     cipher_algo: 0,
     aead_algo: 0,
-    s2k_spec: Bytes::new(0),
-    iv: Bytes::new(0),
+    s2k_spec: Bytes::make(0, b'\x00'),
+    iv: Bytes::make(0, b'\x00'),
     secret_material: x.scalar,
     dummy: false,
   }

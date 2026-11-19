@@ -74,7 +74,7 @@ fn reissue_sig(
   let fresh : @packet.SignaturePacket = {
     ..sig,
     hashed_subpackets: hashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     sig_params: [],
   }
@@ -179,7 +179,7 @@ pub fn PrivateKey::set_subkey_expiry(
   let subkeys : Array[SecretSubkeyCert] = []
   let mut found = false
   for c in self.subkeys {
-    let id = c.secret.public.key_id() catch { _ => Bytes::new(0) }
+    let id = c.secret.public.key_id() catch { _ => Bytes::make(0, b'\x00') }
     if !found && id.length() > 0 && id.equal(subkey_id.to_owned()) {
       let binding = resign_sig_with_expiry(
         c.binding,

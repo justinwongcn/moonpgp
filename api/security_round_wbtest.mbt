@@ -60,7 +60,7 @@ test "a message packed with heavy SKESKs hits the per-message budget (S3)" {
     cipher_algo: @primitives.Aes256.number(),
     aead_algo: 0,
     s2k: @s2k.Iterated(@primitives.Sha256, Bytes::make(8, 0x42), 255),
-    iv: Bytes::new(0),
+    iv: Bytes::make(0, b'\x00'),
     encrypted_session_key: Bytes::make(48, 0x00),
   }
   let body = skesk.to_body()
@@ -294,7 +294,7 @@ test "an MD5 document signature fails verification (C5)" {
   let fresh : @packet.SignaturePacket = {
     ..base,
     hash_algo: @primitives.Md5.number(),
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     sig_params: [],
   }

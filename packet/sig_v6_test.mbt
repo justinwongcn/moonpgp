@@ -33,7 +33,7 @@ test "a v6 signature rejects Ed25519Legacy and a wrong Ed25519 length" {
   // EdDsaLegacy (22) is forbidden for version 6.
   try
     @packet.SignaturePacket::parse(
-      v6_signature_body(22, Bytes::new(0).exact_view()).exact_view(),
+      v6_signature_body(22, Bytes::make(0, b'\x00').exact_view()).exact_view(),
     )
   catch {
     @error.Malformed(msg~) => assert_true(msg.contains("EdDsaLegacy"))

@@ -29,7 +29,11 @@ test "gcm internal checkpoints" {
     @primitives.to_hex(gcm_mul(y2.exact_view(), h.exact_view())),
     "f38cbb1ad69223dcc3457ae5b6b0f885",
   )
-  let s = gcm_ghash(h.exact_view(), Bytes::new(0).exact_view(), c.exact_view())
+  let s = gcm_ghash(
+    h.exact_view(),
+    Bytes::make(0, b'\x00').exact_view(),
+    c.exact_view(),
+  )
   assert_eq(@primitives.to_hex(s), "f38cbb1ad69223dcc3457ae5b6b0f885")
 }
 
@@ -54,7 +58,7 @@ test "aead final-tag internals match the rfc4880bis A.4 sample" {
     bc,
     nonce.exact_view(),
     ad.exact_view(),
-    Bytes::new(0).exact_view(),
+    Bytes::make(0, b'\x00').exact_view(),
   )
   assert_eq(@primitives.to_hex(tag), "d571bcd83b20add3a08b73af15b9a098")
 }

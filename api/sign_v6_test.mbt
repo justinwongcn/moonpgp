@@ -137,7 +137,7 @@ test "v6 signature with a mismatched salt length is rejected" {
     hashed_subpackets: [ // SHA-256 expects a 16-octet salt
     ],
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: Bytes::make(32, b'\x01'),
     sig_params: [Bytes::make(64, b'\x02')],

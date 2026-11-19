@@ -119,14 +119,14 @@ fn make_uid_revocation_signature(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: if v6 {
       @primitives.random_bytes(
         @packet.salt_size_of_hash(@primitives.Sha256.number()),
       )
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     sig_params: [],
   }

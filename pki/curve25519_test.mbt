@@ -14,14 +14,14 @@ test "RFC 8032 ed25519 test 1 (empty message)" {
     @primitives.to_hex(key.public.exact_view()),
     "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
   )
-  let sig = key.sign(Bytes::new(0).exact_view())
+  let sig = key.sign(Bytes::make(0, b'\x00').exact_view())
   assert_eq(
     @primitives.to_hex(sig.exact_view()),
     "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155" +
     "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b",
   )
   let pk = @pki.ed25519_public_key(key.public.exact_view())
-  assert_true(pk.verify(Bytes::new(0).exact_view(), sig.exact_view()))
+  assert_true(pk.verify(Bytes::make(0, b'\x00').exact_view(), sig.exact_view()))
 }
 
 ///|

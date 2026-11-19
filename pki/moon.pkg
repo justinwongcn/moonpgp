@@ -4,3 +4,7 @@ import {
   "justinwongcn/moonpgp/packet",
   "moonbitlang/core/debug",
 }
+
+import {
+  "moonbitlang/core/string",
+} for "test"

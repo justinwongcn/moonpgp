@@ -730,8 +730,8 @@ pub fn argon2id(
   argon2id_with_secret_ad(
     pass,
     salt,
-    Bytes::new(0),
-    Bytes::new(0),
+    Bytes::make(0, b'\x00'),
+    Bytes::make(0, b'\x00'),
     passes,
     m_kib,
     parallelism,

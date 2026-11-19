@@ -327,7 +327,7 @@ fn make_self_signature(
       @packet.salt_size_of_hash(@primitives.Sha256.number()),
     )
   } else {
-    Bytes::new(0)
+    Bytes::make(0, b'\x00')
   }
   let sig : @packet.SignaturePacket = {
     version: if v6 {
@@ -340,7 +340,7 @@ fn make_self_signature(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt,
     sig_params: [],
@@ -373,7 +373,7 @@ fn make_direct_key_signature(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: @primitives.random_bytes(
       @packet.salt_size_of_hash(@primitives.Sha256.number()),
@@ -436,14 +436,14 @@ fn make_primary_key_binding(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: unhashed,
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     salt: if v6 {
       @primitives.random_bytes(
         @packet.salt_size_of_hash(@primitives.Sha256.number()),
       )
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     sig_params: [],
   }
@@ -523,14 +523,14 @@ fn make_binding_signature(
         @packet.salt_size_of_hash(@primitives.Sha256.number()),
       )
     } else {
-      Bytes::new(0)
+      Bytes::make(0, b'\x00')
     },
     sig_type: @packet.SubkeyBinding,
     pub_algo: secret_packet.public.algo(),
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: hashed,
     unhashed_subpackets: [..unhashed, ..unhashed_embedded],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
     sig_params: [],
   }

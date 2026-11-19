@@ -129,7 +129,7 @@ test "x2 A2c: v6 sig + 21-octet unhashed fp is malformed" {
     hash_algo: 8,
     hashed_subpackets: [],
     unhashed_subpackets: [fp],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0x1F2F,
     salt: Bytes::make(16, 0x00),
     sig_params: [Bytes::make(64, 0x11)],

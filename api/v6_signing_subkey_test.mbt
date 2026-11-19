@@ -98,7 +98,7 @@ test "v6 dual-subkey key signs through its signing subkey" {
   let sig = @api.sign_detached(data, key)
   let block = @armor.decode(sig)
   let packets = @packet.parse_packets(block.data().exact_view())
-  let mut issuer : Bytes = Bytes::new(0)
+  let mut issuer : Bytes = Bytes::make(0, b'\x00')
   for p in packets {
     if p.tag() == @packet.Signature {
       let s = @packet.SignaturePacket::parse(p.body().exact_view())

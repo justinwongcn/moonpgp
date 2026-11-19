@@ -27,8 +27,7 @@ priv struct BzBits {
 ///|
 /// Read `n` bits (n <= 32), most significant bit first.
 fn BzBits::get(self : BzBits, n : Int32) -> Int32 raise {
-  guard n >= 1 &&
-    self.pos + n.to_int64() <= Int64::from_int(self.data.length()) * 8L else {
+  guard n >= 1 && self.pos + n.to_int64() <= self.data.length().to_int64() * 8L else {
     @error.malformed("compress: truncated bzip2 stream")
   }
   let mut v = 0
@@ -46,7 +45,7 @@ fn BzBits::get(self : BzBits, n : Int32) -> Int32 raise {
 fn BzBits::get64(self : BzBits, n : Int32) -> Int64 raise {
   guard n >= 1 &&
     n <= 48 &&
-    self.pos + n.to_int64() <= Int64::from_int(self.data.length()) * 8L else {
+    self.pos + n.to_int64() <= self.data.length().to_int64() * 8L else {
     @error.malformed("compress: truncated bzip2 stream")
   }
   let mut v = 0L

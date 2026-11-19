@@ -69,9 +69,9 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
   guard version == 3 || version == 6 else {
     @error.unsupported("packet: unsupported PKESK version \{version}")
   }
-  let mut key_id = Bytes::new(0)
+  let mut key_id = Bytes::make(0, b'\x00')
   let mut key_version = 0
-  let mut fingerprint = Bytes::new(0)
+  let mut fingerprint = Bytes::make(0, b'\x00')
   if version == 6 {
     // §5.1.2: a 1-octet size covering the key-version and fingerprint
     // fields; zero means an anonymous recipient and both are absent. The
@@ -161,7 +161,7 @@ pub fn PkeskPacket::parse(body : BytesView) -> PkeskPacket raise {
         fingerprint,
         pub_algo: algo,
         encrypted,
-        ecdh_ephemeral: Bytes::new(0),
+        ecdh_ephemeral: Bytes::make(0, b'\x00'),
       }
     }
   }
@@ -324,7 +324,7 @@ pub fn SkeskPacket::parse(body : BytesView) -> SkeskPacket raise {
   let iv = if version == 5 || version == 6 {
     r.read_bytes(aead_iv_len(aead_algo))
   } else {
-    Bytes::new(0)
+    Bytes::make(0, b'\x00')
   }
   if version == 6 {
     guard v6_params_len == 3 + spec_len + iv.length() else {
@@ -623,7 +623,7 @@ pub fn SeipdPacket::v1(ciphertext : BytesView) -> SeipdPacket {
     cipher_algo: 0,
     aead_algo: 0,
     chunk_octet: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     ciphertext: ciphertext.to_owned(),
   }
 }

@@ -147,7 +147,7 @@ test "s2k encode rejects malformed salt instead of aborting" {
   assert_true(raised)
   let bad_iterated : @s2k.S2k = @s2k.Iterated(
     @primitives.Sha256,
-    Bytes::new(0),
+    Bytes::make(0, b'\x00'),
     96,
   )
   let raised2 = try {

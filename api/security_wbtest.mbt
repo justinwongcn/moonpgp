@@ -31,9 +31,9 @@ fn document_signature_with_extra(
         body: key.primary.public.key_id(),
       },
     ],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [],
   }
   let digest = document_hash(sig, data, @packet.BinaryDocument)
@@ -53,7 +53,7 @@ fn recertify_with_extra(
   let cert : @packet.SignaturePacket = {
     ..base,
     hashed_subpackets: [..base.hashed_subpackets(), ..extra],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
   }
   let digest = hash_certification(cert, key.primary.public, uid)
   finish_signature(cert, key.primary, @primitives.Sha256, digest.exact_view())
@@ -72,9 +72,9 @@ fn signed_key_revocation(
     hash_algo: @primitives.Sha256.number(),
     hashed_subpackets: [creation_subpacket(now)],
     unhashed_subpackets: [],
-    raw_hashed_area: Bytes::new(0),
+    raw_hashed_area: Bytes::make(0, b'\x00'),
     fast_hash: 0,
-    salt: Bytes::new(0),
+    salt: Bytes::make(0, b'\x00'),
     sig_params: [],
   }
   let digest = hash_direct_key(rev, key.primary.public)

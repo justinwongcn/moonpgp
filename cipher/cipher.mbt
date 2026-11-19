@@ -10,7 +10,7 @@ pub fn cfb_encrypt(
   let bs = bc.block_size()
   guard iv.length() == bs else { @error.fail("cfb: bad IV length") }
   let mut fr = iv.to_owned()
-  let out = Buffer(size_hint=data.length())
+  let out = Buffer(capacity=data.length())
   let mut off = 0
   while off < data.length() {
     let keystream = bc.encrypt_block(fr.exact_view())
@@ -39,7 +39,7 @@ pub fn cfb_decrypt(
   let bs = bc.block_size()
   guard iv.length() == bs else { @error.fail("cfb: bad IV length") }
   let mut fr = iv.to_owned()
-  let out = Buffer(size_hint=data.length())
+  let out = Buffer(capacity=data.length())
   let mut off = 0
   while off < data.length() {
     let keystream = bc.encrypt_block(fr.exact_view())

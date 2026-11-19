@@ -11,7 +11,7 @@ pub fn seipd_v1_encrypt(
   // Single accumulating buffer (F12): the old Bytes::add chain made three
   // full copies of the plaintext (prefix||inner||tail, then +MDC); this
   // makes exactly one intermediate copy for the SHA-1 input.
-  let buf = Buffer(size_hint=prefix.length() + inner.length() + 22)
+  let buf = Buffer(capacity=prefix.length() + inner.length() + 22)
   buf.write_bytes(prefix.exact_view())
   buf.write_bytes(inner)
   buf.write_bytes(tail.exact_view())

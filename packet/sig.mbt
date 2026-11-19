@@ -458,7 +458,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
     }
     r.read_bytes(salt_len)
   } else {
-    Bytes::new(0)
+    Bytes::make(0, b'\x00')
   }
   let params : Array[Bytes] = []
   match pub_algo {
@@ -867,9 +867,9 @@ pub fn OnePassSigPacket::parse(body : BytesView) -> OnePassSigPacket raise {
   let sig_type = sig_type_of_number(r.read_u8())
   let hash_algo = r.read_u8()
   let pub_algo = pub_key_algo_of_number(r.read_u8())
-  let mut key_id = Bytes::new(0)
-  let mut salt = Bytes::new(0)
-  let mut fingerprint = Bytes::new(0)
+  let mut key_id = Bytes::make(0, b'\x00')
+  let mut salt = Bytes::make(0, b'\x00')
+  let mut fingerprint = Bytes::make(0, b'\x00')
   if version == 6 {
     let salt_len = r.read_u8()
     // RFC 9580 §5.4: the size MUST match the hash algorithm's Table 23

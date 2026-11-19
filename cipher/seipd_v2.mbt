@@ -98,7 +98,7 @@ pub fn seipd_v2_seal(
     )
   }
   let chunk_size = aead_chunk_size(chunk_octet)
-  let out = Buffer(size_hint=plain.length() + 32)
+  let out = Buffer(capacity=plain.length() + 32)
   let mut index : Int64 = 0L
   let mut off = 0
   while off < plain.length() || index == 0L {
@@ -154,7 +154,7 @@ pub fn seipd_v2_open(
     @error.malformed("seipd_v2: payload shorter than the final tag")
   }
   let chunk_size = aead_chunk_size(chunk_octet)
-  let out = Buffer(size_hint=cipher.length())
+  let out = Buffer(capacity=cipher.length())
   let mut index : Int64 = 0L
   let mut pos = 0
   while cipher.length() - pos > mode.tag_length() {

@@ -101,8 +101,8 @@ test "gcm rejects a non-12-octet IV" {
     let _ = @cipher.gcm_encrypt(
       bc,
       Bytes::make(8, b'\x00').exact_view(),
-      Bytes::new(0).exact_view(),
-      Bytes::new(0).exact_view(),
+      Bytes::make(0, b'\x00').exact_view(),
+      Bytes::make(0, b'\x00').exact_view(),
     )
     false
   } catch {

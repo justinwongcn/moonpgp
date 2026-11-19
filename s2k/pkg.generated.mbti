@@ -34,6 +34,7 @@ pub fn S2k::equal(Self, Self) -> Bool
 pub fn S2k::is_argon2(Self) -> Bool
 pub fn S2k::not_equal(Self, Self) -> Bool
 pub fn S2k::to_repr(Self) -> @debug.Repr
+pub fn S2k::uses_weak_hash(Self) -> Bool
 
 // Type aliases
 

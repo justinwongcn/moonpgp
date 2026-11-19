@@ -317,7 +317,10 @@ fn serialize_subpackets(subs : Array[SigSubpacket]) -> Bytes {
 /// otherwise silently read as "absent" downstream and flip expiry or
 /// capability decisions. Unhashed subpackets are untrusted carrier data
 /// and stay lenient.
-fn validate_hashed_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
+fn validate_hashed_subpackets(
+  subs : Array[SigSubpacket],
+  version : Int32,
+) -> Unit raise {
   for sp in subs {
     let n = sp.body.length()
     let bad = match sp.sub_type {
@@ -337,6 +340,26 @@ fn validate_hashed_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
         "packet: signature subpacket \{sp.sub_type} has an invalid body length of \{n}",
       )
     }
+    // RFC 9580 §5.2.3.35: the version octet in the Issuer Fingerprint
+    // body MUST match the version of the signature (audit c1g4) — which
+    // also pins the fingerprint length (v4→21, v6→33) through the
+    // existing length gate.
+    if sp.sub_type == SIGSUB_ISSUER_FINGERPRINT {
+      guard sp.body[0].to_int() == version else {
+        @error.malformed(
+          "packet: issuer fingerprint claims key version \{sp.body[0].to_int()}, signature is version \{version}",
+        )
+      }
+      // (audit lax-1) joint lock: the length must match the octet-declared
+      // version — a 33-octet body claiming v4 (or a 21-octet one claiming
+      // v6) passed the two independent gates before.
+      let fp_len : Int32 = if version == 4 { 21 } else { 33 }
+      guard sp.body.length() == fp_len else {
+        @error.malformed(
+          "packet: issuer fingerprint length \{sp.body.length()} does not match key version \{version}",
+        )
+      }
+    }
   }
 }
 
@@ -346,7 +369,10 @@ fn validate_hashed_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
 /// Key ID and where a ragged body would flow back out of
 /// `issuer_key_id()` to slicing callers. All other subpacket types stay
 /// lenient on the unhashed side (untrusted carrier data).
-fn validate_issuer_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
+fn validate_issuer_subpackets(
+  subs : Array[SigSubpacket],
+  version : Int32,
+) -> Unit raise {
   for sp in subs {
     let n = sp.body.length()
     let bad = match sp.sub_type {
@@ -358,6 +384,26 @@ fn validate_issuer_subpackets(subs : Array[SigSubpacket]) -> Unit raise {
       @error.malformed(
         "packet: signature subpacket \{sp.sub_type} has an invalid body length of \{n}",
       )
+    }
+    // RFC 9580 §5.2.3.35: the version octet in the Issuer Fingerprint
+    // body MUST match the version of the signature (audit c1g4) — which
+    // also pins the fingerprint length (v4→21, v6→33) through the
+    // existing length gate.
+    if sp.sub_type == SIGSUB_ISSUER_FINGERPRINT {
+      guard sp.body[0].to_int() == version else {
+        @error.malformed(
+          "packet: issuer fingerprint claims key version \{sp.body[0].to_int()}, signature is version \{version}",
+        )
+      }
+      // (audit lax-1) joint lock: the length must match the octet-declared
+      // version — a 33-octet body claiming v4 (or a 21-octet one claiming
+      // v6) passed the two independent gates before.
+      let fp_len : Int32 = if version == 4 { 21 } else { 33 }
+      guard sp.body.length() == fp_len else {
+        @error.malformed(
+          "packet: issuer fingerprint length \{sp.body.length()} does not match key version \{version}",
+        )
+      }
     }
   }
 }
@@ -392,7 +438,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   let hashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let raw_hashed = r.read_bytes(hashed_len)
   let hashed = parse_subpackets(raw_hashed.exact_view())
-  validate_hashed_subpackets(hashed)
+  validate_hashed_subpackets(hashed, version)
   let unhashed_len : Int32 = if v6 { r.read_u32() } else { r.read_u16() }
   let unhashed = parse_subpackets(r.read_bytes(unhashed_len).exact_view())
   // Issuer shapes are exact in BOTH areas (audit F5 + hacker-round
@@ -400,7 +446,7 @@ pub fn SignaturePacket::parse(body : BytesView) -> SignaturePacket raise {
   // issuer_key_id() hands those bodies to callers who slice them — the
   // F5 gate initially covered only the hashed side. Everything else
   // stays lenient here, per the unhashed-area contract below.
-  validate_issuer_subpackets(unhashed)
+  validate_issuer_subpackets(unhashed, version)
   let fast = r.read_u16()
   let salt : Bytes = if v6 {
     let salt_len = r.read_u8()

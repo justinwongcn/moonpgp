@@ -33,7 +33,7 @@ test "issuer subpacket bodies must match the RFC shapes (F5)" {
     body: Bytes::make(7, 0x11),
   }
   let raised = try {
-    validate_hashed_subpackets([short_id])
+    validate_hashed_subpackets([short_id], 4)
     false
   } catch {
     _ => true
@@ -44,33 +44,59 @@ test "issuer subpacket bodies must match the RFC shapes (F5)" {
     sub_type: SIGSUB_ISSUER_KEY_ID,
     body: Bytes::make(8, 0x11),
   }
-  validate_hashed_subpackets([ok_id])
+  validate_hashed_subpackets([ok_id], 4)
   let bad_fp : SigSubpacket = {
     critical: false,
     sub_type: SIGSUB_ISSUER_FINGERPRINT,
     body: Bytes::make(20, 0x22),
   }
   let raised_fp = try {
-    validate_hashed_subpackets([bad_fp])
+    validate_hashed_subpackets([bad_fp], 4)
     false
   } catch {
     _ => true
   }
   assert_true(raised_fp)
-  validate_hashed_subpackets([
-    {
-      critical: false,
-      sub_type: SIGSUB_ISSUER_FINGERPRINT,
-      body: Bytes::make(21, 0x22),
-    },
-  ])
-  validate_hashed_subpackets([
-    {
-      critical: false,
-      sub_type: SIGSUB_ISSUER_FINGERPRINT,
-      body: Bytes::make(33, 0x22),
-    },
-  ])
+  // v4 signature: the issuer fingerprint body starts with key version 4.
+  validate_hashed_subpackets(
+    [
+      {
+        critical: false,
+        sub_type: SIGSUB_ISSUER_FINGERPRINT,
+        body: Bytes::from_array([4]).add(Bytes::make(20, 0x22)),
+      },
+    ],
+    4,
+  )
+  // v6 signature: version 6 octet + 32-octet fingerprint.
+  validate_hashed_subpackets(
+    [
+      {
+        critical: false,
+        sub_type: SIGSUB_ISSUER_FINGERPRINT,
+        body: Bytes::from_array([6]).add(Bytes::make(32, 0x22)),
+      },
+    ],
+    6,
+  )
+  // A version octet that disagrees with the signature version is
+  // malformed (RFC 9580 §5.2.3.35, audit c1g4).
+  let raised_version = try {
+    validate_hashed_subpackets(
+      [
+        {
+          critical: false,
+          sub_type: SIGSUB_ISSUER_FINGERPRINT,
+          body: Bytes::from_array([6]).add(Bytes::make(20, 0x22)),
+        },
+      ],
+      4,
+    )
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised_version)
 }
 
 ///|

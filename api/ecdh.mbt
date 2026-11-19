@@ -15,6 +15,23 @@ fn ecdh_secret_parts(p : @packet.SecretKeyPacket) -> @pki.X25519SecretKey raise 
   }
   let r = @packet.Reader::new(p.secret_material.exact_view())
   let mpi_value = r.read_mpi()
+  // RFC 9580 §5.5.3 (audit c2g5): exact consumption + checksum.
+  let end = r.position()
+  guard r.remaining() == 2 else {
+    @error.fail("api: ECDH secret material length misaligned")
+  }
+  match r.remaining() {
+    2 => {
+      let want = (p.secret_material[end].to_int() << 8) |
+        p.secret_material[end + 1].to_int()
+      guard @packet.session_key_checksum(p.secret_material[0:end].exact_view()) ==
+        want else {
+        @error.fail("api: ECDH secret key checksum failed")
+      }
+    }
+    0 => ()
+    _ => @error.fail("api: ECDH secret material length misaligned")
+  }
   @pki.x25519_secret_of_wire_mpi(mpi_value.exact_view())
 }
 

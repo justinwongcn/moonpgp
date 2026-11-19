@@ -448,8 +448,13 @@ test "pv1: a failing first SKESK does not kill the retry" {
     @primitives.random_bytes(@s2k.SALT_SIZE),
     @s2k.encode_count(96),
   )
-  let skesk1 = build_skesk(wrong_key.exact_view(), "p", s2k1)
-  let skesk2 = build_skesk(real_key.exact_view(), "p", s2k2)
+  let skesk1 = build_skesk(
+    @primitives.Aes256,
+    wrong_key.exact_view(),
+    "p",
+    s2k1,
+  )
+  let skesk2 = build_skesk(@primitives.Aes256, real_key.exact_view(), "p", s2k2)
   let seipd_ciphertext = @cipher.seipd_v1_encrypt(
     @primitives.new_block_cipher(@primitives.Aes256, real_key.exact_view()),
     @packet.serialize_packet(
@@ -496,8 +501,13 @@ test "pv1b: multi-SKESK retry with verifiers configured (moved-code combo)" {
     @primitives.random_bytes(@s2k.SALT_SIZE),
     @s2k.encode_count(96),
   )
-  let skesk1 = build_skesk(wrong_key.exact_view(), "p", s2k1)
-  let skesk2 = build_skesk(real_key.exact_view(), "p", s2k2)
+  let skesk1 = build_skesk(
+    @primitives.Aes256,
+    wrong_key.exact_view(),
+    "p",
+    s2k1,
+  )
+  let skesk2 = build_skesk(@primitives.Aes256, real_key.exact_view(), "p", s2k2)
   let seipd_ciphertext = @cipher.seipd_v1_encrypt(
     @primitives.new_block_cipher(@primitives.Aes256, real_key.exact_view()),
     @packet.serialize_packet(
@@ -531,9 +541,9 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
   // verify_signature_packet raises Unsupported at document_hash). The
   // per-verifier catch maps that to Failed and the decrypted data
   // survives — before the fix the raise voided the data and killed the
-  // whole call. (The hand-built OPS bytes are inert: collect_data_sig
-  // skips OnePassSig without parsing them — the Signature packet is the
-  // semantic trigger.)
+  // whole call. The OPS is well-formed and pairs with the signature
+  // (audit hit-2: an unparseable OPS voids the stream, so the old
+  // hand-built truncated OPS bytes would now classify as NotSigned).
   let verifier = generate_ed25519_key("r91 <t@e>")
   let session_key = @primitives.random_bytes(32)
   let sig : @packet.SignaturePacket = {
@@ -549,11 +559,21 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
     salt: Bytes::new(0),
     sig_params: [Bytes::make(64, b'\x04')],
   }
+  // A well-formed v3 OPS whose hash octet matches the (unassigned)
+  // signature hash — the pairing must hold for the signature to reach
+  // the verifier (audit hit-2).
+  let ops_body = @packet.Writer::new()
+  ops_body.u8(3)
+  ops_body.u8(0) // BinaryDocument
+  ops_body.u8(0x63)
+  ops_body.u8(sig.pub_algo().number())
+  ops_body.bytes(verifier.primary.public.key_id().exact_view())
+  ops_body.u8(1) // nested
   let inner = @packet.Writer::new()
   inner.bytes(
     @packet.serialize_packet(
       @packet.OnePassSig,
-      Bytes::from_array([4, 0, 0x63, 1, 1]).exact_view(),
+      ops_body.to_bytes().exact_view(),
     ).exact_view(),
   )
   inner.bytes(
@@ -570,7 +590,12 @@ test "r9-1: a verifier-raising signature keeps data on the password path" {
     @primitives.random_bytes(@s2k.SALT_SIZE),
     @s2k.encode_count(96),
   )
-  let skesk = build_skesk(session_key.exact_view(), "p", s2k)
+  let skesk = build_skesk(
+    @primitives.Aes256,
+    session_key.exact_view(),
+    "p",
+    s2k,
+  )
   let seipd_ciphertext = @cipher.seipd_v1_encrypt(
     @primitives.new_block_cipher(@primitives.Aes256, session_key.exact_view()),
     inner.to_bytes().exact_view(),
@@ -596,9 +621,8 @@ test "key-path tolerance: unknown hash_algo verifier keeps data (r13 follow-up)"
   // The key-path normalization twin of r9-1: finish_inline_verify maps a
   // verifier raise (unknown hash algorithm at document_hash) to Failed
   // with the decrypted data intact — before, the Unsupported escaped and
-  // the caller lost the data. The hand-built OPS bytes are inert
-  // (collect_data_sig skips OnePassSig); the Signature packet is the
-  // semantic trigger.
+  // the caller lost the data. The OPS is well-formed and pairs with the
+  // signature (audit hit-2: an unparseable OPS voids the stream).
   let key = generate_ed25519_key("ktol <t@e>")
   let sig : @packet.SignaturePacket = {
     version: 4,
@@ -613,11 +637,20 @@ test "key-path tolerance: unknown hash_algo verifier keeps data (r13 follow-up)"
     salt: Bytes::new(0),
     sig_params: [Bytes::make(64, b'\x04')],
   }
+  // A well-formed v3 OPS whose hash octet matches the (unassigned)
+  // signature hash (audit hit-2).
+  let ops_body = @packet.Writer::new()
+  ops_body.u8(3)
+  ops_body.u8(0) // BinaryDocument
+  ops_body.u8(0x63)
+  ops_body.u8(sig.pub_algo().number())
+  ops_body.bytes(key.primary.public.key_id().exact_view())
+  ops_body.u8(1) // nested
   let inner = @packet.Writer::new()
   inner.bytes(
     @packet.serialize_packet(
       @packet.OnePassSig,
-      Bytes::from_array([4, 0, 0x63, 1, 1]).exact_view(),
+      ops_body.to_bytes().exact_view(),
     ).exact_view(),
   )
   inner.bytes(
@@ -635,4 +668,165 @@ test "key-path tolerance: unknown hash_algo verifier keeps data (r13 follow-up)"
   let (d, status) = decrypt_and_verify(armored, [key], Some(key.to_public()))
   assert_eq(d, b"payload")
   assert_eq(status, Failed)
+}
+
+///|
+test "c2g7: recent SHA-1 signatures do not validate, legacy ones do" {
+  // RFC 9580 §9.5: recent weak-hash signatures MUST NOT validate; old
+  // ones stay verifiable (SHOULD NOT, with the custody caveat). The
+  // "recent" line is implemented as the SHA-1 chosen-prefix cutoff
+  // (SHAttered, 2020-01-01). The signatures are minted below the policy
+  // gate with explicit creation dates (RSA carries the legacy shape —
+  // Ed25519 is barred from sub-256-bit digests by §5.2.3.4, c1g3).
+  let key = generate_key("c2g7 <t@e>", bits=3072)
+  let data : Bytes = b"legacy sha-1 document"
+  let sig_old = make_document_signature_with(
+    key.primary,
+    data.exact_view(),
+    @packet.BinaryDocument,
+    @primitives.Sha1,
+    created=1546300800,
+    policy_gate=false,
+  )
+  let armored_old = @armor.Signature.encode(
+    @packet.serialize_packet(@packet.Signature, sig_old.to_body().exact_view()).exact_view(),
+  )
+  assert_true(
+    verify_detached(data.exact_view(), armored_old, key.to_public()) is Ok,
+  )
+  let sig_new = make_document_signature_with(
+    key.primary,
+    data.exact_view(),
+    @packet.BinaryDocument,
+    @primitives.Sha1,
+    created=1609459200,
+    policy_gate=false,
+  )
+  let armored_new = @armor.Signature.encode(
+    @packet.serialize_packet(@packet.Signature, sig_new.to_body().exact_view()).exact_view(),
+  )
+  assert_true(
+    verify_detached(data.exact_view(), armored_new, key.to_public()) is Failed,
+  )
+}
+
+///|
+test "c1g6: an OPS whose fields disagree with the signature is ignored" {
+  // RFC 9580 §5.2.5: a signature that disagrees with the stream's
+  // One-Pass Signature (version, type, hash, pub-algo) MUST be ignored
+  // for validation. The stream below carries OPS(hash=SHA-256) but a
+  // trailing SHA-512 signature — before the pairing check it verified Ok
+  // with no OPS<->signature relationship checked at all.
+  let key = generate_ed25519_key("c1g6 <t@e>")
+  let data : Bytes = b"payload"
+  let mint = make_document_signature_with(
+    key.primary,
+    data.exact_view(),
+    @packet.BinaryDocument,
+    @primitives.Sha512,
+  )
+  let inner = @packet.Writer::new()
+  inner.bytes(
+    @packet.serialize_packet(
+      @packet.OnePassSig,
+      Bytes::from_array([3, 0, 9, 22, 1])
+      .add(key.primary.public.key_id())
+      .exact_view(),
+    ).exact_view(),
+  )
+  inner.bytes(
+    @packet.serialize_packet(
+      @packet.Literal,
+      @packet.LiteralPacket::binary(data).to_body().exact_view(),
+    ).exact_view(),
+  )
+  inner.bytes(
+    @packet.serialize_packet(@packet.Signature, mint.to_body().exact_view()).exact_view(),
+  )
+  let armored = seal_to_recipients(inner.to_bytes().exact_view(), [
+    key.to_public(),
+  ])
+  let (d, status) = decrypt_and_verify(armored, [key], Some(key.to_public()))
+  // Data still delivered; the mismatched signature is NOT validated.
+  assert_eq(d, data)
+  assert_eq(status, NotSigned)
+}
+
+///|
+test "c1g1: unknown critical packets reject, non-critical are ignored" {
+  // RFC 9580 §4.3: Type IDs 0-39 are critical — an unknown one MUST
+  // reject the whole sequence; 40-63 are non-critical and MUST be
+  // ignored. Tag 21 (Padding) is a defined type and stays ignorable.
+  let literal = @packet.serialize_packet(
+    @packet.Literal,
+    @packet.LiteralPacket::binary(b"payload").to_body().exact_view(),
+  )
+  let critical_unknown = Bytes::from_array([0xC0 | 22, 1]).add(b"x")
+  let non_critical = Bytes::from_array([0xC0 | 45, 1]).add(b"x")
+  let padding = Bytes::from_array([0xC0 | 21, 3]).add(b"abc")
+  // Critical unknown: the sequence is rejected.
+  let raised = try {
+    ignore(@packet.parse_packets(critical_unknown.add(literal).exact_view()))
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(raised)
+  // Non-critical unknown: ignored.
+  let ps = @packet.parse_packets(non_critical.add(literal).exact_view())
+  assert_eq(ps.length(), 2)
+  // Defined Padding: ignored.
+  let ps2 = @packet.parse_packets(padding.add(literal).exact_view())
+  assert_eq(ps2.length(), 2)
+}
+
+///|
+test "c2g3: the v4 message cipher follows the recipient preference list" {
+  // RFC 9580 §12.2 (audit c2g3): the message cipher MUST come from every
+  // recipient's preference list — the v4 seal used to hardcode AES-256
+  // and never read the Preferred Symmetric Algorithms subpacket.
+  let key = generate_key("c2g3 <t@e>", bits=3072)
+  // The certification's preference list excludes AES-256 and AES-192:
+  // only AES-128 (7) remains.
+  let prefs_sig : @packet.SignaturePacket = {
+    ..key.user_ids[0].self_signature,
+    hashed_subpackets: [
+      {
+        critical: false,
+        sub_type: @packet.SIGSUB_PREFERRED_SYM_ALGOS,
+        body: Bytes::from_array([7]),
+      },
+    ],
+  }
+  let modified_binding : UserIdBinding = {
+    ..key.user_ids[0],
+    self_signature: prefs_sig,
+  }
+  let modified : PrivateKey = { ..key, user_ids: [modified_binding], }
+  let recipient = modified.to_public()
+  // Unit: the picker honors the list.
+  assert_eq(pick_v4_symmetric([recipient]), @primitives.Aes128)
+  // Integration: the sealed message's session key is an AES-128 key and
+  // the recipient still decrypts the payload.
+  let armored : String = encrypt_to_recipients(b"payload", [recipient])
+  let armored_bytes = @armor.ArmorBlock::data(@armor.decode(armored))
+  let block = @armor.decode(armored)
+  let all = @packet.parse_packets(block.data().exact_view())
+  let mut pkesk : @packet.PkeskPacket? = None
+  for p in all {
+    if p.tag() is @packet.PacketTag::Pkesk {
+      pkesk = Some(@packet.PkeskPacket::parse(p.body().exact_view()))
+    }
+  }
+  let (algo, _session) = rsa_unwrap_session_key(
+    pkesk.unwrap(),
+    modified.subkeys[0].secret,
+  )
+  assert_eq(algo, 7)
+  let d = decrypt_binary_with_private_key(armored_bytes.exact_view(), modified)
+  assert_eq(d, b"payload")
+  // A recipient without the preference subpacket is unconstrained:
+  // AES-256 stays the default.
+  let bare = generate_ed25519_key("c2g3-bare <t@e>")
+  assert_eq(pick_v4_symmetric([bare.to_public()]), @primitives.Aes256)
 }

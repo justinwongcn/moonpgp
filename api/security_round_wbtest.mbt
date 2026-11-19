@@ -255,6 +255,7 @@ test "an MD5 document signature fails verification (C5)" {
     data.exact_view(),
     @packet.BinaryDocument,
     @primitives.Sha1,
+    policy_gate=false,
   )
   let md5_proto = { ..sha_sig, hash_algo: 1, }
   let md5_digest = document_hash(
@@ -433,20 +434,17 @@ test "Debug output redacts secret material (F16)" {
 }
 
 ///|
-test "issuing refuses MD5 but keeps SHA-1 mintable and verifiable (F13)" {
+test "issuing refuses MD5, SHA-1 and RIPEMD-160 (F13 + c2g2)" {
   let key = generate_ed25519_key("F13 <f13@example.net>")
-  let raised = try {
-    let _ = sign_cleartext_with("hi\n", key, @primitives.Md5)
-    false
-  } catch {
-    _ => true
+  for hash in [@primitives.Md5, @primitives.Sha1, @primitives.Ripemd160] {
+    let raised = try {
+      let _ = sign_cleartext_with("hi\n", key, hash)
+      false
+    } catch {
+      e => e.to_string().contains("SHA-1 or RIPEMD-160")
+    }
+    assert_true(raised)
   }
-  assert_true(raised)
-  // SHA-1 remains mintable for legacy interop and still verifies Ok.
-  let ct = sign_cleartext_with("hi\n", key, @primitives.Sha1)
-  let (text, status) = verify_cleartext(ct, key.to_public())
-  assert_eq(text, "hi")
-  assert_true(status is Ok)
 }
 
 ///|

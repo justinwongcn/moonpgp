@@ -4,7 +4,9 @@
 
 ///|
 /// GnuPG 2.4.5 key with two User IDs, each with its own Positive
-/// certification (generated with `--quick-add-uid`).
+/// certification (generated with `--quick-add-uid`; rsa3072 — the
+/// original rsa1024 fixture predates the RFC 9580 §12.4 verification
+/// floor).
 test "import a two-User-ID key from GnuPG" {
   let key = @api.PublicKey::from_armored(
     read_testdata("interop_gpg_two_uid_key.asc"),

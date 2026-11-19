@@ -172,15 +172,21 @@ fn make_document_signature_with(
   sig_type : @packet.SigType,
   hash : @primitives.HashId,
   created? : Int32,
+  policy_gate~ : Bool = true,
 ) -> @packet.SignaturePacket raise {
-  // C5's issuing-side mirror (audit F13): MD5 is dead for signatures
-  // (RFC 9580 §9.5 MUST NOT) and the verification side already refuses
-  // it — an entry point that could mint a signature this library itself
-  // rejects (and gpg discards) was the lenient outlier. SHA-1 stays
-  // available for legacy interop, verification-only by policy.
-  if hash is @primitives.Md5 {
+  // C5's issuing-side mirror (audit F13) + c2g2: RFC 9580 §9.5 —
+  // implementations MUST NOT generate signatures with MD5, SHA-1 or
+  // RIPEMD-160 (the gate covered MD5 only before c2g2). policy_gate=false
+  // exists for the verify-side tests that mint real weak-hash signatures
+  // below the gate; every public entry keeps the gate on.
+  if policy_gate &&
+    (
+      hash is @primitives.Md5 ||
+      hash is @primitives.Sha1 ||
+      hash is @primitives.Ripemd160
+    ) {
     @error.fail(
-      "api: refusing to create an MD5 signature (RFC 9580 §9.5; use SHA-256)",
+      "api: refusing to create a signature with MD5, SHA-1 or RIPEMD-160 (RFC 9580 §9.5; use SHA-256)",
     )
   }
   let now = match created {
@@ -330,15 +336,44 @@ fn collect_data_sig(
   packets : Array[@packet.RawPacket],
   data0 : Bytes?,
   sig0 : @packet.SignaturePacket?,
+  ops0 : @packet.OnePassSigPacket?,
+  broken0 : Bool,
   max_decompressed : Int32,
   budget : Int32,
   depth : Int32,
-) -> (Bytes?, @packet.SignaturePacket?, Int32) raise {
+) -> (Bytes?, @packet.SignaturePacket?, @packet.OnePassSigPacket?, Bool, Int32) raise {
   let mut data = data0
   let mut sig = sig0
   let mut remaining = budget
+  // The one-pass signature the stream opened with (audit c1g6): RFC 9580
+  // §5.2.5 requires a signature whose version/type/hash/pub-algo
+  // disagree with the One-Pass Signature to be IGNORED for validation —
+  // a v3-OPS + v6-signature stream used to verify Ok with the trailing
+  // signature against no pairing check at all. The state threads through
+  // compressed layers (audit hit-2): an OPS inside a compressed packet
+  // pairs with a signature outside it and vice versa.
+  let mut ops = ops0
+  // (audit hit-2) set when a One-Pass Signature packet is present but
+  // unparseable: the stream opened with an unverifiable declaration, so
+  // no signature may validate.
+  let mut broken = broken0
   for p in packets {
     match p.tag() {
+      @packet.OnePassSig =>
+        if ops is None {
+          // (audit hit-2) an unparseable One-Pass Signature is not
+          // silently dropped — the trailing signature would then verify
+          // against no pairing check at all.
+          let parsed : @packet.OnePassSigPacket? = Some(
+            @packet.OnePassSigPacket::parse(p.body().exact_view()),
+          ) catch {
+            _ => None
+          }
+          match parsed {
+            Some(o) => ops = Some(o)
+            None => broken = true
+          }
+        }
       @packet.Literal =>
         data = Some(@packet.LiteralPacket::parse(p.body().exact_view()).data())
       @packet.Signature =>
@@ -363,22 +398,54 @@ fn collect_data_sig(
             out
           }
         }
-        let (d2, s2, rem2) = collect_data_sig(
+        let (d2, s2, o2, b2, rem2) = collect_data_sig(
           @packet.parse_packets(inner.exact_view()),
           data,
           sig,
+          ops,
+          broken,
           max_decompressed,
           remaining,
           depth + 1,
         )
         data = d2
         sig = s2
+        ops = o2
+        broken = b2
         remaining = rem2
       }
       _ => ()
     }
   }
-  (data, sig, remaining)
+  // (audit hit-2) an unparseable OPS voids every signature in the stream.
+  if broken {
+    sig = None
+  }
+  // The pairing check (audit c1g6): a signature that disagrees with the
+  // stream's One-Pass Signature (version, type, hash or pub-algo) is
+  // ignored for validation — RFC 9580 §5.2.5. The OPS state threads
+  // through compressed layers, so the check holds wherever the two
+  // packets sit relative to each other.
+  if ops is Some(o) {
+    match sig {
+      Some(sg) => {
+        // RFC 9580 Table 27 rows pair OPS v3 with a v4 signature and
+        // OPS v6 with a v6 signature — the versions legitimately differ
+        // on the v4 row, so the pairing compares the ROW, then the
+        // type/hash/pub-algo fields (audit c1g6).
+        let mismatch = !((o.version == 3 && sg.version() == 4) ||
+          (o.version == 6 && sg.version() == 6)) ||
+          o.sig_type.number() != sg.sig_type().number() ||
+          o.hash_algo != sg.hash_algo() ||
+          o.pub_algo.number() != sg.pub_algo().number()
+        if mismatch {
+          sig = None
+        }
+      }
+      None => ()
+    }
+  }
+  (data, sig, ops, broken, remaining)
 }
 
 ///|
@@ -470,6 +537,14 @@ pub(all) enum VerifyStatus {
 
 ///|
 /// Verify a detached armored signature over `data` using `verifier`.
+
+///|
+/// Signatures created on or after this instant are "recent" for the §9.5
+/// weak-hash validation rule (SHA-1 chosen-prefix collisions were
+/// demonstrated in January 2020).
+const SHA1_REJECT_AFTER : Int32 = 1577836800
+
+///|
 pub fn verify_detached(
   data : BytesView,
   armored_signature : String,
@@ -593,6 +668,26 @@ fn verify_signature_packet(
       if hash_id is @primitives.Md5 {
         return Failed
       }
+      // RFC 9580 §9.5 (audit c2g7): MUST NOT validate any recent
+      // signature that depends on MD5, SHA-1 or RIPEMD-160. MD5 is
+      // rejected outright; SHA-1/RIPEMD-160 are rejected when the
+      // signature is recent — "recent" implemented as created after the
+      // SHA-1 chosen-prefix demonstration (SHAttered, 2020-01-01).
+      if hash_id is @primitives.Sha1 || hash_id is @primitives.Ripemd160 {
+        match sig.creation_time() {
+          Some(t) if t >= SHA1_REJECT_AFTER => return Failed
+          Some(_) => ()
+          // (audit hit-3) RFC 9580 §5.2.3.3 requires a creation-time
+          // subpacket; a timestamp-less weak-hash signature cannot prove
+          // it predates the cutoff, so it fails the same recent gate.
+          None => return Failed
+        }
+      }
+      // RFC 9580 §5.2.3.4 (audit c1g3): an Ed25519 signature MUST use a
+      // hash algorithm with a digest size of at least 256 bits.
+      if sig.pub_algo() is @packet.Ed25519 && hash_id.digest_size() < 32 {
+        return Failed
+      }
       let verified = verify_sig_material(
         signer_pk,
         hash_id,
@@ -684,7 +779,10 @@ fn one_pass_sig_for(
     } else {
       Bytes::new(0)
     },
-    nested: false,
+    // RFC 9580 §5.4: nested=0 declares "the next packet is another
+    // One-Pass Signature packet" — this library produces exactly one OPS
+    // per signed payload, so the flag is always 1 (audit c1g7).
+    nested: true,
   }
 }
 
@@ -734,10 +832,12 @@ pub fn verify_inline(
 ) -> (Bytes, VerifyStatus) raise {
   let block = @armor.decode(message)
   let packets = @packet.parse_packets(block.data().exact_view())
-  let (data, sig, _budget) = collect_data_sig(
+  let (data, sig, _ops, _broken, _budget) = collect_data_sig(
     packets,
     None,
     None,
+    None,
+    false,
     max_decompressed,
     max_decompressed,
     0,
@@ -897,10 +997,12 @@ pub fn decrypt_and_verify(
   }
   // Walk inner packets: OPS? literal | compressed; trailing sig.
   let inner_packets = @packet.parse_packets(inner.exact_view())
-  let (data, sig, _budget) = collect_data_sig(
+  let (data, sig, _ops, _broken, _budget) = collect_data_sig(
     inner_packets,
     None,
     None,
+    None,
+    false,
     max_decompressed,
     max_decompressed,
     0,

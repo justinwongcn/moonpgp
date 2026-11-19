@@ -83,6 +83,13 @@ pub fn RsaPublicKey::pkcs1_v15_encrypt(
   self : RsaPublicKey,
   message : BytesView,
 ) -> Bytes raise {
+  // RFC 9580 §12.4: MUST NOT encrypt with RSA keys under 2048 bits
+  // (audit c2g4). Generation is already floored at 3072.
+  guard self.octet_length() >= 256 else {
+    @error.fail(
+      "rsa: refusing to encrypt with RSA keys under 2048 bits (RFC 9580 §12.4)",
+    )
+  }
   let k = self.octet_length()
   guard message.length() <= k - 11 else {
     @error.fail("rsa: message too long for \{k}-octet modulus")
@@ -140,6 +147,12 @@ pub fn RsaPrivateKey::pkcs1_v15_sign(
   hash : @primitives.HashId,
   digest : BytesView,
 ) -> Bytes raise {
+  // RFC 9580 §12.4: MUST NOT sign with RSA keys under 2048 bits (audit c2g4).
+  guard self.public.octet_length() >= 256 else {
+    @error.fail(
+      "rsa: refusing to sign with RSA keys under 2048 bits (RFC 9580 §12.4)",
+    )
+  }
   guard digest.length() == hash.digest_size() else {
     @error.fail("rsa: digest size mismatch")
   }
@@ -168,6 +181,12 @@ pub fn RsaPublicKey::pkcs1_v15_verify(
   digest : BytesView,
   signature : BytesView,
 ) -> Bool raise {
+  // RFC 9580 §12.4: MUST NOT verify with RSA keys under 2048 bits (audit c2g4).
+  guard self.octet_length() >= 256 else {
+    @error.fail(
+      "rsa: refusing to verify with RSA keys under 2048 bits (RFC 9580 §12.4)",
+    )
+  }
   guard digest.length() == hash.digest_size() else {
     @error.fail("rsa: digest size mismatch")
   }
@@ -237,6 +256,13 @@ pub fn generate_rsa_key(bits~ : Int32) -> RsaPrivateKey raise {
     guard guard_count < 100 else { @error.fail("rsa: prime generation stuck") }
   }
   let n = p.mul(q)
+  // RFC 9580 §5.5.5.1 lists the secret MPIs as q, p with p < q (audit
+  // c2g6): normalize the sample order so the serialized key matches.
+  if p.compare(q) == 1 {
+    let tmp = p
+    p = q
+    q = tmp
+  }
   let one = BigInt::from_int(1)
   // phi = (p-1)(q-1); d = e^-1 mod phi (also valid mod lambda for e=65537).
   let phi = p.sub(one).mul(q.sub(one))

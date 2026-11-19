@@ -37,6 +37,26 @@ fn rsa_secret_parts(p : @packet.SecretKeyPacket) -> @pki.RsaPrivateKey raise {
   let pbig = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
   let qbig = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
   let u = BigInt::from_octets(r.read_mpi().exact_view(), signum=1)
+  // RFC 9580 §5.5.3 (audit c2g5): the cleartext MPIs MUST consume the
+  // material up to exactly the 2-octet checksum, and the checksum must
+  // match — trailing garbage or a bad checksum makes the key unusable.
+  let end = r.position()
+  // Two legal shapes (audit c2g5 refinement): wire-parsed material ends
+  // with the 2-octet checksum (verify it); an in-memory unlocked packet
+  // (the 254/255 unlock strips the check) ends right after the MPIs —
+  // its integrity was verified at unlock time.
+  match r.remaining() {
+    2 => {
+      let want = (p.secret_material[end].to_int() << 8) |
+        p.secret_material[end + 1].to_int()
+      guard @packet.session_key_checksum(p.secret_material[0:end].exact_view()) ==
+        want else {
+        @error.fail("api: RSA secret key checksum failed")
+      }
+    }
+    0 => ()
+    _ => @error.fail("api: RSA secret material length misaligned")
+  }
   @pki.RsaPrivateKey::{ public: { n, e, }, d, p: pbig, q: qbig, u, }
 }
 
@@ -58,6 +78,23 @@ fn eddsa_secret_parts(
   guard seed_mpi.length() <= 32 else {
     @error.fail("api: bad EdDSA seed length")
   }
+  // RFC 9580 §5.5.3 (audit c2g5): exact consumption + checksum.
+  let end = r.position()
+  guard r.remaining() == 2 else {
+    @error.fail("api: EdDSA secret material length misaligned")
+  }
+  match r.remaining() {
+    2 => {
+      let want = (p.secret_material[end].to_int() << 8) |
+        p.secret_material[end + 1].to_int()
+      guard @packet.session_key_checksum(p.secret_material[0:end].exact_view()) ==
+        want else {
+        @error.fail("api: EdDSA secret key checksum failed")
+      }
+    }
+    0 => ()
+    _ => @error.fail("api: EdDSA secret material length misaligned")
+  }
   let seed = @primitives.pad_left(seed_mpi.exact_view(), 32)
   let point = p.public.params()[1]
   guard point.length() == 33 else { @error.fail("api: bad EdDSA point") }
@@ -75,11 +112,23 @@ fn ed25519_native_secret_parts(
   guard p.s2k_usage == 0 else {
     @error.fail("api: secret key material is locked; unlock it first")
   }
-  let want = if p.public.version() >= 6 { 32 } else { 34 }
-  guard p.secret_material.length() == want else {
+  // Two legal shapes (audit c2g5 refinement): 34 = wire material ending
+  // with the 2-octet checksum (verify it); 32 = in-memory unlocked (the
+  // unlock verified the SHA-1/AEAD integrity at unlock time). v6 is
+  // always 32.
+  let material_len = p.secret_material.length()
+  guard material_len == 32 || material_len == 34 else {
     @error.fail("api: bad Ed25519 secret key length")
   }
-  let seed = if want == 32 {
+  if material_len == 34 {
+    let want_sum = (p.secret_material[32].to_int() << 8) |
+      p.secret_material[33].to_int()
+    guard @packet.session_key_checksum(p.secret_material[0:32].exact_view()) ==
+      want_sum else {
+      @error.fail("api: Ed25519 secret key checksum failed")
+    }
+  }
+  let seed = if material_len == 32 {
     p.secret_material
   } else {
     p.secret_material[0:32].to_owned()
@@ -603,6 +652,21 @@ pub fn verify_key_signature(
   // refuses it); a prefix collision must not validate a certification,
   // binding or revocation. SHA-1 stays verification-only for legacy mail.
   if hash_id is @primitives.Md5 {
+    return false
+  }
+  // RFC 9580 §9.5 (audit c2g7): recent weak-hash signatures are not
+  // validated (cutoff = the SHAttered demonstration, 2020-01-01), and
+  // §5.2.3.4 (audit c1g3): an Ed25519 signature must use a hash with a
+  // digest of at least 256 bits.
+  if hash_id is @primitives.Sha1 || hash_id is @primitives.Ripemd160 {
+    match sig.creation_time() {
+      Some(t) if t >= 1577836800 => return false
+      Some(_) => ()
+      // (audit hit-3) no creation time: "not recent" is unprovable.
+      None => return false
+    }
+  }
+  if sig.pub_algo() is @packet.Ed25519 && hash_id.digest_size() < 32 {
     return false
   }
   verify_sig_material(

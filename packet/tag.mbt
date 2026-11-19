@@ -192,6 +192,15 @@ fn read_one_packet(r : Reader) -> RawPacket raise {
     // Old format.
     tag_of_number((first >> 2) & 0x0F)
   }
+  // RFC 9580 §4.3 (audit c1g1): Type IDs 0-39 are critical — an unknown
+  // critical packet MUST reject the whole sequence; 40-63 are
+  // non-critical and MUST be ignored. Tag 21 (Padding) is a defined type
+  // the walkers ignore, so it stays exempt.
+  match tag {
+    Unknown(u) if u < 40 && u != 21 =>
+      @error.malformed("packet: unknown critical packet tag \{u}")
+    _ => ()
+  }
   let chunks : Array[Bytes] = []
   if (first & 0x40) != 0 {
     // New format lengths.

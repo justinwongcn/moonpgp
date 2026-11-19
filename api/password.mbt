@@ -250,7 +250,12 @@ fn seal_skesk_with_password(
   compress? : @compress.CompressedAlgo,
 ) -> String raise {
   let session_key = @primitives.random_bytes(SESSION_KEY_SIZE)
-  let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
+  let skesk = build_skesk(
+    @primitives.Aes256,
+    session_key.exact_view(),
+    passphrase,
+    s2k,
+  )
   let literal = @packet.LiteralPacket::binary(plaintext, file_name?)
   let literal_wire = @packet.serialize_packet(
     @packet.Literal,
@@ -446,10 +451,12 @@ pub fn decrypt_binary_with_password(
           let inner = open_password_container(
             packets, msg_algo, session_key, skesk_version,
           )
-          let (data_opt, sig_opt, _b) = collect_data_sig(
+          let (data_opt, sig_opt, _ops, _broken, _b) = collect_data_sig(
             @packet.parse_packets(inner.exact_view()),
             None,
             None,
+            None,
+            false,
             max_decompressed,
             max_decompressed,
             0,
@@ -661,10 +668,16 @@ fn write_packet_length(w : @packet.Writer, length : Int32) -> Unit {
 /// CFB under an all-zero IV (RFC 9580 §5.3.1: an all-zero IV requires a
 /// salted or Argon2 specifier).
 fn build_skesk(
+  msg_algo : @primitives.CipherAlgo,
   session_key : BytesView,
   passphrase : String,
   s2k : @s2k.S2k,
 ) -> @packet.SkeskPacket raise {
+  // The message cipher octet is Aes256 (this helper serves the
+  // password-only path and the combined recipients+passwords seal, whose
+  // v4 session algorithm is Aes256 by the §12.2 pick — the prefs-aware
+  // picker never demotes the message cipher below the recipient floor
+  // when a passphrase rides along).
   // The S2K key wraps [algo byte || session key] with CFB, zero IV —
   // exactly the RFC 9580 §5.3.1 shape. The 2-octet checksum RFC 4880
   // carried was DROPPED from the standard, and gpg 2.4.5 rejects the
@@ -680,7 +693,7 @@ fn build_skesk(
     @primitives.Aes256,
     wrapping_key.exact_view(),
   )
-  let plain = Bytes::from_array([@primitives.Aes256.number().to_byte()]).add(
+  let plain = Bytes::from_array([msg_algo.number().to_byte()]).add(
     session_key.to_owned(),
   )
   let esk = @cipher.cfb_encrypt(
@@ -797,6 +810,12 @@ fn unwrap_one_skesk(
   }
   let pass = @primitives.utf8_bytes(passphrase)
   if skesk.version() == 6 {
+    // RFC 9580 §9.5: MD5/SHA-1/RIPEMD-160 are forbidden as the S2K hash
+    // in a version 6 (or later) packet — refuse before any derivation
+    // (audit c2g1). No passphrase can open such a packet.
+    guard !skesk.s2k().uses_weak_hash() else {
+      @error.malformed("api: v6 SKESK uses a weak S2K hash (RFC 9580 §9.5)")
+    }
     // RFC 9580 §5.3.2: the same HKDF-SHA256 key separation as a
     // usage-253 secret key, with info/AD = tag | version | cipher |
     // aead, and the session key sealed alone (no algorithm octet).
@@ -898,9 +917,13 @@ fn unwrap_one_skesk(
     )
     .exact_view(),
   )
+  // The zero IV follows the wrapping cipher's block size (audit c1g2,
+  // the M2 twin): CAST5/3DES legacy SKESKs wrap with an 8-octet block —
+  // the hardcoded 16 rejected every such esk-carrying message as
+  // "cfb: bad IV length", misclassified as a wrong passphrase.
   let wrapped = @cipher.cfb_decrypt(
     bc,
-    Bytes::make(16, b'\x00').exact_view(),
+    Bytes::make(bc.block_size(), b'\x00').exact_view(),
     skesk.encrypted_session_key().exact_view(),
   )
   guard wrapped.length() >= 1 else {
@@ -1078,6 +1101,13 @@ fn extract_literal(inner : BytesView, max_decompressed : Int32) -> Bytes raise {
       // RFC 9580 §4.2 / gpg behavior: an unassigned packet tag is skipped,
       // not fatal (audit pk2). The stream is only inspected here — no
       // re-serialization touches it.
+      ps = ps[1:ps.length()].to_owned()
+      continue
+    }
+    if tag is @packet.PacketTag::Marker {
+      // RFC 9580 §5.8: "Such a packet MUST be ignored when received" and
+      // §10.3 allows a Marker "anywhere in the sequence" (audit c1g5) —
+      // the decryption payload walk used to hard-fail on it.
       ps = ps[1:ps.length()].to_owned()
       continue
     }

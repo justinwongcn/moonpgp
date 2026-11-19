@@ -1,22 +1,28 @@
-MIME-Version: 1.0
-Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg=pgp-sha256; boundary="=gpgmime=0011="
+Content-Type: multipart/signed; protocol="application/pgp-signature"; micalg=pgp-sha256; boundary="MIMEBOUND"
 
---=gpgmime=0011=
+--MIMEBOUND
 Content-Type: text/plain; charset=utf-8
 Content-Transfer-Encoding: 8bit
 
-mime body for gpg
-- dash line
---=gpgmime=0011=
-Content-Type: application/pgp-signature; name="sig.asc"
+Pgp/Mime interop body.
+Second line.
+--MIMEBOUND
+Content-Type: application/pgp-signature; name="OpenPGP_signature.asc"
+Content-Disposition: attachment; filename="OpenPGP_signature.asc"
 
 -----BEGIN PGP SIGNATURE-----
 
-iLMEAAEIAB0WIQRdweIXGOsvE24I2XzEPzfuRSaCCgUCarquUAAKCRDEPzfuRSaC
-CpB0BACq2pGhQOsXC0RmivqLZ/QCwac5li1upJL9XnVJM5K1apVrSwaufVjg2jSU
-4iILp17lUrj/m4bMInkG75mw7GbethYsloj21ai0FY8+cjCAiZsbwKIX3rg71kJh
-G46gyM99EbWibFYwKJWpVAPYTpM5xGptQNSuMbR1VcyqrlI7NA==
-=WiJW
+iQGzBAABCAAdFiEEwLrl+/3MQTWwaiMCWFgwdMBvEGIFAmr/cwwACgkQWFgwdMBv
+EGI7Rgv+OzX3Off364SNUcyQBiN5B+54b9Gp9ovilqxNXvTUNYFuZmUqBsaquvue
+Xr6lMJ+BQQP9CelHB14grh+VXVPPlQuUWajSCmuyOj5ZnHZwkoNdQ0b5hQu1dVDx
+TXM+49L0cgq/W/+NdZGgYUBRd6QkdlEVjDOsR95Ro9bFrTC3hMq1nmjIB/QbPVfA
+vPNthdelx6h925tsRrgH4dM5FRyENASkmezJVICbMmPwnGv5elvMc4xual4gOKof
+xBAUbgzIZG/mXaa98yoq1J9SJ7YXRleUwiG86xi006lpl+9d+aI8R3VayvmcZ8ve
+gXfWD6ClcwdV3x4d8Jn51OKliq1j83UOg8iiiP6gzMYI5u7FnlwGOgepin/lccfe
+Ap5ocAU1xX4WNo8Wg6+gj5sQA+ZzdMPMW68AjTehHdFSeF8HB5LigbBJu6zuBlKF
+ouhYnJ3oKq06AxGthDppogFBg9P6hBCsduSslQKDv9O/8mTKgqAtDoOAuWN/spCh
+vAcNbxnz
+=IVCI
 -----END PGP SIGNATURE-----
 
---=gpgmime=0011=--
+--MIMEBOUND--

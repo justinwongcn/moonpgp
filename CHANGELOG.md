@@ -229,6 +229,49 @@ a released version when that version is published to mooncakes.io.
     reclassified the AEAD unlock failure, and the `#skip`ed slow suite
     had not been run since. The catch accepts the typed WrongPassphrase
     now.
+- RFC 9580 conformance + attack round 2026-11-19/20 (17 MUST-level gaps
+  from a requirements-driven matrix, plus 4 attack hits against the fix
+  boundary itself; full tables in `report-conformance-20261119.md`).
+  Highlights:
+  - **Breaking:** a signature whose packet stream declares an unknown
+    critical packet tag (Type IDs 0–39) is rejected per RFC 9580 §4.3;
+    tags 40–63 stay non-critical and are ignored (tag 21 Padding
+    exempt).
+  - **Breaking:** MD5 signatures verify as `Failed` outright, and
+    SHA-1/RIPEMD-160 signatures made after 2020-01-01 (SHAttered) — or
+    carrying no creation time at all, which cannot prove they are not
+    recent — verify as `Failed` (RFC 9580 §9.5 MUST NOT validate).
+  - **Breaking:** an Ed25519 signature over a hash with a digest below
+    256 bits (SHA-224) is rejected on verification (RFC 9580
+    §5.2.3.4), and RSA verification/signing/encryption refuses keys
+    below 2048 bits (§12.4).
+  - **Breaking:** a v6 secret key or v6 SKESK whose S2K derives through
+    MD5/SHA-1/RIPEMD-160 is refused on the receiving side (§9.5), and
+    issuing refuses SHA-1/RIPEMD-160 for new signatures.
+  - **Breaking:** the v4-recipient cipher selection reads the recipient
+    certificate's Preferred Symmetric Algorithms (strongest common AES
+    wins, AES-256 fallback) instead of hard-coding AES-256.
+  - A One-Pass Signature now pairs with the trailing signature (RFC
+    9580 §5.2.5, Table 27): a signature disagreeing with the OPS in
+    version row/type/hash/pub-algo is ignored for validation, the OPS
+    state survives compression boundaries, an unparseable OPS voids
+    the stream, and the generated nested bit is set (§5.4).
+  - Issuer Fingerprint subpackets cross-check the version octet against
+    the signature version (§5.2.3.35) and lock the length to the
+    declared version (21/33); Issuer Key ID/Fingerprint bodies are
+    exact-length in both subpacket areas.
+  - v4 SKESK unwrapping derives the zero IV from the wrapping cipher's
+    block size (CAST5/3DES legacy messages no longer fail as
+    wrong-passphrase), a usage-0 secret key verifies its trailing
+    2-octet checksum on import (§5.5.3, plaintext branch only), and
+    RSA key generation normalizes p < q.
+  - Marker packets are ignored inside decrypted payloads (§5.8), the
+    password message path walks them the same way.
+  - Attack-round hits fixed (the round deliberately attacked the fix
+    boundary itself): the checksum gate had landed in the encrypted
+    branch and broke every locked-key import (moved to the usage-0
+    branch), OPS pairing did not survive compression layers, and the
+    missing-creation-time weak-hash bypass above.
 
 ### Changed
 

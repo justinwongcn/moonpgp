@@ -1,21 +1,22 @@
 ///|
-/// M1 lifecycle tests against gopenpgp's expired/revoked key fixtures,
-/// with FIXED timestamps so the assertions are identical on every target
-/// (the wall-clock paths are exercised in `api/lifecycle_test.mbt`).
+/// M1 lifecycle tests against expired/revoked key fixtures, with FIXED
+/// timestamps so the assertions are identical on every target (the
+/// wall-clock paths are exercised in `api/lifecycle_test.mbt`).
 
 ///|
-/// gopenpgp `testdata/key_expiredKey`: an RSA key whose Generic
-/// certification carries a Signature Expiration Time of 1320 s counted
-/// from creation time 1 — the *signature* is what expired (the key packet
-/// itself has no Key Expiration Time).
+/// `testdata/key_expiredKey`: an RSA-3072 key (library-minted — the
+/// original gopenpgp fixture was rsa1024 and RFC 9580 §12.4 forbids
+/// verifying with it) whose Generic certification carries a Signature
+/// Expiration Time of 1337 s counted from creation time 1 — the
+/// *signature* is what expired (the key packet has no Key Expiration
+/// Time).
 test "expired certification disables capabilities at a fixed now" {
   let key = @api.PrivateKey::from_armored(read_testdata("key_expiredKey"))
   // Strict import (M1) still accepts the key: the certification verifies
   // cryptographically — expiry is a lifecycle question, not an import one.
   // The fixture is a primary-only key with certify+sign flags (0x03), so
   // it can never encrypt; the certification's Signature Expiration Time
-  // (1337 s from creation 1; gpg rounds to "0h22m") is what kills
-  // verification.
+  // (1337 s from creation 1) is what kills verification.
   let just_before = 1338L // created(1) + 1337: the last live second
   assert_false(key.is_expired(just_before)) // key-level lifetime unset
   assert_false(key.can_encrypt(just_before)) // flags 0x03, no subkey

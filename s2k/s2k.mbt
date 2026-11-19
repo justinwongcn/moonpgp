@@ -17,6 +17,20 @@ pub(all) enum S2k {
 }
 
 ///|
+/// RFC 9580 §9.5: MD5, SHA-1 and RIPEMD-160 are forbidden as the S2K hash
+/// function in version 6 (or later) packets (audit c2g1). Argon2 has no
+/// PGP hash octet and is never weak by this rule.
+pub fn S2k::uses_weak_hash(self : S2k) -> Bool {
+  match self {
+    Simple(h) | Salted(h, _) | Iterated(h, _, _) =>
+      h is @primitives.Md5 ||
+      h is @primitives.Sha1 ||
+      h is @primitives.Ripemd160
+    Argon2(_, _, _, _) => false
+  }
+}
+
+///|
 /// Salt length in octets for salted/iterated S2K.
 pub const SALT_SIZE : Int32 = 8
 

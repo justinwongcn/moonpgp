@@ -3,7 +3,7 @@
 /// non-default symmetric algorithm:
 ///
 ///   gpg --batch --trust-model always --encrypt --armor \
-///     --recipient 5DC1E21718EB2F136E08D97CC43F37EE4526820A \
+///     --recipient C0BAE5FBFDCC4135B06A230258583074C06F1062 \
 ///     --cipher-algo AES128 \
 ///     < "secret for moonbit rsa aes128" \
 ///     > testdata/interop_gpg_rsa_aes128_message.asc

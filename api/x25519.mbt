@@ -33,14 +33,24 @@ fn x25519_native_secret(sk : @packet.SecretKeyPacket) -> Bytes raise {
   guard sk.public.algo() == @packet.X25519 else {
     @error.fail("api: not an X25519 key")
   }
-  let want = if sk.public.version() >= 6 { 32 } else { 34 }
-  guard sk.secret_material.length() == want else {
+  // Two legal shapes (audit c2g5 refinement): 34 = wire material ending
+  // with the 2-octet checksum (verify it); 32 = in-memory unlocked (the
+  // unlock verified the SHA-1/AEAD integrity at unlock time). v6 is
+  // always 32.
+  let material_len = sk.secret_material.length()
+  guard material_len == 32 || material_len == 34 else {
     @error.fail("api: bad X25519 secret key material")
   }
-  if want == 32 {
-    sk.secret_material
-  } else {
+  if material_len == 34 {
+    let want_sum = (sk.secret_material[32].to_int() << 8) |
+      sk.secret_material[33].to_int()
+    guard @packet.session_key_checksum(sk.secret_material[0:32].exact_view()) ==
+      want_sum else {
+      @error.fail("api: X25519 secret key checksum failed")
+    }
     sk.secret_material[0:32].to_owned()
+  } else {
+    sk.secret_material
   }
 }
 

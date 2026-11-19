@@ -367,7 +367,20 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
   let r = Reader::new(body[pub_len:body.length()])
   let usage = r.read_u8()
   if usage == 0 {
-    // v6 carries no trailing 2-octet checksum; the material is raw.
+    let material = r.read_rest()
+    // RFC 9580 §5.5.3 (audit c2g5): a v4 usage-0 packet's secret material
+    // ends with the 2-octet sum checksum — verify it on receipt. v6
+    // carries no checksum (the material is raw).
+    if !v6 {
+      guard material.length() >= 3 else {
+        @error.malformed("packet: secret material too short for a usage-0 key")
+      }
+      let n = material.length()
+      let want = (material[n - 2].to_int() << 8) | material[n - 1].to_int()
+      guard session_key_checksum(material[0:n - 2].exact_view()) == want else {
+        @error.malformed("packet: secret key checksum failed")
+      }
+    }
     SecretKeyPacket::{
       public,
       s2k_usage: 0,
@@ -375,7 +388,7 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
       aead_algo: 0,
       s2k_spec: Bytes::new(0),
       iv: Bytes::new(0),
-      secret_material: r.read_rest(),
+      secret_material: material,
       dummy: false,
     }
   } else if usage == 253 {
@@ -470,6 +483,10 @@ pub fn SecretKeyPacket::parse(body : BytesView) -> SecretKeyPacket raise {
           }
         None => ()
       }
+      // The 2-octet checksum rides INSIDE the CFB ciphertext (RFC 9580
+      // §5.5.3) — it is verified at unlock time after decryption, never
+      // on the wire form (audit HIT-1: the c2g5 gate landed here first
+      // and rejected every legal locked key at import).
       SecretKeyPacket::{
         public,
         s2k_usage: usage,

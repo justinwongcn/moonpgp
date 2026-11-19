@@ -162,6 +162,77 @@ fn seal_to_recipients(
 /// (audit api2: the builder's public-key branch used to drop supplied
 /// passphrases silently). The generation must not mix: v6 PKESKs ride a
 /// v2 SEIPD and cannot coexist with v4 SKESKs.
+
+///|
+/// The recipient's Preferred Symmetric Algorithms from the latest
+/// certification carrying the subpacket (audit c2g3); None when no
+/// certification states a preference — the key is then unconstrained
+/// for §12.2 purposes.
+fn recipient_symmetric_prefs(k : PublicKey) -> Array[Int32]? {
+  let mut found : Array[Int32]? = None
+  for uid in k.user_ids {
+    match
+      @packet.find_subpacket(
+        uid.self_signature.hashed_subpackets,
+        @packet.SIGSUB_PREFERRED_SYM_ALGOS,
+      ) {
+      Some(body) => {
+        let list : Array[Int32] = []
+        for b in body {
+          list.push(b.to_int())
+        }
+        found = Some(list)
+      }
+      None => ()
+    }
+  }
+  found
+}
+
+///|
+/// RFC 9580 §12.2 (audit c2g3): the message cipher MUST come from every
+/// recipient's preference list. Recipients without the subpacket are
+/// unconstrained; the strongest common AES wins; AES-256 remains the
+/// fallback when nobody states a preference.
+fn pick_v4_symmetric(
+  recipients : Array[PublicKey],
+) -> @primitives.CipherAlgo raise {
+  let lists : Array[Array[Int32]] = []
+  for r in recipients {
+    match recipient_symmetric_prefs(r) {
+      Some(l) => lists.push(l)
+      None => ()
+    }
+  }
+  if lists.is_empty() {
+    return @primitives.Aes256
+  }
+  let order : Array[@primitives.CipherAlgo] = [
+    @primitives.Aes256,
+    @primitives.Aes192,
+    @primitives.Aes128,
+  ]
+  for cand in order {
+    let mut in_all = true
+    for l in lists {
+      let mut has = false
+      for a in l {
+        if a == cand.number() {
+          has = true
+        }
+      }
+      if !has {
+        in_all = false
+      }
+    }
+    if in_all {
+      return cand
+    }
+  }
+  @error.fail("api: recipients have no common preferred symmetric algorithm")
+}
+
+///|
 fn seal_esks_and_seipd(
   inner : BytesView,
   recipients : Array[PublicKey],
@@ -206,7 +277,10 @@ fn seal_esks_and_seipd(
   let (sym_algo, aead_mode) = if v6 {
     pick_v6_ciphersuite(recipients)
   } else {
-    (@primitives.Aes256, @cipher.Ocb)
+    // RFC 9580 §12.2 (audit c2g3): the message cipher MUST come from
+    // every recipient's preference list; recipients without the subpacket
+    // are unconstrained (AES-256 fallback, the strongest default).
+    (pick_v4_symmetric(recipients), @cipher.Ocb)
   }
   // Every v6 passphrase's AEAD must name the payload's AEAD (the SKESK's
   // HKDF AD carries the pair; audit f1 follow-up).
@@ -249,7 +323,7 @@ fn seal_esks_and_seipd(
       @primitives.random_bytes(@s2k.SALT_SIZE),
       @s2k.encode_count(S2K_COUNT_TARGET),
     )
-    let skesk = build_skesk(session_key.exact_view(), passphrase, s2k)
+    let skesk = build_skesk(sym_algo, session_key.exact_view(), passphrase, s2k)
     w.bytes(
       @packet.serialize_packet(@packet.Skesk, skesk.to_body().exact_view()).exact_view(),
     )
@@ -267,11 +341,10 @@ fn seal_esks_and_seipd(
   } else {
     // v1 SEIPD always uses the v4 profile's mandatory cipher. Built here,
     // not before the branch: a v6 ciphersuite may be AES-128/192, and an
-    // eager AES-256 cipher would reject that session-key length.
-    let bc = @primitives.new_block_cipher(
-      @primitives.Aes256,
-      session_key.exact_view(),
-    )
+    // eager AES-256 cipher would reject that session-key length. The
+    // cipher follows the picked message algorithm (audit c2g3: the v4
+    // recipient preference list may move the message cipher off AES-256).
+    let bc = @primitives.new_block_cipher(sym_algo, session_key.exact_view())
     @packet.SeipdPacket::v1(@cipher.seipd_v1_encrypt(bc, inner).exact_view())
   }
   w.bytes(

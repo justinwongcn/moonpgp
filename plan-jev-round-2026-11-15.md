@@ -212,3 +212,42 @@ guard(smtp 显式传参/roundtrip 提前返回)——即 r11-2 登记过的「�
 (f16.eml 落盘)、显式非默认 smtp 旗标仍大声失败。第 16 轮其余三项交叉验证
 干净(提交间无「后轮撤销前轮」、工作区干净、CHANGELOG 对账完整、三处 usage
 与 README 一致、openwiki/api.md 与代码现状一致)。
+
+## 收尾轮(2026-11-18,worktree followup-20261118)
+
+用户令:创建 worktree 解决剩余未处理项。worktree /Users/john/Downloads/moonpgp-followup
+(分支 followup-20261118 @5338f92),两项登记后续落地,合并回 main(快进 3ed41dd):
+
+| 项 | 内容 | 回归测试 |
+|----|------|-----|
+| ① v6 组合(第 2 轮 f1 登记) | `.password_v6().recipient()` 真支持:`build_v6_skesk` 从 seal_skesks_v6_inner 抽出复用,seal_esks_and_seipd 增 passwords_v6 参数(v6 SKESK 与 v6 PKESK 共享会话钥、同前置 v2 SEIPD,RFC §10.3.2.1);v4 收件人×v6 口令、entry AEAD 与收件人套件不匹配仍大声拒 | v6 组合双路径可解密 + v4×v6 大声拒(stash 红收据:F1 拒绝句/静默丢) |
+| ② 密钥路径归一化(第 11 轮 r11-1 登记,r13 勘误定位) | finish_inline_verify 与 cleartext verify_cleartext 的裸 verify_signature_packet 加 per-verifier catch→Failed——未知 hash_algo 签名在两条解密路径均为 (数据, Failed);verify_cleartext 同享 | key-path 容错测试(手工 hash_algo=0x63 内嵌签名,stash 红收据:Unsupported 逃逸) |
+
+门禁(worktree 与 main 各一遍):native 643/643、wasm 634/634、js 634/634、
+fmt+deny-warn 过、ci_smoke PASS。worktree 已移除、分支已删。
+
+剩余未处理项终态:①② 已解决;PV-2 可用性收窄维持「登记不改」(fail-loud 无
+静默危害);JEV 直连 401 为用户侧事项(MAGPIE 形态已入方案与记忆)。
+
+## 符合性+攻击轮(2026-11-19/20,worktree audit-20261119)
+
+用户令:创建 Worktree,一边检查项目是否符合 PGP 的所有要求,一边像安全
+团队一样审查代码漏洞、不断发起攻击测试。worktree audit-20261119(分支
+audit-conformance-20261119 @3ed41dd),两轮符合性 agent(C1 包格式 33 条款
+簇 / C2 密钥材料约 50 条款簇)+两轮攻击 agent(X1 预认证面中断/X2 攻修复
+边界终局),合并回 main(快进 e504b4f):
+
+- **17 项 MUST 级 GAP 全修**(C1-G1..G7 / C2-G1..G7,全表见
+  report-conformance-20261119.md):§4.3 未知关键包闸、SKESK 零 IV 随块长、
+  Ed25519 摘要≥256、issuer-fp 版本交叉+长度联锁、Marker 跳过、OPS↔签名
+  Table 27 配对+nested 位、v6 弱哈希双闸、生成侧拒签、收件人偏好算法选择、
+  RSA ≥2048 三入口、usage-0 校验和、p<q 归一化、SHA-1/RIPEMD-160 recent
+  截止。
+- **攻击轮命中 4 项全修**(X2 专攻修复边界自身):HIT-1 校验和闸落错分支
+  (锁键导入全断)、HIT-2 OPS 配对不跨压缩层+坏 OPS 静默吞、HIT-3 缺创建
+  时间旁路 recent 闸、LAX-1 issuer-fp 版本-长度联锁缺失;探针翻转回归。
+- SHOULD 级文档化偏差 8 条登记(C1-G8/G9/G10 等,随 0.5.0 决策)。
+- 夹具重造:rsa1024 遗留三把按 §12.4 重造 rsa3072(key_expiredKey 库内
+  铸造复刻),派生向量 gpg 重出,interop 45/45。
+- 门禁:native 684/wasm 675/js 675 全绿、deny-warn 过、ci_smoke PASS、
+  gpg 实机七向 PASS。worktree 已移除、分支已删。

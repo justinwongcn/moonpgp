@@ -269,3 +269,24 @@ audit-conformance-20261119 @3ed41dd),两轮符合性 agent(C1 包格式 33 条�
 
 覆盖面声明:JEV 仅裁决六个语义修复点;夹具重造(机械性)、gpg 实机七向、
 三目标测试不在 JEV 覆盖内(已有实收据)。
+
+## 推送+0.5.0 规划轮(2026-11-20)
+
+用户令"完成这两步"(推送+范围规划):
+
+- **步①推送**:1172424..8015212 推上 GitHub(此前远端 main 停在 11-13,
+  schedule interop 连红即旧脚本+新 CLI 错配所致,推送即愈)。推送触发 CI
+  check 挂于工具链漂移:CI 每次装最新 moon,已弃用 Bytes::new/
+  Buffer(size_hint=)/Int64::from_int/BigInt::from_string,--deny-warn 下成
+  错。本地升 moon 0.1.20261117 对齐后机械迁移 156 处(141+12+2+5)+发现
+  --target all 下 cstring 未用→#cfg native 域+手写标量编码(去 primitives
+  依赖)。3a3ae39+a41f009 推送,check/build/smoke 全绿,三目标测试跑中。
+  教训:本地工具链必须跟 CI 同步升级,门禁口径 moon check --target all
+  --deny-warn(非默认 target)。
+- **步②0.5.0 范围**:RFC 原文核实(§5.2.3.35 issuer-fp SHOULD all signatures;
+  §5.2.3.11/.29 双 SHOULD critical;§9.5 SHOULD NOT SHA-1 依赖;§12.4 字面)
+  +JEV 九题逐项 predicate。纳入 5 项(S1 issuer-fp 0.9978/S2 critical 位
+  0.9832/S3 直构域 0.9963/S7 压缩偏好 0.9526/S8a lock v6 拒绝 0.9416),
+  维持登记 4 项(S4 v6 默认/S5 Ed448/X448/S6 RSA 2048 线/S9 SED,均≥0.98)。
+  s8 首判 0.7052 触发复议纪律,拆三方案 0.9416/0.3731/0.2854 定案。
+  文档:plan-0.5.0-scope-2026-11-20.md。
